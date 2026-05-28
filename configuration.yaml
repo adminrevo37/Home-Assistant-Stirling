@@ -218,6 +218,43 @@ input_text:
     max: 100
     initial: ""
 
+###############################################################################
+##### ROLLER DOOR — Configurable auto-close timings
+# Adjust these in HA (Settings → Helpers) without touching automations.yaml.
+# Attempt 1: how many seconds after door opens before first LOCK command.
+# Attempt 2: how many seconds after attempt 1 before second LOCK command.
+# Alert:     how many seconds after attempt 2 before snapshot + staff notify.
+# Defaults: 75 + 25 + 20 = 120 seconds (2 min) total.
+###############################################################################
+input_number:
+  door_close_attempt1_secs:
+    name: "Roller Door - Attempt 1 delay (sec from open)"
+    min: 10
+    max: 300
+    step: 5
+    initial: 75
+    unit_of_measurement: "s"
+    mode: box
+    icon: mdi:timer
+  door_close_attempt2_secs:
+    name: "Roller Door - Delay between attempt 1 and 2 (sec)"
+    min: 5
+    max: 120
+    step: 5
+    initial: 25
+    unit_of_measurement: "s"
+    mode: box
+    icon: mdi:timer
+  door_close_alert_secs:
+    name: "Roller Door - Alert delay after attempt 2 (sec)"
+    min: 5
+    max: 120
+    step: 5
+    initial: 20
+    unit_of_measurement: "s"
+    mode: box
+    icon: mdi:timer-alert
+
 utility_meter:
   energy_meter_daily_light_bay1:
     source: sensor.energy_usage_kwh_light_bay1

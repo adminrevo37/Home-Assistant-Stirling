@@ -1696,30 +1696,36 @@
 - id: 'roller_door_auto_close'
   alias: Roller Door - Auto Close + Alert if Left Open
   description: >
-    After door opens: tries to close at 1:15 and 1:40.
-    If still open at 2:00, takes a snapshot from camera.pier_facing_entry
-    and sends a push notification with the image to all staff.
+    After door opens: two LOCK attempts then a snapshot + staff alert.
+    Timings are configurable via:
+      input_number.door_close_attempt1_secs  (default 75s)
+      input_number.door_close_attempt2_secs  (default 25s after attempt 1)
+      input_number.door_close_alert_secs     (default 20s after attempt 2)
+    Total default = 120s (2 min). Mode restart: resets if door reopens.
   triggers:
     - trigger: state
       entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
       to: 'on'
   actions:
-    # ── Attempt 1 at T+1:15 ──────────────────────────────────────────────────
-    - delay: "00:01:15"
+    # ── Attempt 1 (configurable — default T+75s) ─────────────────────────────
+    - delay:
+        seconds: "{{ states('input_number.door_close_attempt1_secs') | int(75) }}"
     - condition: state
       entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
       state: 'on'
     - action: shell_command.c4_lock_door
 
-    # ── Attempt 2 at T+1:40 ──────────────────────────────────────────────────
-    - delay: "00:00:25"
+    # ── Attempt 2 (configurable — default +25s after attempt 1) ─────────────
+    - delay:
+        seconds: "{{ states('input_number.door_close_attempt2_secs') | int(25) }}"
     - condition: state
       entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
       state: 'on'
     - action: shell_command.c4_lock_door
 
-    # ── Alert at T+2:00 ──────────────────────────────────────────────────────
-    - delay: "00:00:20"
+    # ── Alert (configurable — default +20s after attempt 2) ──────────────────
+    - delay:
+        seconds: "{{ states('input_number.door_close_alert_secs') | int(20) }}"
     - condition: state
       entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
       state: 'on'
