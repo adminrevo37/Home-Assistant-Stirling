@@ -1,13 +1,12 @@
 ###############################################################################
-# BAY 1 - NATIVE CALENDAR AUTOMATION (replaces Blackshome blueprint)
-# Fires 5 min before booking start; extracts door code from event description
+# BAY 1 — BOOKING START
+# Fires 5 min before booking. Turns on highbay 1 + common lights.
+# Extracts customer name and door code from calendar event for notification.
 ###############################################################################
-
 - id: 'bay1_booking_start'
   alias: Bay 1 Booking - START
   description: >
-    5 minutes before booking: program door code from calendar event,
-    turn on lights, send notification.
+    5 min before booking: turn on highbay 1 and common lights.
   triggers:
     - trigger: calendar
       event: start
@@ -26,47 +25,45 @@
           {{ (trigger.calendar_event.description or '')
              | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
         booking_title: "{{ trigger.calendar_event.summary | default('Booking') }}"
-    - if:
-        - condition: template
-          value_template: "{{ door_code != '' }}"
-      then:
-        - action: lock_code_manager.set_usercode
-          data:
-            lock_entity_id: lock.front_door_lock
-            code_slot: 1
-            usercode: "{{ door_code }}"
-    - action: script.bay1_activate_script
-      data: {}
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bay1_helper
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_1
+    - action: light.turn_on
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
     - action: notify.notify
       data:
-        title: "\U0001f3cf Bay 1 Starting in 5 min"
+        title: "Bay 1 - Starting in 5 min"
         message: >-
           {{ customer_name }} | {{ booking_title }}.
-          {% if door_code != '' %}Door code: {{ door_code }}.{% else %}No door code on this booking.{% endif %}
+          {% if door_code != '' %}Door code: {{ door_code }}.{% endif %}
   mode: single
 
+###############################################################################
+# BAY 1 — BOOKING END
+# Fires 5 min after booking ends.
+# Skips entirely if a back-to-back booking has already started on Bay 1.
+# Only turns off common lights if ALL 5 bays are now empty.
+###############################################################################
 - id: 'bay1_booking_end'
   alias: Bay 1 Booking - END
   description: >
-    At booking end: clear door code from lock, turn off Bay 1 lights.
-    If no other bays are active, turn off general lights too.
+    5 min after booking: turn off highbay 1.
+    Common lights off only when all bays are empty.
   triggers:
     - trigger: calendar
       event: end
       entity_id: calendar.lane_1_bowling_machine
+      offset: "0:05:00"
   actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: (\d+)') | first | default('') }}
-    - if:
-        - condition: template
-          value_template: "{{ door_code != '' }}"
-      then:
-        - action: lock_code_manager.clear_usercode
-          data:
-            lock_entity_id: lock.front_door_lock
-            code_slot: 1
+    - condition: template
+      value_template: "{{ is_state('calendar.lane_1_bowling_machine', 'off') }}"
     - action: input_boolean.turn_off
       target:
         entity_id: input_boolean.bay1_helper
@@ -75,203 +72,294 @@
         entity_id: light.highbay_1
     - condition: template
       value_template: >-
-        {{ is_state('input_boolean.bay2_helper', 'off') and
+        {{ is_state('input_boolean.bay1_helper', 'off') and
+           is_state('input_boolean.bay2_helper', 'off') and
            is_state('input_boolean.bay3_helper', 'off') and
            is_state('input_boolean.bay4_helper', 'off') and
            is_state('input_boolean.bay5_helper', 'off') }}
-    - action: script.scene_general_off
-      data: {}
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
   mode: single
 
 ###############################################################################
-# BAY 2-5  - CALENDAR AUTOMATIONS (Blackshome blueprint)
-# NOTE: Bay 2 calendar was fixed from lane_1 → lane_2
+# BAY 2 — BOOKING START
 ###############################################################################
-
-- id: '1773219674927'
-  alias: Booking Bay 2 - Calendar
-  description: ''
-  use_blueprint:
-    path: Blackshome/calendar-notifications-and-actions.yaml
-    input:
-      calendar: calendar.lane_2_bowling_machine
-      include_calendar_trigger: disable_key_word
-      start_calendar_offset:
-        hours: 0
-        minutes: -5
-        seconds: 0
-        days: 0
-      start_action_1:
-      - action: input_boolean.turn_on
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay2_helper
-        data: {}
-      include_end_auto_actions:
-      - enable_end_action_1
-      include_start_auto_actions:
-      - enable_start_action_1
-      end_action_1:
-      - action: input_boolean.turn_off
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay2_helper
-        data: {}
-      global_conditions:
-      - condition: state
-        entity_id: calendar.bay2
-        state:
-        - 'off'
-      - condition: and
-        conditions:
-        - condition: state
-          entity_id: input_boolean.bay2_blocked
-          state:
-          - 'off'
-      end_calendar_offset:
-        hours: 0
-        minutes: 5
-        seconds: 0
-        days: 0
-- id: '1773219674928'
-  alias: Booking Bay 3 - Calendar
-  description: ''
-  use_blueprint:
-    path: Blackshome/calendar-notifications-and-actions.yaml
-    input:
-      calendar: calendar.lane_3_truman_or_bowling_machine
-      include_calendar_trigger: disable_key_word
-      start_calendar_offset:
-        hours: 0
-        minutes: -5
-        seconds: 0
-        days: 0
-      start_action_1:
-      - action: input_boolean.turn_on
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay3_helper
-        data: {}
-      include_end_auto_actions:
-      - enable_end_action_1
-      include_start_auto_actions:
-      - enable_start_action_1
-      end_action_1:
-      - action: input_boolean.turn_off
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay3_helper
-        data: {}
-      global_conditions:
-      - condition: state
-        entity_id: calendar.bay3
-        state:
-        - 'off'
-      - condition: and
-        conditions:
-        - condition: state
-          entity_id: input_boolean.bay3_blocked
-          state:
-          - 'off'
-      end_calendar_offset:
-        hours: 0
-        minutes: 2
-        seconds: 0
-        days: 0
-- id: '1773219674947'
-  alias: Booking Bay 4 - Calendar
-  description: ''
-  use_blueprint:
-    path: Blackshome/calendar-notifications-and-actions.yaml
-    input:
-      calendar: calendar.lane_4_run_up_net
-      include_calendar_trigger: disable_key_word
-      start_calendar_offset:
-        hours: 0
-        minutes: 0
-        seconds: 0
-        days: 0
-      start_action_1:
-      - action: input_boolean.turn_on
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay4_helper
-        data: {}
-      include_end_auto_actions:
-      - enable_end_action_1
-      include_start_auto_actions:
-      - enable_start_action_1
-      end_action_1:
-      - action: input_boolean.turn_off
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay4_helper
-        data: {}
-      global_conditions:
-      - condition: state
-        entity_id: calendar.bay4
-        state:
-        - 'off'
-      - condition: and
-        conditions:
-        - condition: state
-          entity_id: input_boolean.bay4_blocked
-          state:
-          - 'off'
-- id: '1773219674957'
-  alias: Booking Bay 5 - Calendar
-  description: ''
-  use_blueprint:
-    path: Blackshome/calendar-notifications-and-actions.yaml
-    input:
-      calendar: calendar.lane_5_run_up_net
-      include_calendar_trigger: disable_key_word
-      start_calendar_offset:
-        hours: 0
-        minutes: 0
-        seconds: 0
-        days: 0
-      start_action_1:
-      - action: input_boolean.turn_on
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay5_helper
-        data: {}
-      include_end_auto_actions:
-      - enable_end_action_1
-      include_start_auto_actions:
-      - enable_start_action_1
-      end_action_1:
-      - action: input_boolean.turn_off
-        metadata: {}
-        target:
-          entity_id:
-          - input_boolean.bay5_helper
-        data: {}
-      global_conditions:
-      - condition: state
-        entity_id: calendar.bay5
-        state:
-        - 'off'
-      - condition: and
-        conditions:
-        - condition: state
-          entity_id: input_boolean.bay5_blocked
-          state:
-          - 'off'
+- id: 'bay2_booking_start'
+  alias: Bay 2 Booking - START
+  description: >
+    5 min before booking: turn on highbay 2 and common lights.
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_2_bowling_machine
+      offset: "-0:05:00"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.bay2_blocked
+      state: 'off'
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bay2_helper
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_2
+    - action: light.turn_on
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
 
 ###############################################################################
-# BAY 1 - WEBHOOK ACCESS
-# Opened manually via webhook (e.g. from booking platform or button)
+# BAY 2 — BOOKING END
 ###############################################################################
+- id: 'bay2_booking_end'
+  alias: Bay 2 Booking - END
+  description: >
+    5 min after booking: turn off highbay 2.
+    Common lights off only when all bays are empty.
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_2_bowling_machine
+      offset: "0:05:00"
+  actions:
+    - condition: template
+      value_template: "{{ is_state('calendar.lane_2_bowling_machine', 'off') }}"
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bay2_helper
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_2
+    - condition: template
+      value_template: >-
+        {{ is_state('input_boolean.bay1_helper', 'off') and
+           is_state('input_boolean.bay2_helper', 'off') and
+           is_state('input_boolean.bay3_helper', 'off') and
+           is_state('input_boolean.bay4_helper', 'off') and
+           is_state('input_boolean.bay5_helper', 'off') }}
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
 
+###############################################################################
+# BAY 3 — BOOKING START
+###############################################################################
+- id: 'bay3_booking_start'
+  alias: Bay 3 Booking - START
+  description: >
+    5 min before booking: turn on highbay 3 and common lights.
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_3_truman_or_bowling_machine
+      offset: "-0:05:00"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.bay3_blocked
+      state: 'off'
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bay3_helper
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_3
+    - action: light.turn_on
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
+
+###############################################################################
+# BAY 3 — BOOKING END
+###############################################################################
+- id: 'bay3_booking_end'
+  alias: Bay 3 Booking - END
+  description: >
+    5 min after booking: turn off highbay 3.
+    Common lights off only when all bays are empty.
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_3_truman_or_bowling_machine
+      offset: "0:05:00"
+  actions:
+    - condition: template
+      value_template: "{{ is_state('calendar.lane_3_truman_or_bowling_machine', 'off') }}"
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bay3_helper
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_3
+    - condition: template
+      value_template: >-
+        {{ is_state('input_boolean.bay1_helper', 'off') and
+           is_state('input_boolean.bay2_helper', 'off') and
+           is_state('input_boolean.bay3_helper', 'off') and
+           is_state('input_boolean.bay4_helper', 'off') and
+           is_state('input_boolean.bay5_helper', 'off') }}
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
+
+###############################################################################
+# BAY 4 — BOOKING START
+###############################################################################
+- id: 'bay4_booking_start'
+  alias: Bay 4 Booking - START
+  description: >
+    5 min before booking: turn on highbay 4 and common lights.
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_4_run_up_net
+      offset: "-0:05:00"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.bay4_blocked
+      state: 'off'
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bay4_helper
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_4
+    - action: light.turn_on
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
+
+###############################################################################
+# BAY 4 — BOOKING END
+###############################################################################
+- id: 'bay4_booking_end'
+  alias: Bay 4 Booking - END
+  description: >
+    5 min after booking: turn off highbay 4.
+    Common lights off only when all bays are empty.
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_4_run_up_net
+      offset: "0:05:00"
+  actions:
+    - condition: template
+      value_template: "{{ is_state('calendar.lane_4_run_up_net', 'off') }}"
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bay4_helper
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_4
+    - condition: template
+      value_template: >-
+        {{ is_state('input_boolean.bay1_helper', 'off') and
+           is_state('input_boolean.bay2_helper', 'off') and
+           is_state('input_boolean.bay3_helper', 'off') and
+           is_state('input_boolean.bay4_helper', 'off') and
+           is_state('input_boolean.bay5_helper', 'off') }}
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
+
+###############################################################################
+# BAY 5 — BOOKING START
+###############################################################################
+- id: 'bay5_booking_start'
+  alias: Bay 5 Booking - START
+  description: >
+    5 min before booking: turn on highbay 5 and common lights.
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_5_run_up_net
+      offset: "-0:05:00"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.bay5_blocked
+      state: 'off'
+  actions:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.bay5_helper
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_5
+    - action: light.turn_on
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
+
+###############################################################################
+# BAY 5 — BOOKING END
+###############################################################################
+- id: 'bay5_booking_end'
+  alias: Bay 5 Booking - END
+  description: >
+    5 min after booking: turn off highbay 5.
+    Common lights off only when all bays are empty.
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_5_run_up_net
+      offset: "0:05:00"
+  actions:
+    - condition: template
+      value_template: "{{ is_state('calendar.lane_5_run_up_net', 'off') }}"
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bay5_helper
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_5
+    - condition: template
+      value_template: >-
+        {{ is_state('input_boolean.bay1_helper', 'off') and
+           is_state('input_boolean.bay2_helper', 'off') and
+           is_state('input_boolean.bay3_helper', 'off') and
+           is_state('input_boolean.bay4_helper', 'off') and
+           is_state('input_boolean.bay5_helper', 'off') }}
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+  mode: single
+
+###############################################################################
+# BAY 1 — WEBHOOK ACCESS (manual trigger, e.g. from booking platform)
+###############################################################################
 - id: '1773291498207'
   alias: Booking BAY1 Access - Webhook
   description: Open Door Turn on Lights
@@ -299,9 +387,8 @@
   mode: single
 
 ###############################################################################
-# OCCUPANCY / SAFETY
+# SAFETY — Lights left on when nobody is there
 ###############################################################################
-
 - id: '1779256315851'
   alias: Lights ON Nobody There
   description: ''
@@ -342,9 +429,8 @@
   mode: single
 
 ###############################################################################
-# GIT SYNC - GitHub bidirectional sync
+# GIT SYNC — Nightly push to GitHub at 2am
 ###############################################################################
-
 - id: 'auto_git_push'
   alias: Auto Push Config to GitHub
   description: Nightly 2am push of HA config changes to GitHub
@@ -367,6 +453,9 @@
               Error: {{ push_result.stderr }}
   mode: single
 
+###############################################################################
+# GIT SYNC — Pull from GitHub when repo is updated
+###############################################################################
 - id: 'github_deploy_webhook'
   alias: Deploy from GitHub
   description: Pulls latest config from GitHub when a push is made to the repo
