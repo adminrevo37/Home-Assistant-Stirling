@@ -858,7 +858,7 @@
   triggers:
     - trigger: numeric_state
       entity_id: sensor.main_occupancy_probability
-      below: 35
+      below: 40
   conditions:
     - condition: state
       entity_id: sun.sun
@@ -891,7 +891,7 @@
   triggers:
     - trigger: numeric_state
       entity_id: sensor.main_occupancy_probability
-      below: 11
+      below: 40
       for:
         minutes: 1
   conditions:
