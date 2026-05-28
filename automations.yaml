@@ -1655,4 +1655,63 @@
       minutes: "/1"
   actions:
     - action: shell_command.c4_entry_log
+
+###############################################################################
+# ROLLER DOOR — Open/Close detection via Aqara contact sensor
+#
+# *** BEFORE THIS WORKS ***
+# 1. Pair your Aqara Door & Window sensor in Zigbee2MQTT
+# 2. Give it a friendly name (e.g. "Roller Door")
+# 3. Replace BOTH occurrences of  binary_sensor.roller_door_contact
+#    below with the actual entity_id HA created (check Developer Tools → States,
+#    search for your sensor name — it will be something like
+#    binary_sensor.roller_door_contact  or  binary_sensor.roller_door_opening)
+#
+# Sensor states:  on = door OPEN (contact broken)
+#                 off = door CLOSED (contact made)
+###############################################################################
+
+- id: 'roller_door_opened_notify'
+  alias: Roller Door - Notify Staff on Open
+  description: >
+    Immediately notifies all staff when the roller door opens.
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      to: 'on'
+  actions:
+    - action: notify.notify
+      data:
+        title: "🚪 Roller Door Opened"
+        message: "The front roller door has been opened."
+  mode: single
+
+- id: 'roller_door_auto_close'
+  alias: Roller Door - Auto Close if Left Open
+  description: >
+    If the roller door is left open for longer than the configured timeout
+    (input_number.roller_door_auto_close_minutes), automatically closes it
+    via Control4 and notifies all staff.
+    Mode restart: if door opens again after closing, timer resets.
+  triggers:
+    - trigger: state
+      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      to: 'on'
+  actions:
+    - variables:
+        timeout_minutes: "{{ states('input_number.roller_door_auto_close_minutes') | int(5) }}"
+    - delay:
+        minutes: "{{ timeout_minutes }}"
+    # Re-check: only close if door is STILL open after the delay
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      state: 'on'
+    - action: shell_command.c4_lock_door
+    - action: notify.notify
+      data:
+        title: "🚨 Roller Door Auto-Closed"
+        message: >
+          The front roller door was left open for {{ timeout_minutes }} minute(s)
+          and has been automatically closed.
+  mode: restart
   mode: single
