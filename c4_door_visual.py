@@ -2,11 +2,11 @@
 """
 Roller Door Visual State Sensor
 ================================
-Reads the latest camera snapshot and measures brightness in the door ROI
-to determine whether the roller door is open or closed.
+Uses ffprobe (built into HA) to measure average Y-luminance in the door ROI.
+No PIL/Pillow dependency needed.
 
 Output:  prints "open" or "closed" to stdout (no trailing newline)
-         diagnostic line is written to stderr
+         diagnostic line written to stderr
 Exit:    always 0  (errors default to "closed" for safety)
 
 Call flow (driven by HA automation every 15 seconds):
@@ -19,39 +19,56 @@ ROI (tuned from live test 2026-05-29 06:19):
 
 Calibration:
   Closed baseline : avg ≈ 96.4  (B&W night-vision, door slats visible)
-  Open (dawn)     : avg ≈ 127.4  Δ = +31  (colour mode, exterior brickwork visible)
-  Threshold       : |avg − baseline| > 15  →  OPEN
+  Open (dawn)     : avg ≈ 127.4  Δ = +31  (colour mode, exterior brick visible)
+  Threshold       : abs(avg − baseline) > 15  →  OPEN
 
-The ±0.2 closed variance means false-trigger risk is negligible.
+  Closed variance was ±0.2 across 25 frames — false trigger risk negligible.
 """
 
 import sys
+import subprocess
+import re
 
 SNAPSHOT        = "/config/www/door_check_latest.jpg"
 CLOSED_BASELINE = 96.4
-OPEN_THRESHOLD  = 15.0   # any deviation > this = door open
+OPEN_THRESHOLD  = 15.0
 
-# ROI fractions  (tuned 2026-05-29)
+# ROI as fractions of image dimensions (ffprobe crop filter: w:h:x:y)
 ROI_X = 0.55
 ROI_Y = 0.10
 ROI_W = 0.17
 ROI_H = 0.32
 
+
+def get_brightness():
+    """
+    Crop the door ROI and return average Y (luma) via ffprobe signalstats.
+    YAVG is 0-255 scale for full-range JPEG input.
+    """
+    crop = f"crop=iw*{ROI_W}:ih*{ROI_H}:iw*{ROI_X}:ih*{ROI_Y},signalstats"
+    cmd = [
+        "ffprobe", "-v", "quiet",
+        "-show_entries", "frame_tags=lavfi.signalstats.YAVG",
+        "-vf", crop,
+        "-of", "default=noprint_wrappers=1",
+        SNAPSHOT
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    m = re.search(r"YAVG=(\d+\.?\d*)", r.stdout)
+    if not m:
+        raise RuntimeError(
+            f"ffprobe returned no YAVG\n"
+            f"  stdout: {r.stdout!r}\n"
+            f"  stderr: {r.stderr!r}"
+        )
+    return float(m.group(1))
+
+
 try:
-    from PIL import Image
-
-    img  = Image.open(SNAPSHOT).convert("L")   # grayscale
-    W, H = img.size
-    x, y = int(W * ROI_X), int(H * ROI_Y)
-    w, h = int(W * ROI_W), int(H * ROI_H)
-
-    crop   = img.crop((x, y, x + w, y + h))
-    pixels = list(crop.getdata())
-    avg    = sum(pixels) / len(pixels)
+    avg    = get_brightness()
     delta  = avg - CLOSED_BASELINE
     status = "open" if abs(delta) > OPEN_THRESHOLD else "closed"
-
-    print(f"img={W}x{H} roi=({x},{y},{w},{h}) avg={avg:.1f} delta={delta:+.1f} => {status}",
+    print(f"avg={avg:.1f} delta={delta:+.1f} threshold={OPEN_THRESHOLD} => {status}",
           file=sys.stderr)
     print(status, end="")
     sys.exit(0)
