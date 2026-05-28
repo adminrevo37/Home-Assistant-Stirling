@@ -1,0 +1,106 @@
+==============================
+ Control4 Phase 3 Diagnostic
+==============================
+
+=== TEST 1: SET_USER_CODE slot 11 WITH NAME ===
+--- SET CODE_ID=11 CODE=972707 NAME=Athlete Julian ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "d869b0867e41aedbcb052f323a76eff7",
+ "$t": ""
+}
+
+=== TEST 2: READ variables (check Last Known values) ===
+  Last Known User Code ID                  = 2
+  Last Known User Name                     = User 1
+  DS_ADDRESS                               = 192.168.1.107
+
+=== TEST 3: DELETE_USER_CODE slot 11 ===
+--- DELETE CODE_ID=11 ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "21cd87d6ed49dbb732ac52f290d003ad",
+ "$t": ""
+}
+
+=== TEST 4: REMOVE_USER_CODE slot 11 ===
+--- REMOVE CODE_ID=11 ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "a3b1ae2385c775cbab45a9daa34b385d",
+ "$t": ""
+}
+
+=== TEST 5: CLEAR_USER_CODE slot 11 ===
+--- CLEAR CODE_ID=11 ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "c6694d1052af495a499daca7920f183f",
+ "$t": ""
+}
+
+=== TEST 6: SET empty string to clear slot 11 ===
+--- SET CODE_ID=11 CODE=empty ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "53e690cad3439212992ab514c8323d2c",
+ "$t": ""
+}
+
+=== TEST 7: Slot boundary - slot 0 ===
+--- SET CODE_ID=0 ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "d5cd646771066095f6d4cfd90053c6d4",
+ "$t": ""
+}
+
+=== TEST 8: Slot boundary - slot 100 ===
+--- SET CODE_ID=100 ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "f723c41acb8f2e94b2afeca9e78cc3b3",
+ "$t": ""
+}
+
+=== TEST 9: Slot boundary - slot 250 ===
+--- SET CODE_ID=250 ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "95def5afaf9ed2b39a264c10f3e7f6dc",
+ "$t": ""
+}
+
+=== TEST 10: Re-set slot 11 with real booking code ===
+--- SET CODE_ID=11 CODE=972707 NAME=Athlete Julian ---
+{
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "37ed3d1047d3f602e525c8b7c9a9a15e",
+ "$t": ""
+}
+
+=== TEST 11: All available commands on DS3 item 39 ===
+[
+ {
+  "command": "Restart",
+  "label": "Restart",
+  "display": "Send Restart Command to Room › Control4 DS3 Door Station",
+  "deviceId": 39
+ },
+ {
+  "command": "Send Snapshot Email",
+  "label": "Send Snapshot Email",
+  "display": "Send Snapshot Email from Room › Control4 DS3 Door Station",
+  "deviceId": 39
+ }
+]
+=== Done ===

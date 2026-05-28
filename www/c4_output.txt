@@ -1,0 +1,274 @@
+Director host          : 192.168.1.112
+Controller unique ID   : control4_core3_000FFFA1ADD2
+
+Authenticating with Control4 cloud...
+Authentication OK
+
+Fetching all Director items...
+Total items: 93
+
+Found 21 relevant item(s):
+
+=== 8-Channel Relay 2 ===
+  ID   : 30
+  Type : 7
+  Room : Room
+  Variables:
+    Module Temperature                       = 0
+    Module Over Temperature Fault            = False
+    Channel 1 Short Circuit                  = True
+    Channel 2 Short Circuit                  = True
+    Channel 3 Short Circuit                  = True
+    Channel 4 Short Circuit                  = True
+    Channel 5 Short Circuit                  = True
+    Channel 6 Short Circuit                  = True
+    Channel 7 Short Circuit                  = True
+    Channel 8 Short Circuit                  = True
+
+=== 8-Channel Relay 1 ===
+  ID   : 31
+  Type : 7
+  Room : Room
+  Variables:
+    Module Temperature                       = 0
+    Module Over Temperature Fault            = False
+    Channel 1 Short Circuit                  = True
+    Channel 2 Short Circuit                  = True
+    Channel 3 Short Circuit                  = True
+    Channel 4 Short Circuit                  = True
+    Channel 5 Short Circuit                  = True
+    Channel 6 Short Circuit                  = True
+    Channel 7 Short Circuit                  = True
+    Channel 8 Short Circuit                  = True
+
+=== Control4 DS3 Door Station ===
+  ID   : 39
+  Type : 6
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.107
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 39}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 39}
+
+=== Front door ===
+  ID   : 40
+  Type : 7
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.107
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 39}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 39}
+
+=== Control4 DS3 Camera ===
+  ID   : 41
+  Type : 7
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.107
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 39}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 39}
+
+=== Front Door Station ===
+  ID   : 42
+  Type : 7
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.107
+    RINGER_VOLUME                            = 0
+    SPEAKER_VOLUME                           = 0
+    MICROPHONE_GAIN                          = 0
+    CALL_DURATION                            = 0
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 39}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 39}
+
+=== Control4 DS3 Door Station ===
+  ID   : 44
+  Type : 6
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.108
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 44}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 44}
+
+=== Office Door station ===
+  ID   : 45
+  Type : 7
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.108
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 44}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 44}
+
+=== Control4 DS3 Camera 2 ===
+  ID   : 46
+  Type : 7
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.108
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 44}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 44}
+
+=== Office Door Station ===
+  ID   : 47
+  Type : 7
+  Room : Room
+  Variables:
+    Last Known User Code ID                  = 2
+    Last Known User Name                     = User 1
+    DS_ADDRESS                               = 192.168.1.108
+    RINGER_VOLUME                            = 0
+    SPEAKER_VOLUME                           = 0
+    MICROPHONE_GAIN                          = 0
+    CALL_DURATION                            = 0
+  Commands:
+    {'command': 'Restart', 'label': 'Restart', 'display': 'Send Restart Command to Room › Control4 DS3 Door Station', 'deviceId': 44}
+    {'command': 'Send Snapshot Email', 'label': 'Send Snapshot Email', 'display': 'Send Snapshot Email from Room › Control4 DS3 Door Station', 'deviceId': 44}
+
+=== Intercom 2 ===
+  ID   : 77
+  Type : 7
+  Room : Room
+  Variables:
+    RINGER_VOLUME                            = 0
+    SPEAKER_VOLUME                           = 0
+    MICROPHONE_GAIN                          = 0
+    CALL_DURATION                            = 0
+  Commands:
+    {'label': 'Screensaver Mode', 'display': 'Set the screensaver mode on Room › T4 10" In-Wall Touch Screen to PARAM:0', 'command': 'SET_SCREENSAVER_MODE', 'params': [{'name': 'MODE', 'type': 'LIST', 'values': [{'name': 'None', 'value': 'none'}, {'name': 'Blank', 'value': 'blank'}, {'name': 'Date and Time', 'value': 'dateandtime'}, {'name': 'Current Media', 'value': 'media'}, {'name': 'Photos', 'value': 'photos'}, {'name': 'Custom', 'value': 'custom'}], 'valueField': 'value', 'valueDisplay': '{name}', 'valueType': 'STRING'}], 'deviceId': 75}
+    {'label': 'Screensaver Delay', 'display': 'Start the screensaver on Room › T4 10" In-Wall Touch Screen PARAM:0', 'command': 'SET_SCREENSAVER_START_TIME', 'params': [{'name': 'TIME', 'type': 'LIST', 'values': [{'name': 'after 15 seconds', 'value': '15'}, {'name': 'after 30 seconds', 'value': '30'}, {'name': 'after 45 seconds', 'value': '45'}, {'name': 'after 1 minute', 'value': '60'}, {'name': 'after 2 minutes', 'value': '120'}, {'name': 'after 3 minutes', 'value': '180'}, {'name': 'after 5 minutes', 'value': '300'}, {'name': 'after 10 minutes', 'value': '600'}, {'name': 'after 15 minutes', 'value': '900'}, {'name': 'after 20 minutes', 'value': '1200'}, {'name': 'after 25 minutes', 'value': '1500'}, {'name': 'after 30 minutes', 'value': '1800'}, {'name': 'after 45 minutes', 'value': '2700'}, {'name': 'after 1 hour', 'value': '3600'}], 'valueField': 'value', 'valueDisplay': '{name}', 'valueType': 'STRING'}], 'deviceId': 75}
+    {'label': 'Activate Screensaver', 'display': 'Activate the screensaver on Room › T4 10" In-Wall Touch Screen', 'command': 'SCREENSAVER_ENTER', 'deviceId': 75}
+    {'label': 'Dismiss Screensaver', 'display': 'Dismiss the screensaver on Room › T4 10" In-Wall Touch Screen', 'command': 'SCREENSAVER_EXIT', 'deviceId': 75}
+    {'label': 'Enable Auto Brightness', 'display': 'Enable AutoBrightness mode on Room › T4 10" In-Wall Touch Screen', 'command': 'SET_AUTOBRIGHTNESS_ENABLED:True', 'deviceId': 75}
+    {'label': 'Disable Auto Brightness', 'display': 'Disable AutoBrightness mode on Room › T4 10" In-Wall Touch Screen', 'command': 'SET_AUTOBRIGHTNESS_ENABLED:False', 'deviceId': 75}
+    {'label': 'Enable Proximity Sensor', 'display': 'Enable the Proximity Sensor on Room › T4 10" In-Wall Touch Screen', 'command': 'SET_PROXIMITY_SENSOR_ENABLED:True', 'deviceId': 75}
+    {'label': 'Disable Proximity Sensor', 'display': 'Disable the Proximity Sensor on Room › T4 10" In-Wall Touch Screen', 'command': 'SET_PROXIMITY_SENSOR_ENABLED:False', 'deviceId': 75}
+    {'label': 'Enable Alexa', 'display': 'Enable Alexa on Room › T4 10" In-Wall Touch Screen', 'command': 'SET_ALEXA_ENABLED:True', 'deviceId': 75}
+    {'label': 'Disable Alexa', 'display': 'Disable Alexa on Room › T4 10" In-Wall Touch Screen', 'command': 'SET_ALEXA_ENABLED:False', 'deviceId': 75}
+
+=== Configurable Keypad (Wired) ===
+  ID   : 80
+  Type : 6
+  Room : Room
+  Variables: (none)
+
+=== Configurable Keypad (Wired) ===
+  ID   : 81
+  Type : 7
+  Room : Room
+  Variables: (none)
+  Commands:
+    {'label': 'Use On Color', 'display': 'Use the ON color for BTN_ID=PARAMVALUE:0 on Room › Configurable Keypad (Wired)', 'command': 'KEYPAD_BUTTON_INFO', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'STATE', 'type': 'HIDDEN', 'value': 'true', 'valueType': 'STRING'}], 'deviceId': 81}
+    {'label': 'Use Off Color', 'display': 'Use the OFF color for BTN_ID=PARAMVALUE:0 on Room › Configurable Keypad (Wired)', 'command': 'KEYPAD_BUTTON_INFO', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'STATE', 'type': 'HIDDEN', 'value': 'false', 'valueType': 'STRING'}], 'deviceId': 81}
+    {'label': 'Set Button LED when On', 'id': 1, 'display': 'Set the LED ON color of the BTN_ID=PARAMVALUE:0 LED on the Room › Configurable Keypad (Wired) to PARAM:1', 'command': 'KEYPAD_BUTTON_COLOR', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'ON_COLOR', 'type': 'HEXCOLOR'}], 'deviceId': 81}
+    {'label': 'Set Button LED when Off', 'display': 'Set the LED OFF color of the BTN_ID=PARAMVALUE:0 LED on the Room › Configurable Keypad (Wired) to PARAM:1', 'command': 'KEYPAD_BUTTON_COLOR', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'OFF_COLOR', 'type': 'HEXCOLOR'}], 'deviceId': 81}
+    {'label': 'Set Button LED', 'display': 'Set the current LED color of the BTN_ID=PARAMVALUE:0 LED on the Room › Configurable Keypad (Wired) to PARAM:1', 'command': 'KEYPAD_BUTTON_COLOR', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'CURRENT_COLOR', 'type': 'HEXCOLOR'}], 'deviceId': 81}
+    {'label': 'Set all LEDs when On', 'id': 0, 'display': 'Set the LED ON color of all LEDs on the Room › Configurable Keypad (Wired) to PARAM:0', 'command': 'KEYPAD_ALL_BUTTON_COLOR', 'params': [{'name': 'ON_COLOR', 'type': 'HEXCOLOR'}], 'deviceId': 81}
+    {'label': 'Set all LEDs when Off', 'display': 'Set the LED OFF color of all LEDs on the Room › Configurable Keypad (Wired) to PARAM:0', 'command': 'KEYPAD_ALL_BUTTON_COLOR', 'params': [{'name': 'OFF_COLOR', 'type': 'HEXCOLOR'}], 'deviceId': 81}
+    {'label': 'Set all LEDs', 'display': 'Set the color on all LEDs on the Room › Configurable Keypad (Wired) to PARAM:0', 'command': 'KEYPAD_ALL_BUTTON_COLOR', 'params': [{'name': 'CURRENT_COLOR', 'type': 'HEXCOLOR'}], 'deviceId': 81}
+    {'label': 'Press Button', 'display': 'Press the BTN_ID=PARAMVALUE:0 button on the Room › Configurable Keypad (Wired)', 'command': 'KEYPAD_BUTTON_ACTION', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'ACTION', 'type': 'HIDDEN', 'value': 1, 'valueType': 'INTEGER'}], 'deviceId': 81}
+    {'label': 'Release Button', 'display': 'Release the BTN_ID=PARAMVALUE:0 button on the Room › Configurable Keypad (Wired)', 'command': 'KEYPAD_BUTTON_ACTION', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'ACTION', 'type': 'HIDDEN', 'value': 0, 'valueType': 'INTEGER'}], 'deviceId': 81}
+    {'label': 'Single Click Button', 'display': 'Single Click the BTN_ID=PARAMVALUE:0 button on the Room › Configurable Keypad (Wired)', 'command': 'KEYPAD_BUTTON_ACTION', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'ACTION', 'type': 'HIDDEN', 'value': 2, 'valueType': 'INTEGER'}], 'deviceId': 81}
+    {'label': 'Double Click Button', 'display': 'Double Click the BTN_ID=PARAMVALUE:0 button on the Room › Configurable Keypad (Wired)', 'command': 'KEYPAD_BUTTON_ACTION', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'ACTION', 'type': 'HIDDEN', 'value': 3, 'valueType': 'INTEGER'}], 'deviceId': 81}
+    {'label': 'Triple Click Button', 'display': 'Triple Click the BTN_ID=PARAMVALUE:0 button on the Room › Configurable Keypad (Wired)', 'command': 'KEYPAD_BUTTON_ACTION', 'params': [{'name': 'BUTTON_ID', 'type': 'LIST', 'values': [{'name': 'Mezzanine ', 'id': 0}, {'name': 'Inside wall lights + Fluros ', 'id': 3}], 'valueField': 'id', 'valueDisplay': '{name}', 'valueType': 'INTEGER'}, {'name': 'ACTION', 'type': 'HIDDEN', 'value': 4, 'valueType': 'INTEGER'}], 'deviceId': 81}
+
+=== Access ===
+  ID   : 87
+  Type : 9
+  Room : None
+  Variables: (none)
+
+=== Control4 DS2 Lock ===
+  ID   : 92
+  Type : 6
+  Room : Room
+  Variables:
+    Last Unlocked By                         = User 1
+
+=== DS2 Lock - Front Door ===
+  ID   : 93
+  Type : 7
+  Room : Room
+  Variables:
+    Last Unlocked By                         = User 1
+    LockStatus                               = locked
+    BatteryStatus                            = normal
+    LastActionDescription                    = Locked by Control4
+  Commands:
+    {'id': 0, 'display': 'Unlock the Room › DS2 Lock - Front Door', 'command': 'UNLOCK', 'deviceId': 93}
+    {'id': 1, 'display': 'Lock the Room › DS2 Lock - Front Door', 'command': 'LOCK', 'deviceId': 93}
+    {'id': 2, 'display': 'Toggle the Room › DS2 Lock - Front Door', 'command': 'TOGGLE', 'deviceId': 93}
+
+=== Front Door Lock ===
+  ID   : 94
+  Type : 7
+  Room : Room
+  Variables:
+    RelayState                               = 0
+    StateVerified                            = 1
+    LastActionTime                           = 1779944291
+  Commands:
+    {'display': 'Lock the Room › Front Door Lock', 'command': 'OPEN', 'deviceId': 94}
+    {'display': 'Unlock the Room › Front Door Lock', 'command': 'CLOSE', 'deviceId': 94}
+    {'display': 'Toggle the Room › Front Door Lock', 'command': 'TOGGLE', 'deviceId': 94}
+
+=== Control4 DS2 Lock ===
+  ID   : 95
+  Type : 6
+  Room : Room
+  Variables:
+    Last Unlocked By                         = User 1
+
+=== DS2 Lock - Office Door ===
+  ID   : 96
+  Type : 7
+  Room : Room
+  Variables:
+    Last Unlocked By                         = User 1
+    LockStatus                               = locked
+    BatteryStatus                            = normal
+    LastActionDescription                    = Locked by Control4
+  Commands:
+    {'id': 0, 'display': 'Unlock the Room › DS2 Lock - Office Door', 'command': 'UNLOCK', 'deviceId': 96}
+    {'id': 1, 'display': 'Lock the Room › DS2 Lock - Office Door', 'command': 'LOCK', 'deviceId': 96}
+    {'id': 2, 'display': 'Toggle the Room › DS2 Lock - Office Door', 'command': 'TOGGLE', 'deviceId': 96}
+
+=== Office Door Lock ===
+  ID   : 97
+  Type : 7
+  Room : Room
+  Variables:
+    RelayState                               = 0
+    StateVerified                            = 1
+    LastActionTime                           = 1779956900
+  Commands:
+    {'display': 'Lock the Room › Office Door Lock', 'command': 'OPEN', 'deviceId': 97}
+    {'display': 'Unlock the Room › Office Door Lock', 'command': 'CLOSE', 'deviceId': 97}
+    {'display': 'Toggle the Room › Office Door Lock', 'command': 'TOGGLE', 'deviceId': 97}
+
+=== Remote Access ===
+  ID   : 100117
+  Type : 9
+  Room : None
+  Variables: (none)
+
