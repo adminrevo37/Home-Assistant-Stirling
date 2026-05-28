@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
 Control4 Director diagnostic - finds DS3 intercom and checks door code variables.
-Run from HA terminal:
-    docker exec homeassistant python3 /config/c4_diagnostic.py
+Trigger from HA: Developer Tools -> Actions -> shell_command.c4_diagnostic
+Read output:     cat /config/c4_output.txt
 """
 import asyncio
 import json
-import sys
 
 async def main():
     # ----------------------------------------------------------------
@@ -29,21 +28,17 @@ async def main():
         print("ERROR: Control4 integration not found in HA config entries")
         return
 
-    host     = c4_entry['data'].get('host')
-    username = c4_entry['data'].get('username')
-    password = c4_entry['data'].get('password')
+    host                 = c4_entry['data'].get('host')
+    username             = c4_entry['data'].get('username')
+    password             = c4_entry['data'].get('password')
+    controller_unique_id = c4_entry['data'].get('controller_unique_id')
 
-    if not all([host, username, password]):
-        print("ERROR: Missing host/username/password in Control4 config entry")
-        print(f"Keys found: {list(c4_entry['data'].keys())}")
-        return
-
-    print(f"Director host : {host}")
-    print(f"Account user  : {username}")
+    print(f"Director host          : {host}")
+    print(f"Controller unique ID   : {controller_unique_id}")
     print()
 
     # ----------------------------------------------------------------
-    # Step 2: Authenticate with Control4 cloud to get Director token
+    # Step 2: Authenticate and get Director bearer token
     # ----------------------------------------------------------------
     try:
         import aiohttp
@@ -51,17 +46,15 @@ async def main():
         from pyControl4.director import C4Director
     except ImportError as e:
         print(f"ERROR: {e}")
-        print("pyControl4 is not available in this Python environment.")
-        print("Run this script inside the HA container:")
-        print("  docker exec homeassistant python3 /config/c4_diagnostic.py")
         return
 
     print("Authenticating with Control4 cloud...")
     try:
         async with aiohttp.ClientSession() as session:
             account = C4Account(username, password, session)
-            await account.getSessionToken()
-            token_dict = await account.getDirectorBearerToken(host)
+            await account.get_account_bearer_token()
+
+            token_dict = await account.get_director_bearer_token(controller_unique_id)
             token = token_dict['token']
             print("Authentication OK")
             print()
@@ -69,16 +62,15 @@ async def main():
             director = C4Director(host, token, session)
 
             # ----------------------------------------------------------------
-            # Step 3: List all items - look for DS3 / intercom / keypad
+            # Step 3: Get all items - search for DS3 / intercom / keypad
             # ----------------------------------------------------------------
             print("Fetching all Director items...")
-            all_items = await director.getAllItemInfo()
-            print(f"Total items found: {len(all_items)}")
+            all_items = await director.get_all_item_info()
+            print(f"Total items: {len(all_items)}")
             print()
 
-            # Keywords that suggest a door/intercom/keypad device
             keywords = ['ds3', 'ds2', 'intercom', 'doorbell', 'keypad',
-                        'door', 'entry', 'access', 'pier', 'front', 'lock']
+                        'door', 'entry', 'access', 'pier', 'lock', 'relay', 'spare']
 
             matched = []
             for item in all_items:
@@ -88,52 +80,54 @@ async def main():
                     matched.append(item)
 
             if not matched:
-                print("No door/intercom items matched by keyword.")
-                print("Printing ALL items so you can identify the DS3 manually:")
+                print("No door/intercom items matched. Printing ALL items:")
                 for item in all_items:
-                    print(f"  ID:{item.get('id'):>5}  Type:{item.get('type',''):<30}  "
-                          f"Name:{item.get('name',''):<30}  Room:{item.get('roomName','')}")
+                    print(f"  ID:{item.get('id'):>5}  "
+                          f"Type:{str(item.get('type','')):<30}  "
+                          f"Name:{str(item.get('name','')):<30}  "
+                          f"Room:{item.get('roomName','')}")
             else:
-                print(f"Found {len(matched)} potentially relevant item(s):\n")
+                print(f"Found {len(matched)} relevant item(s):\n")
                 for item in matched:
                     iid   = item.get('id')
                     iname = item.get('name')
                     itype = item.get('type')
                     iroom = item.get('roomName')
-                    print(f"  ID:{iid}  |  {iname}  |  {itype}  |  {iroom}")
+                    print(f"=== {iname} ===")
+                    print(f"  ID   : {iid}")
+                    print(f"  Type : {itype}")
+                    print(f"  Room : {iroom}")
+
+                    # Variables
                     try:
-                        variables = await director.getItemVariables(iid)
+                        variables = await director.get_item_variables(iid)
                         if variables:
                             print("  Variables:")
                             for v in variables:
-                                print(f"    {v.get('varName',''):<35} = {v.get('value','')}")
+                                print(f"    {str(v.get('varName','')):<40} = {v.get('value','')}")
                         else:
                             print("  Variables: (none)")
                     except Exception as ve:
-                        print(f"  Variables: ERROR - {ve}")
-                    print()
+                        print(f"  Variables error: {ve}")
 
-            # ----------------------------------------------------------------
-            # Step 4: Check the Front Door Lock and Office Door Lock item IDs
-            # ----------------------------------------------------------------
-            print("=== Lock relay items ===")
-            lock_keywords = ['lock', 'relay', 'spare']
-            for item in all_items:
-                name = str(item.get('name', '')).lower()
-                if any(k in name for k in lock_keywords):
-                    iid = item.get('id')
-                    print(f"  ID:{iid}  |  {item.get('name')}  |  {item.get('type')}  |  {item.get('roomName')}")
-                    try:
-                        variables = await director.getItemVariables(iid)
-                        if variables:
-                            for v in variables:
-                                print(f"    {v.get('varName',''):<35} = {v.get('value','')}")
-                    except Exception:
-                        pass
+                    # Commands (best-effort - method name may vary)
+                    for cmd_method in ['get_item_commands', 'getItemCommands']:
+                        m = getattr(director, cmd_method, None)
+                        if m:
+                            try:
+                                commands = await m(iid)
+                                if commands:
+                                    print("  Commands:")
+                                    for c in commands:
+                                        print(f"    {c}")
+                            except Exception:
+                                pass
+                            break
+
                     print()
 
     except Exception as e:
-        print(f"ERROR during Director query: {e}")
+        print(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
 
