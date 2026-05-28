@@ -2,8 +2,7 @@
 """
 Roller Door Visual State Sensor
 ================================
-Uses ffprobe (built into HA) to measure average Y-luminance in the door ROI.
-No PIL/Pillow dependency needed.
+Uses PIL (Pillow) to measure average luma in the door ROI.
 
 Output:  prints "open" or "closed" to stdout (no trailing newline)
          diagnostic line written to stderr
@@ -26,49 +25,33 @@ Calibration:
 """
 
 import sys
-import subprocess
-import re
 
 SNAPSHOT        = "/config/www/door_check_latest.jpg"
 CLOSED_BASELINE = 96.4
 OPEN_THRESHOLD  = 15.0
 
-# ROI as fractions of image dimensions (ffprobe crop filter: w:h:x:y)
+# ROI fractions  (tuned 2026-05-29)
 ROI_X = 0.55
 ROI_Y = 0.10
 ROI_W = 0.17
 ROI_H = 0.32
 
-
-def get_brightness():
-    """
-    Crop the door ROI and return average Y (luma) via ffprobe signalstats.
-    YAVG is 0-255 scale for full-range JPEG input.
-    """
-    crop = f"crop=iw*{ROI_W}:ih*{ROI_H}:iw*{ROI_X}:ih*{ROI_Y},signalstats"
-    cmd = [
-        "ffprobe", "-v", "quiet",
-        "-show_entries", "frame_tags=lavfi.signalstats.YAVG",
-        "-vf", crop,
-        "-of", "default=noprint_wrappers=1",
-        SNAPSHOT
-    ]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-    m = re.search(r"YAVG=(\d+\.?\d*)", r.stdout)
-    if not m:
-        raise RuntimeError(
-            f"ffprobe returned no YAVG\n"
-            f"  stdout: {r.stdout!r}\n"
-            f"  stderr: {r.stderr!r}"
-        )
-    return float(m.group(1))
-
-
 try:
-    avg    = get_brightness()
+    from PIL import Image
+
+    img  = Image.open(SNAPSHOT).convert("L")   # grayscale
+    W, H = img.size
+    x, y = int(W * ROI_X), int(H * ROI_Y)
+    w, h = int(W * ROI_W), int(H * ROI_H)
+
+    crop   = img.crop((x, y, x + w, y + h))
+    # tobytes() returns raw pixel bytes for 'L' mode — each byte = one pixel value
+    raw    = crop.tobytes()
+    avg    = sum(raw) / len(raw)
     delta  = avg - CLOSED_BASELINE
     status = "open" if abs(delta) > OPEN_THRESHOLD else "closed"
-    print(f"avg={avg:.1f} delta={delta:+.1f} threshold={OPEN_THRESHOLD} => {status}",
+
+    print(f"img={W}x{H} roi=({x},{y},{w},{h}) avg={avg:.1f} delta={delta:+.1f} => {status}",
           file=sys.stderr)
     print(status, end="")
     sys.exit(0)
