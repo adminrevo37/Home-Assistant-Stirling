@@ -1,0 +1,31 @@
+{
+  "domain": "lock_code_manager",
+  "name": "Lock Code Manager",
+  "after_dependencies": [
+    "calendar",
+    "frontend",
+    "input_boolean",
+    "local_akuvox",
+    "lovelace",
+    "matter",
+    "mqtt",
+    "schlage",
+    "schedule",
+    "template",
+    "virtual",
+    "zha",
+    "zwave_js"
+  ],
+  "codeowners": [
+    "@raman325"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
+  "documentation": "https://github.com/raman325/lock_code_manager",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/raman325/lock_code_manager/issues",
+  "requirements": [],
+  "version": "3.1.5"
+}

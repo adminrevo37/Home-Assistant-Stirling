@@ -1,0 +1,122 @@
+"""Text for lock_code_manager."""
+
+from __future__ import annotations
+
+import logging
+
+from homeassistant.components.text import TextEntity, TextMode
+from homeassistant.const import CONF_ENABLED, CONF_NAME, CONF_PIN, STATE_ON, Platform
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .const import DOMAIN
+from .entity import BaseLockCodeManagerEntity
+from .models import LockCodeManagerConfigEntry
+from .util import async_disable_slot
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: LockCodeManagerConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> bool:
+    """Set up config entry."""
+
+    @callback
+    def add_standard_text_entities(slot_num: int, ent_reg: er.EntityRegistry) -> None:
+        """Add standard text entities for slot."""
+        async_add_entities(
+            [
+                LockCodeManagerText(hass, ent_reg, config_entry, slot_num, *props)
+                for props in ((CONF_NAME, TextMode.TEXT), (CONF_PIN, TextMode.PASSWORD))
+            ],
+            True,
+        )
+
+    config_entry.async_on_unload(
+        config_entry.runtime_data.callbacks.register_standard_adder(
+            add_standard_text_entities
+        )
+    )
+
+    return True
+
+
+class LockCodeManagerText(BaseLockCodeManagerEntity, TextEntity):
+    """Text entity for lock code manager."""
+
+    _attr_native_min = 0
+    _attr_native_max = 9999
+    _enabled_entity_id: str = ""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        ent_reg: er.EntityRegistry,
+        config_entry: LockCodeManagerConfigEntry,
+        slot_num: int,
+        key: str,
+        text_mode: TextMode,
+    ) -> None:
+        """Initialize Text entity."""
+        BaseLockCodeManagerEntity.__init__(
+            self, hass, ent_reg, config_entry, slot_num, key
+        )
+        self._attr_mode = text_mode
+
+    @property
+    def native_value(self) -> str | None:
+        """Return native value."""
+        return self._state
+
+    async def async_set_value(self, value: str) -> None:
+        """Set value of text."""
+        # Normalize whitespace-only PINs to empty string
+        if self.key == CONF_PIN and not value.strip():
+            value = ""
+
+        if not self._enabled_entity_id:
+            self._enabled_entity_id = (
+                self.ent_reg.async_get_entity_id(
+                    Platform.SWITCH, DOMAIN, self._get_uid(CONF_ENABLED)
+                )
+                or ""
+            )
+        # When clearing a PIN on an enabled slot, auto-disable the slot first so the
+        # sync logic will clear the code on the lock, then proceed to clear the PIN value.
+        if self.key == CONF_PIN and not value:
+            if (
+                self._enabled_entity_id
+                and (state := self.hass.states.get(self._enabled_entity_id))
+                and state.state == STATE_ON
+            ):
+                _LOGGER.debug(
+                    "%s (%s): Clearing PIN on enabled slot %s, auto-disabling slot",
+                    self.config_entry.entry_id,
+                    self.config_entry.title,
+                    self.slot_num,
+                )
+                await async_disable_slot(
+                    self.hass,
+                    self.ent_reg,
+                    self.config_entry.entry_id,
+                    self.slot_num,
+                )
+            elif not self._enabled_entity_id:
+                _LOGGER.warning(
+                    "%s (%s): Clearing PIN on slot %s but cannot resolve enabled "
+                    "switch entity to auto-disable; slot may not be fully set up",
+                    self.config_entry.entry_id,
+                    self.config_entry.title,
+                    self.slot_num,
+                )
+
+        self._update_config_entry(value)
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity added to hass."""
+        await BaseLockCodeManagerEntity.async_added_to_hass(self)
+        await TextEntity.async_added_to_hass(self)

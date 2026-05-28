@@ -1,0 +1,46 @@
+version: 5
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://core-mosquitto:1883
+  user: addons
+  password: joona8pheem6muj1ahPhahleigogoquejoo8eeneeRo9ahcai1Xeishech4ohTha
+serial:
+  port: /dev/serial/by-id/usb-Nabu_Casa_ZBT-2_E072A1D909C8-if00
+  baudrate: 460800
+  rtscts: true
+  adapter: ember
+advanced:
+  log_level: info
+  channel: 11
+  network_key:
+    - 114
+    - 37
+    - 115
+    - 5
+    - 23
+    - 246
+    - 232
+    - 47
+    - 164
+    - 49
+    - 68
+    - 63
+    - 43
+    - 32
+    - 154
+    - 230
+  pan_id: 25912
+  ext_pan_id:
+    - 29
+    - 15
+    - 61
+    - 188
+    - 198
+    - 47
+    - 148
+    - 61
+frontend:
+  enabled: true
+  port: 8099
+homeassistant:
+  enabled: true

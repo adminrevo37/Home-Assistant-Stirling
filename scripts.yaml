@@ -1,0 +1,240 @@
+create_calendar_event_bay_1:
+  alias: Create Calendar Event Bay 1
+  sequence:
+  - target:
+      entity_id: calendar.lane_1_bowling_machine
+    data:
+      summary: '{{ states(''input_text.event_name'') }}'
+      description: '{{ states(''input_text.event_description'') }}'
+      location: BAY 1 (booked by HASS)
+      start_date_time: '{{ states(''input_datetime.event_start'') }}'
+      end_date_time: '{{ states(''input_datetime.event_end'') }}'
+    action: calendar.create_event
+  description: Bay 1 Booking
+create_calendar_event_bay_2:
+  sequence:
+  - data:
+      summary: '{{ states(''input_text.event_name'') }}'
+      description: '{{ states(''input_text.event_description'') }}'
+      location: BAY 3 (booked by HASS)
+      start_date_time: '{{ states(''input_datetime.event_start'') }}'
+      end_date_time: '{{ states(''input_datetime.event_end'') }}'
+    action: calendar.create_event
+    target:
+      entity_id: calendar.lane_2_bowling_machine
+  alias: Create Calendar Event Bay 2
+  description: Bay 2 Booking
+create_calendar_event_bay_3:
+  sequence:
+  - data:
+      summary: '{{ states(''input_text.event_name'') }}'
+      description: '{{ states(''input_text.event_description'') }}'
+      location: BAY 3 (booked by HASS)
+      start_date_time: '{{ states(''input_datetime.event_start'') }}'
+      end_date_time: '{{ states(''input_datetime.event_end'') }}'
+    action: calendar.create_event
+    target:
+      entity_id: calendar.lane_3_truman_or_bowling_machine
+  alias: Create Calendar Event Bay 3
+  description: Bay 3 Booking
+create_calendar_event_bay_4:
+  sequence:
+  - data:
+      summary: '{{ states(''input_text.event_name'') }}'
+      description: '{{ states(''input_text.event_description'') }}'
+      location: BAY 4 (booked by HASS)
+      start_date_time: '{{ states(''input_datetime.event_start'') }}'
+      end_date_time: '{{ states(''input_datetime.event_end'') }}'
+    action: calendar.create_event
+    target:
+      entity_id: calendar.lane_4_run_up_net
+  alias: Create Calendar Event Bay 4
+  description: Bay 4 Booking
+create_calendar_event_bay_5:
+  sequence:
+  - data:
+      summary: '{{ states(''input_text.event_name'') }}'
+      description: '{{ states(''input_text.event_description'') }}'
+      location: BAY 5 (booked by HASS)
+      start_date_time: '{{ states(''input_datetime.event_start'') }}'
+      end_date_time: '{{ states(''input_datetime.event_end'') }}'
+    action: calendar.create_event
+    target:
+      entity_id: calendar.lane_5_run_up_net
+  alias: Create Calendar Event Bay 5
+  description: Bay 5 Booking
+bay1_activate_script:
+  sequence:
+  - action: input_boolean.turn_on
+    metadata: {}
+    target:
+      entity_id: input_boolean.bay1_helper
+    data: {}
+  - action: calendar.get_events
+    metadata: {}
+    target:
+      entity_id: calendar.lane_1_bowling_machine
+    data: {}
+  - action: light.turn_on
+    metadata: {}
+    target:
+      entity_id:
+      - light.highbay_1
+    data: {}
+  - action: script.scene_general_bay
+    metadata: {}
+    data: {}
+  alias: Scene - BAY1 On
+  description: ''
+scene_empty:
+  sequence:
+  - action: light.turn_off
+    metadata: {}
+    target:
+      entity_id:
+      - light.highbay_1
+      - light.highbay_2
+      - light.highbay_3
+      - light.highbay_4
+      - light.highbay_5
+      - light.mezzanine_wall_lights
+      - light.office_downlights
+      - light.inside_wall_lights
+      - light.fluro_x_4
+    data: {}
+  - delay:
+      hours: 0
+      minutes: 5
+      seconds: 0
+      milliseconds: 0
+  - action: light.turn_off
+    metadata: {}
+    target:
+      entity_id: light.outside_wall_lights
+    data: {}
+  - action: switch.turn_off
+    metadata: {}
+    target:
+      label_id: power
+    data: {}
+  alias: Scene - Empty
+  description: ''
+scene_general_bay:
+  sequence:
+  - action: light.turn_on
+    metadata: {}
+    target:
+      entity_id:
+      - light.inside_wall_lights
+    data: {}
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 1
+      milliseconds: 0
+  - action: light.turn_on
+    metadata: {}
+    target:
+      entity_id: light.fluro_x_4
+    data: {}
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 1
+      milliseconds: 0
+  - action: light.turn_on
+    metadata: {}
+    target:
+      entity_id: light.mezzanine_wall_lights
+    data: {}
+  alias: Scene - General On
+  description: ''
+scene_bay1_off:
+  sequence:
+  - action: input_boolean.turn_off
+    metadata: {}
+    target:
+      entity_id: input_boolean.bay1_helper
+    data: {}
+  - action: calendar.get_events
+    metadata: {}
+    target:
+      entity_id: calendar.lane_1_bowling_machine
+    data: {}
+  - action: light.turn_off
+    metadata: {}
+    target:
+      entity_id:
+      - light.highbay_1
+    data: {}
+  - condition: light.is_on
+    options:
+      behavior: any
+    target:
+      entity_id:
+      - light.highbay_2
+      - light.highbay_3
+      - light.highbay_4
+      - light.highbay_5
+  - action: light.turn_off
+    metadata: {}
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+    data: {}
+  alias: Scene - BAY1 Off
+  description: ''
+scene_general_off:
+  sequence:
+  - action: light.turn_off
+    metadata: {}
+    target:
+      entity_id:
+      - light.lights_general
+    data: {}
+  alias: Scene - General Off
+  description: ''
+sample_booking_bay_3:
+  sequence:
+  - action: lock.unlock
+    metadata: {}
+    target:
+      entity_id: lock.front_door_lock
+    data: {}
+  - action: light.turn_on
+    metadata: {}
+    target:
+      entity_id:
+      - light.lights_general
+      - light.highbay_3
+    data: {}
+  - delay:
+      hours: 0
+      minutes: 2
+      seconds: 0
+      milliseconds: 0
+  - action: lock.lock
+    metadata: {}
+    target:
+      entity_id: lock.front_door_lock
+    data: {}
+  alias: Sample Booking Bay 3
+  description: ''
+notify_script:
+  use_blueprint:
+    path: homeassistant/confirmable_notification.yaml
+    input:
+      notify_device: f40492c148c197d1797526a9689f0fda
+      title: LIGHTS still On
+      message: CENTRE {{ states('binary_sensor.main_occupancy_status') }}
+      confirm_text: TURN OFF
+      confirm_action:
+      - action: light.turn_off
+        metadata: {}
+        target:
+          label_id: light
+          entity_id: light.lights_general
+        data: {}
+  alias: NOTIFY SCRIPT - Lights
+  description: ''

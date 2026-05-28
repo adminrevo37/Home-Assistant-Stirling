@@ -1,0 +1,217 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Lock Code Manager config entry with same slugified name already exists.",
+      "existing_codes_cancelled": "Setup cancelled. Existing codes were not modified.",
+      "locks_updated": "The locks for your config entry have been updated.",
+      "unknown": "An unexpected error occurred during setup."
+    },
+    "error": {
+      "excluded_platform": "Entities from the `{integration}` integration are not supported as condition entities. See the [wiki]({docs_url}) for details.",
+      "invalid_config": "Slots configuration is invalid. For more information, check the logs and the docs.",
+      "missing_pin_if_enabled": "PIN must be set if slot is enabled.",
+      "slots_already_configured": "The following slots for lock {lock} are already managed by another config entry ({entry_title}) and can't be added to this configuration without being removed from the other one: {common_slots}"
+    },
+    "step": {
+      "choose_path": {
+        "description": "Some locks mask stored PINs, making them invisible to external tools. Once LCM is managing your locks, do not set codes using other tools or manually at the lock. Clear all slots before setup. For permanent access codes, configure them through LCM without a condition entity.\n\nChoose whether you want to configure each slot via the UI or if you want to configure all slots in a YAML config.",
+        "menu_options": {
+          "ui": "UI",
+          "yaml": "YAML"
+        },
+        "title": "Choose Path"
+      },
+      "code_slot": {
+        "data": {
+          "entity_id": "Condition Entity",
+          "enabled": "Enabled",
+          "name": "Name",
+          "pin": "PIN Code"
+        },
+        "description": "**Configure slot {slot_num}:** A slot is active when the condition entity (if configured) is 'on'. For calendars, 'on' means an event is in progress. Supported entity types: calendar, binary_sensor, switch, schedule, input_boolean.",
+        "title": "Configure Slot {slot_num}"
+      },
+      "existing_codes_confirm": {
+        "title": "Existing Codes Detected",
+        "description": "Existing codes were found on the following lock slots:\n\n{details}\n\nThese codes will be overwritten when the sync manager reconciles the configured state. Continue to proceed or cancel to back out.",
+        "menu_options": {
+          "existing_codes_continue": "Continue",
+          "existing_codes_cancel": "Cancel"
+        }
+      },
+      "reauth": {
+        "data": {
+          "locks": "Locks"
+        },
+        "description": "The lock `{lock}`, in the configuration for `{name}`, is no longer configured in Home Assistant and must be removed from your configuration. Choose new locks that this configuration is for. If you no longer need this configuration, delete the configuration entry.",
+        "title": "Update locks for {name}"
+      },
+      "ui": {
+        "data": {
+          "num_slots": "Number of slots",
+          "start_slot": "Start from slot #"
+        },
+        "description": "Configure slots for all codes you want on the lock. You can add and remove slots later using the integration services.",
+        "title": "How Many Slots?"
+      },
+      "user": {
+        "data": {
+          "locks": "Locks",
+          "name": "Name"
+        },
+        "description": "Give this configuration a unique name (e.g. `House Locks`) and select the locks you would like to manage with it.",
+        "title": "Lock Code Manager"
+      },
+      "yaml": {
+        "data": {
+          "slots": "Slots YAML"
+        },
+        "description": "The config is expected to be a dictionary where the key is the slot number. For more information, check the docs.",
+        "title": "Configure slots"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "active": {
+        "name": "Active"
+      },
+      "in_sync": {
+        "name": "Code slot {slot_num} in sync",
+        "state_attributes": {
+          "sync_status": {
+            "state": {
+              "in_sync": "In sync",
+              "out_of_sync": "Out of sync",
+              "syncing": "Syncing",
+              "suspended": "Suspended"
+            }
+          }
+        }
+      }
+    },
+    "event": {
+      "pin_used": {
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pin_used": "PIN used"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "code": {
+        "name": "Code slot {slot_num}"
+      }
+    },
+    "switch": {
+      "enabled": {
+        "name": "Enabled"
+      }
+    },
+    "text": {
+      "name": {
+        "name": "Name"
+      },
+      "pin": {
+        "name": "PIN"
+      }
+    }
+  },
+  "options": {
+    "abort": {
+      "existing_codes_cancelled": "Update cancelled. Existing codes were not modified.",
+      "unknown": "An unexpected error occurred while updating options."
+    },
+    "error": {
+      "invalid_config": "Slots configuration is invalid. For more information, check the logs and the docs.",
+      "locks_already_configured": "The following lock(s) are already managed by another config entry: {locks}."
+    },
+    "step": {
+      "init": {
+        "data": {
+          "locks": "Locks",
+          "slots": "Slots YAML"
+        },
+        "description": "Update the locks that are associated with this config entry and/or the slot configurations.",
+        "title": "Lock Code Manager"
+      },
+      "existing_codes_confirm": {
+        "title": "Existing Codes Detected",
+        "description": "Existing codes were found on newly-added lock slots:\n\n{details}\n\nThese codes will be overwritten when the sync manager reconciles the configured state. Continue to proceed or cancel to back out without saving.",
+        "menu_options": {
+          "existing_codes_continue": "Continue",
+          "existing_codes_cancel": "Cancel"
+        }
+      }
+    }
+  },
+  "services": {
+    "hard_refresh_usercodes": {
+      "description": "If Lock Code Manager supports the lock's integration, and the lock's integration supports it, this will query the lock for all usercodes. This is potentially useful for integrations that cache data from the lock and a usercode(s) is configured outside of Home Assistant.",
+      "name": "Hard refresh usercodes"
+    },
+    "generate_pin": {
+      "description": "Generate a random PIN that avoids known unsafe patterns (all-same digits, sequential digits, repeating sub-sequences, and common weak PINs). Returns the PIN via response_variable.",
+      "name": "Generate PIN",
+      "fields": {
+        "length": {
+          "description": "Number of digits in the generated PIN (4-12). Defaults to 4.",
+          "name": "Length"
+        }
+      }
+    }
+  },
+  "issues": {
+    "number_of_uses_removed": {
+      "title": "Number of Uses has been removed",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Number of Uses removed from slot configuration",
+            "description": "The built-in **Number of Uses** feature has been removed and the field was automatically stripped from the following slot configuration:\n\n{impacted}\n\nUse the **[Slot Usage Limiter blueprint]({blueprint_url})** instead. It provides the same functionality with added features like notifications and unlimited mode.\n\nClick **Submit** to acknowledge this issue."
+          }
+        }
+      }
+    },
+    "slot_disabled": {
+      "title": "Lock Code Manager: Slot {slot_num} disabled",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Slot {slot_num} was disabled",
+            "description": "Slot {slot_num} has been automatically disabled.\n\n**Reason:** {reason}\n\nClick **Submit** to acknowledge this issue."
+          }
+        }
+      }
+    },
+    "pin_required": {
+      "title": "Lock Code Manager: PIN required for slot {slot_num}",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "PIN required for slot {slot_num}",
+            "description": "A PIN is required to enable slot {slot_num} on the lock configuration **{config_entry_title}**. Please set a PIN before enabling this slot.\n\nClick **Submit** to acknowledge this issue."
+          }
+        }
+      }
+    },
+    "slot_suspended": {
+      "title": "Lock Code Manager: Sync suspended for {lock_name}",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Sync suspended for {lock_name}",
+            "description": "Sync has been suspended for lock `{lock_entity_id}`.\n\n**Reason:** {reason}\n\nThe lock will resume syncing automatically when it recovers. Click **Submit** to acknowledge this issue."
+          }
+        }
+      }
+    },
+    "lock_offline": {
+      "title": "Lock unreachable: {lock_entity_id}",
+      "description": "Lock Code Manager has been unable to communicate with `{lock_entity_id}` for multiple consecutive attempts. Code synchronization is paused until the lock is reachable again. This issue will be automatically dismissed when the lock recovers."
+    }
+  }
+}

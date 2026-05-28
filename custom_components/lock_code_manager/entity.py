@@ -1,0 +1,304 @@
+"""Base entity class for Lock Code Manager."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, final
+
+from homeassistant.components.lock import LockState
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE
+from homeassistant.core import (
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    State,
+    callback,
+)
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity import DeviceInfo, Entity, EntityCategory
+from homeassistant.helpers.event import TrackStates, async_track_state_change_filtered
+
+from .const import (
+    ATTR_CODE_SLOT,
+    ATTR_TO,
+    DOMAIN,
+)
+from .data import build_slot_unique_id, get_entry_config
+from .models import LockCodeManagerConfigEntry
+from .providers import BaseLock
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class BaseLockCodeManagerEntity(Entity):
+    """Base Lock Code Manager Entity."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        ent_reg: er.EntityRegistry,
+        config_entry: LockCodeManagerConfigEntry,
+        slot_num: int,
+        key: str,
+    ) -> None:
+        """Initialize base entity."""
+        self._hass = hass
+        self.config_entry = config_entry
+        self.entry_id = self.base_unique_id = config_entry.entry_id
+        self.locks: list[BaseLock] = list(config_entry.runtime_data.locks.values())
+        self.slot_num = slot_num
+        self.key = key
+        self.ent_reg = ent_reg
+
+        self._uid_cache: dict[str, str] = {}
+
+        self._attr_translation_key = key
+        self._attr_translation_placeholders = {"slot_num": slot_num}
+
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{self.entry_id}|{slot_num}")},
+            name=f"{config_entry.title} Code slot {slot_num}",
+            manufacturer="Lock Code Manager",
+            model="Code Slot",
+            via_device=(DOMAIN, self.entry_id),
+        )
+
+        self._attr_unique_id = build_slot_unique_id(self.base_unique_id, slot_num, key)
+        self._attr_extra_state_attributes: dict[str, int | list[str]] = {
+            ATTR_CODE_SLOT: int(slot_num)
+        }
+
+    @final
+    @property
+    def _state(self) -> Any:
+        """Return state of entity."""
+        return get_entry_config(self.config_entry).slot(self.slot_num).get(self.key)
+
+    @final
+    def _get_uid(self, key: str) -> str:
+        """Get and cache unique id for a given key."""
+        if key not in self._uid_cache:
+            self._uid_cache[key] = build_slot_unique_id(
+                self.base_unique_id, self.slot_num, key
+            )
+        return self._uid_cache[key]
+
+    @callback
+    @final
+    def _update_config_entry(self, value: Any) -> None:
+        """Update config entry data."""
+        _LOGGER.debug(
+            "%s (%s): Updating %s to %s",
+            self.config_entry.entry_id,
+            self.config_entry.title,
+            self.key,
+            value,
+        )
+        new_config = get_entry_config(self.config_entry).with_slot_field_set(
+            self.slot_num, self.key, value
+        )
+        self.hass.config_entries.async_update_entry(
+            self.config_entry, data=new_config.to_dict()
+        )
+        self.async_write_ha_state()
+
+    async def _internal_async_remove(self) -> None:
+        """
+        Handle entity removal.
+
+        Should not be overwritten by platforms.
+        """
+        _LOGGER.debug(
+            "%s (%s): Removing entity %s",
+            self.config_entry.entry_id,
+            self.config_entry.title,
+            self.entity_id,
+        )
+        await self._async_remove()
+        await self.async_remove(force_remove=True)
+        if self.ent_reg.async_get(self.entity_id):
+            self.ent_reg.async_remove(self.entity_id)
+
+    async def _async_remove(self) -> None:
+        """
+        Handle entity removal.
+
+        Can be overwritten by platforms.
+        """
+        pass
+
+    @callback
+    def _handle_remove_lock(self, lock_entity_id: str) -> None:
+        """
+        Handle lock entity is being removed.
+
+        Can be overwritten by platforms.
+        """
+        self.locks = [
+            lock for lock in self.locks if lock.lock.entity_id != lock_entity_id
+        ]
+
+    @callback
+    def _handle_add_locks(self, locks: list[BaseLock]) -> None:
+        """
+        Handle lock entities are being added.
+
+        Can be overwritten by platforms.
+        """
+        self.locks.extend(locks)
+
+    def _get_removal_uid(self) -> str:
+        """
+        Get unique ID for removal callback registration.
+
+        Override in subclasses for different UID formats.
+        """
+        return f"{self.slot_num}|{self.key}"
+
+    @callback
+    def _register_callbacks(self) -> None:
+        """
+        Register entity with callback registry.
+
+        Can be overwritten by platforms if necessary.
+        """
+        callbacks = self.config_entry.runtime_data.callbacks
+
+        # Register for removal by slot/key pattern
+        self.async_on_remove(
+            callbacks.register_entity_remover(
+                self._get_removal_uid(), self._internal_async_remove
+            )
+        )
+
+        # Register for lock lifecycle events
+        self.async_on_remove(
+            callbacks.register_lock_removed_handler(self._handle_remove_lock)
+        )
+        self.async_on_remove(
+            callbacks.register_lock_added_handler(self._handle_add_locks)
+        )
+
+    @callback
+    def _event_filter(self, event_data: dict[str, Any]) -> bool:
+        """Filter events."""
+        return (
+            any(
+                event_data[ATTR_ENTITY_ID] == lock.lock.entity_id for lock in self.locks
+            )
+            and event_data[ATTR_CODE_SLOT] == int(self.slot_num)
+            and event_data[ATTR_TO] == LockState.UNLOCKED
+        )
+
+    @callback
+    def _is_available(self) -> bool:
+        """Return whether entity should be available."""
+        return any(
+            state.state != STATE_UNAVAILABLE
+            for lock in self.locks
+            if (state := self.hass.states.get(lock.lock.entity_id))
+        )
+
+    @callback
+    def _handle_available_state_update(
+        self, event: Event[EventStateChangedData] | None = None
+    ) -> None:
+        """Update binary sensor state by getting dependent states."""
+        entity_id: str | None = None
+        from_state: State | None = None
+        to_state: State | None = None
+        if event:
+            entity_id = event.data["entity_id"]
+            from_state = event.data["old_state"]
+            to_state = event.data["new_state"]
+
+        if entity_id is not None and entity_id not in (
+            lock.lock.entity_id for lock in self.locks
+        ):
+            return
+
+        if (from_state and from_state.state != STATE_UNAVAILABLE) and (
+            to_state and to_state.state != STATE_UNAVAILABLE
+        ):
+            return
+
+        if (new_available := self._is_available()) != self._attr_available:
+            self._attr_available: bool = new_available
+            self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity added to hass."""
+        await Entity.async_added_to_hass(self)
+
+        self._register_callbacks()
+        self.async_on_remove(
+            async_track_state_change_filtered(
+                self.hass,
+                TrackStates(True, set(), set()),
+                self._handle_available_state_update,
+            ).async_remove
+        )
+        self._handle_available_state_update()
+
+        _LOGGER.debug(
+            "%s (%s): Adding entity %s",
+            self.config_entry.entry_id,
+            self.config_entry.title,
+            self.entity_id,
+        )
+
+
+class BaseLockCodeManagerCodeSlotPerLockEntity(BaseLockCodeManagerEntity):
+    """Base LockCode Manager Code Slot Entity."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        ent_reg: er.EntityRegistry,
+        config_entry: ConfigEntry,
+        lock: BaseLock,
+        slot_num: int,
+        key: str,
+    ) -> None:
+        """Initialize entity."""
+        BaseLockCodeManagerEntity.__init__(
+            self, hass, ent_reg, config_entry, slot_num, key
+        )
+        self.lock = lock
+        if lock.device_entry:
+            self._attr_device_info = DeviceInfo(
+                connections=lock.device_entry.connections,
+                identifiers=lock.device_entry.identifiers,
+            )
+
+        self._attr_unique_id = build_slot_unique_id(
+            self.base_unique_id, slot_num, self.key, lock.lock.entity_id
+        )
+
+    def _get_removal_uid(self) -> str:
+        """Get unique ID for removal callback registration (per-lock variant)."""
+        return f"{self.slot_num}|{self.key}|{self.lock.lock.entity_id}"
+
+    @callback
+    def _handle_remove_lock(self, lock_entity_id: str) -> None:
+        """Handle lock entity is being removed."""
+        super()._handle_remove_lock(lock_entity_id)
+        if self.lock.lock.entity_id != lock_entity_id:
+            return
+        self.config_entry.async_create_task(self.hass, self._internal_async_remove())
+
+    @callback
+    def _is_available(self) -> bool:
+        """Return whether entity is available."""
+        return (
+            state := self.hass.states.get(self.lock.lock.entity_id)
+        ) and state.state != STATE_UNAVAILABLE
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity added to hass."""
+        await BaseLockCodeManagerEntity.async_added_to_hass(self)

@@ -1,0 +1,299 @@
+- id: '1773215301454'
+  alias: Booking Bay 1 - Calendar
+  description: ''
+  use_blueprint:
+    path: Blackshome/calendar-notifications-and-actions.yaml
+    input:
+      calendar: calendar.lane_1_bowling_machine
+      include_calendar_trigger: disable_key_word
+      start_calendar_offset:
+        hours: 0
+        minutes: -5
+        seconds: 0
+        days: 0
+      start_action_1:
+      - action: script.turn_on
+        metadata: {}
+        target:
+          entity_id: script.bay1_activate_script
+        data: {}
+      - action: input_boolean.turn_on
+        metadata: {}
+        target:
+          entity_id: input_boolean.bay1_helper
+        data: {}
+      include_end_auto_actions:
+      - enable_end_action_1
+      include_start_auto_actions:
+      - enable_start_action_1
+      end_action_1:
+      - action: light.turn_off
+        metadata: {}
+        target:
+          entity_id: light.highbay_1
+        data: {}
+      - action: input_boolean.turn_off
+        metadata: {}
+        target:
+          entity_id: input_boolean.bay1_helper
+        data: {}
+      global_conditions:
+      - condition: state
+        entity_id: input_boolean.bay1_blocked
+        state:
+        - 'off'
+      end_time_delay:
+        hours: 0
+        minutes: 0
+        seconds: 0
+      end_calendar_offset:
+        hours: 0
+        minutes: 5
+        seconds: 0
+        days: 0
+      start_notify_device:
+      - 34199ea861173546a72af6f7fbb34b8f
+      start_title: Bay1 Booking Start
+      include_start_notify: enable_start_notify_options
+      include_end_notify: enable_end_notify_options
+- id: '1773219674927'
+  alias: Booking Bay 2 - Calendar
+  description: ''
+  use_blueprint:
+    path: Blackshome/calendar-notifications-and-actions.yaml
+    input:
+      calendar: calendar.lane_1_bowling_machine
+      include_calendar_trigger: disable_key_word
+      start_calendar_offset:
+        hours: 0
+        minutes: -5
+        seconds: 0
+        days: 0
+      start_action_1:
+      - action: input_boolean.turn_on
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay2_helper
+        data: {}
+      include_end_auto_actions:
+      - enable_end_action_1
+      include_start_auto_actions:
+      - enable_start_action_1
+      end_action_1:
+      - action: input_boolean.turn_off
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay2_helper
+        data: {}
+      global_conditions:
+      - condition: state
+        entity_id: calendar.bay2
+        state:
+        - 'off'
+      - condition: and
+        conditions:
+        - condition: state
+          entity_id: input_boolean.bay2_blocked
+          state:
+          - 'off'
+      end_calendar_offset:
+        hours: 0
+        minutes: 5
+        seconds: 0
+        days: 0
+- id: '1773219674928'
+  alias: Booking Bay 3 - Calendar
+  description: ''
+  use_blueprint:
+    path: Blackshome/calendar-notifications-and-actions.yaml
+    input:
+      calendar: calendar.lane_3_truman_or_bowling_machine
+      include_calendar_trigger: disable_key_word
+      start_calendar_offset:
+        hours: 0
+        minutes: -5
+        seconds: 0
+        days: 0
+      start_action_1:
+      - action: input_boolean.turn_on
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay3_helper
+        data: {}
+      include_end_auto_actions:
+      - enable_end_action_1
+      include_start_auto_actions:
+      - enable_start_action_1
+      end_action_1:
+      - action: input_boolean.turn_off
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay3_helper
+        data: {}
+      global_conditions:
+      - condition: state
+        entity_id: calendar.bay3
+        state:
+        - 'off'
+      - condition: and
+        conditions:
+        - condition: state
+          entity_id: input_boolean.bay3_blocked
+          state:
+          - 'off'
+      end_calendar_offset:
+        hours: 0
+        minutes: 2
+        seconds: 0
+        days: 0
+- id: '1773219674947'
+  alias: Booking Bay 4 - Calendar
+  description: ''
+  use_blueprint:
+    path: Blackshome/calendar-notifications-and-actions.yaml
+    input:
+      calendar: calendar.lane_4_run_up_net
+      include_calendar_trigger: disable_key_word
+      start_calendar_offset:
+        hours: 0
+        minutes: 0
+        seconds: 0
+        days: 0
+      start_action_1:
+      - action: input_boolean.turn_on
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay4_helper
+        data: {}
+      include_end_auto_actions:
+      - enable_end_action_1
+      include_start_auto_actions:
+      - enable_start_action_1
+      end_action_1:
+      - action: input_boolean.turn_off
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay4_helper
+        data: {}
+      global_conditions:
+      - condition: state
+        entity_id: calendar.bay4
+        state:
+        - 'off'
+      - condition: and
+        conditions:
+        - condition: state
+          entity_id: input_boolean.bay4_blocked
+          state:
+          - 'off'
+- id: '1773219674957'
+  alias: Booking Bay 5 - Calendar
+  description: ''
+  use_blueprint:
+    path: Blackshome/calendar-notifications-and-actions.yaml
+    input:
+      calendar: calendar.lane_5_run_up_net
+      include_calendar_trigger: disable_key_word
+      start_calendar_offset:
+        hours: 0
+        minutes: 0
+        seconds: 0
+        days: 0
+      start_action_1:
+      - action: input_boolean.turn_on
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay5_helper
+        data: {}
+      include_end_auto_actions:
+      - enable_end_action_1
+      include_start_auto_actions:
+      - enable_start_action_1
+      end_action_1:
+      - action: input_boolean.turn_off
+        metadata: {}
+        target:
+          entity_id:
+          - input_boolean.bay5_helper
+        data: {}
+      global_conditions:
+      - condition: state
+        entity_id: calendar.bay5
+        state:
+        - 'off'
+      - condition: and
+        conditions:
+        - condition: state
+          entity_id: input_boolean.bay5_blocked
+          state:
+          - 'off'
+- id: '1773291498207'
+  alias: Booking BAY1 Access - Webhook
+  description: Open Door Turn on Lights
+  triggers:
+  - trigger: webhook
+    allowed_methods:
+    - POST
+    - PUT
+    local_only: true
+    webhook_id: -jWhm-ATigP7s_EHhGwXxgROk
+  conditions:
+  - condition: state
+    entity_id: input_boolean.bay1_blocked
+    state:
+    - 'off'
+  actions:
+  - action: script.bay1_activate_script
+    metadata: {}
+    data: {}
+  - action: input_boolean.turn_on
+    metadata: {}
+    target:
+      entity_id: input_boolean.bay1_helper
+    data: {}
+  mode: single
+- id: '1779256315851'
+  alias: Lights ON Nobody There
+  description: ''
+  triggers:
+  - trigger: numeric_state
+    entity_id:
+    - sensor.main_occupancy_probability
+    for:
+      hours: 1
+      minutes: 0
+      seconds: 0
+    below: 30
+  conditions:
+  - condition: state
+    entity_id:
+    - light.office_downlights
+    - light.fluro_x_4
+    - light.inside_wall_lights
+    - light.mezzanine_wall_lights
+    - light.outside_wall_lights
+    - light.exhaust_fan_1
+    - light.exhaust_fan_2
+    - light.highbay_1
+    - light.highbay_2
+    - light.highbay_3
+    - light.highbay_4
+    - light.highbay_5
+    state:
+    - 'on'
+    for:
+      hours: 1
+      minutes: 0
+      seconds: 0
+  actions:
+  - action: script.notify_script
+    metadata: {}
+    data: {}
+  mode: single

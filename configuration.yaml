@@ -1,0 +1,196 @@
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
+    - 172.30.33.0/24
+    - 192.168.1.0/24
+
+wake_on_lan:
+
+system_health:
+
+ffmpeg:
+
+stream:
+
+go2rtc:
+
+#network_scanner:
+#  ip_range: "192.168.1.0/24"
+#  mac_mapping_1: "9C:53:22:29:9D:08;Tp Link Router;vx240v."
+#  mac_mapping_2: "4C:49:68:77:A2:09;Switch;Reyee."
+#  mac_mapping_3: "6c:63:f8:6c:23:b9;Unifi WAP1;Ubuqiti."
+#  mac_mapping_4: "6c:63:f8:6c:22:a9;Unifi WAP2;Ubuqiti."
+#  mac_mapping_5: "00:0F:FF:A1:AD:D2;Core 3;Control4."
+#  mac_mapping_6: "00:0F:FF:87:81:1D;Touch Screen T4;Control4."
+###################################################
+##### UTILITY Meters #####
+###################################################
+
+sensor:
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_6
+    name: Energy Usage kWh Light Bay1
+    unique_id: energy_usage_kwh_light_bay1
+    unit_prefix: k
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_8
+    name: Energy Usage kWh Light Bay2
+    unique_id: energy_usage_kwh_light_bay2
+    unit_prefix: k
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_10
+    name: Energy Usage kWh Light Bay3
+    unique_id: energy_usage_kwh_light_bay3
+    unit_prefix: k
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_5
+    name: Energy Usage kWh Light Bay4
+    unique_id: energy_usage_kwh_light_bay4
+    unit_prefix: k
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_2
+    name: Energy Usage kWh Light Bay5
+    unique_id: energy_usage_kwh_light_bay5
+    unit_prefix: k
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_9
+    name: Energy Usage kWh Light Runup
+    unique_id: energy_usage_kwh_light_runup
+    unit_prefix: k
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_3
+    name: Energy Usage kWh Light Inside Wall
+    unique_id: energy_usage_kwh_light_inside_wall
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power
+    name: Energy Usage kWh Light Mezzanine
+    unique_id: energy_usage_kwh_light_mezzanine
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_9
+    name: Energy Usage kWh Light Office
+    unique_id: energy_usage_kwh_light_office
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_11
+    name: Energy Usage kWh Light Outside Wall
+    unique_id: energy_usage_kwh_light_outside_wall
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_12
+    name: Energy Usage kWh Fan Exhaust 1
+    unique_id: energy_usage_kwh_fan_exhaust1
+    round: 2
+    max_sub_interval:
+      minutes: 5
+  - platform: integration
+    source: sensor.non_dimmable_light_centralized_power_13
+    name: Energy Usage kWh Fan Exhaust 2
+    unique_id: energy_usage_kwh_fan_exhaust2
+    round: 2
+    max_sub_interval:
+      minutes: 5
+
+utility_meter:
+  energy_meter_daily_light_bay1:
+    source: sensor.energy_usage_kwh_light_bay1
+    cycle: daily
+    unique_id: energy_daily_light_bay1
+    name: Energy Meter Daily - Light - Bay1
+  energy_meter_daily_light_bay2:
+    source: sensor.energy_usage_kwh_light_bay2
+    cycle: daily
+    unique_id: energy_daily_light_bay2
+    name: Energy Meter Daily - Light - Bay2
+  energy_meter_daily_light_bay3:
+    source: sensor.energy_usage_kwh_light_bay3
+    cycle: daily
+    unique_id: energy_daily_light_bay3
+    name: Energy Meter Daily - Light - Bay3
+  energy_meter_daily_light_bay4:
+    source: sensor.energy_usage_kwh_light_bay4
+    cycle: daily
+    unique_id: energy_daily_light_bay4
+    name: Energy Meter Daily - Light - Bay4
+  energy_meter_daily_light_bay5:
+    source: sensor.energy_usage_kwh_light_bay5
+    cycle: daily
+    unique_id: energy_daily_light_bay5
+    name: Energy Meter Daily - Light - Bay5
+  energy_meter_daily_light_inside_wall:
+    source: sensor.energy_usage_kwh_light_inside_wall
+    cycle: daily
+    unique_id: energy_daily_light_inside_wall
+    name: Energy Meter Daily - Light - Wall (Inside)
+  energy_meter_daily_light_mezzanine:
+    source: sensor.energy_usage_kwh_light_mezzanine
+    cycle: daily
+    unique_id: energy_daily_light_mezzanine
+    name: Energy Meter Daily - Light - Mezzanine
+  energy_meter_daily_light_office:
+    source: sensor.energy_usage_kwh_light_office
+    cycle: daily
+    unique_id: energy_meter_daily_light_office
+    name: Energy Meter Daily - Light - Office
+  energy_meter_daily_light_runup:
+    source: sensor.energy_usage_kwh_light_runup
+    cycle: daily
+    unique_id: energy_meter_daily_light_runup
+    name: Energy Meter Daily - Light - Runup
+  energy_meter_daily_light_outside_wall:
+    source: sensor.energy_usage_kwh_light_outside_wall
+    cycle: daily
+    unique_id: energy_meter_daily_light_outside_wall
+    name: Energy Meter Daily - Light - Front
+  energy_meter_daily_exhaust1:
+    source: sensor.energy_usage_kwh_fan_exhaust1
+    cycle: daily
+    unique_id: energy_meter_daily_exhaust1
+    name: Energy Meter Daily - Fan - exhaust1
+  energy_meter_daily_exhaust2:
+    source: sensor.energy_usage_kwh_fan_exhaust2
+    cycle: daily
+    unique_id: energy_meter_daily_exhaust2
+    name: Energy Meter Daily - Fan - exhaust2
+
+
