@@ -1,6 +1,6 @@
 ###############################################################################
 # BAY 1 — BOOKING START
-# Fires 5 min before booking. Turns on highbay 1 + common lights.
+# Fires 7 min before booking (gives ~5 min real-world lead time after calendar poll lag).
 # Night mode (within 30 min of sunset or sun below horizon): also turns on
 # neighbour highbay 2.
 # Extracts customer name and door code from calendar event for notification.
@@ -8,13 +8,13 @@
 - id: 'bay1_booking_start'
   alias: Bay 1 Booking - START
   description: >
-    5 min before booking: turn on highbay 1 and common lights.
+    7 min before booking: turn on highbay 1 and common lights (~5 min real-world lead time).
     Night mode: also turns on neighbour highbay 2.
   triggers:
     - trigger: calendar
       event: start
       entity_id: calendar.lane_1_bowling_machine
-      offset: "-0:05:00"
+      offset: "-0:07:00"
   conditions:
     - condition: state
       entity_id: input_boolean.bay1_blocked
@@ -141,13 +141,13 @@
 - id: 'bay2_booking_start'
   alias: Bay 2 Booking - START
   description: >
-    5 min before booking: turn on highbay 2 and common lights.
+    7 min before booking: turn on highbay 2 and common lights (~5 min real-world lead time).
     Night mode: also turns on neighbour highbays 1 and 3.
   triggers:
     - trigger: calendar
       event: start
       entity_id: calendar.lane_2_bowling_machine
-      offset: "-0:05:00"
+      offset: "-0:07:00"
   conditions:
     - condition: state
       entity_id: input_boolean.bay2_blocked
@@ -265,13 +265,13 @@
 - id: 'bay3_booking_start'
   alias: Bay 3 Booking - START
   description: >
-    5 min before booking: turn on highbay 3 and common lights.
+    7 min before booking: turn on highbay 3 and common lights (~5 min real-world lead time).
     Night mode: also turns on neighbour highbays 2 and 4.
   triggers:
     - trigger: calendar
       event: start
       entity_id: calendar.lane_3_truman_or_bowling_machine
-      offset: "-0:05:00"
+      offset: "-0:07:00"
   conditions:
     - condition: state
       entity_id: input_boolean.bay3_blocked
@@ -390,13 +390,13 @@
 - id: 'bay4_booking_start'
   alias: Bay 4 Booking - START
   description: >
-    5 min before booking: turn on highbay 4 and common lights.
+    7 min before booking: turn on highbay 4 and common lights (~5 min real-world lead time).
     Night mode: also turns on neighbour highbays 3 and 5.
   triggers:
     - trigger: calendar
       event: start
       entity_id: calendar.lane_4_run_up_net
-      offset: "-0:05:00"
+      offset: "-0:07:00"
   conditions:
     - condition: state
       entity_id: input_boolean.bay4_blocked
@@ -514,13 +514,13 @@
 - id: 'bay5_booking_start'
   alias: Bay 5 Booking - START
   description: >
-    5 min before booking: turn on highbay 5 and common lights.
+    7 min before booking: turn on highbay 5 and common lights (~5 min real-world lead time).
     Night mode: also turns on neighbour highbay 4.
   triggers:
     - trigger: calendar
       event: start
       entity_id: calendar.lane_5_run_up_net
-      offset: "-0:05:00"
+      offset: "-0:07:00"
   conditions:
     - condition: state
       entity_id: input_boolean.bay5_blocked
@@ -918,7 +918,7 @@
 # NIGHT — Common lights on when entry motion detected
 # Fires when the Pier Facing Entry CCTV detects motion after dark.
 # Covers the scenario where a customer arrives before their bay light
-# turns on (bay light fires 5 min before booking, CCTV fires on arrival).
+# turns on (bay light fires 7 min before booking, CCTV fires on arrival).
 # Entity: binary_sensor.pier_facing_entry_motion (Frigate)
 ###############################################################################
 - id: 'night_common_lights_motion_on'
