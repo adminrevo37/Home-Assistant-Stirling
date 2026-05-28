@@ -37,12 +37,13 @@
           - light.inside_wall_lights
           - light.fluro_x_4
           - light.mezzanine_wall_lights
-    - action: notify.notify
-      data:
-        title: "Bay 1 - Starting in 5 min"
-        message: >-
-          {{ customer_name }} | {{ booking_title }}.
-          {% if door_code != '' %}Door code: {{ door_code }}.{% endif %}
+    # Notification disabled - re-enable and set target device when ready
+    # - action: notify.notify
+    #   data:
+    #     title: "Bay 1 - Starting in 5 min"
+    #     message: >-
+    #       {{ customer_name }} | {{ booking_title }}.
+    #       {% if door_code != '' %}Door code: {{ door_code }}.{% endif %}
   mode: single
 
 ###############################################################################
