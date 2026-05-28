@@ -221,6 +221,39 @@ sample_booking_bay_3:
     data: {}
   alias: Sample Booking Bay 3
   description: ''
+###############################################################################
+##### ROLLER DOOR — Service mode toggle
+# Pressing this script/button from the dashboard:
+#   - If service mode OFF → sends UNLOCK (opens door) + enables service mode
+#   - If service mode ON  → sends LOCK  (closes door) + disables service mode
+# While service mode is ON the auto-close automation is suppressed entirely.
+###############################################################################
+door_service_toggle:
+  alias: "Roller Door - Service Toggle"
+  description: >
+    Open/close the front roller door for service staff.
+    Enables service mode (bypasses auto-close) when opening;
+    disables it when closing.
+  icon: mdi:garage
+  sequence:
+    - if:
+        - condition: state
+          entity_id: input_boolean.door_service_mode
+          state: 'off'
+      then:
+        # Currently closed / service mode off → OPEN the door
+        - action: shell_command.c4_unlock_door
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.door_service_mode
+      else:
+        # Currently open / service mode on → CLOSE the door
+        - action: shell_command.c4_lock_door
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.door_service_mode
+  mode: single
+
 notify_script:
   use_blueprint:
     path: homeassistant/confirmable_notification.yaml

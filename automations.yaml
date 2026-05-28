@@ -1746,6 +1746,12 @@
       entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
       to: 'on'
   actions:
+    # ── Service mode guard ────────────────────────────────────────────────────
+    # Skip entirely if staff manually opened the door via the dashboard button.
+    - condition: state
+      entity_id: input_boolean.door_service_mode
+      state: 'off'
+
     # ── Attempt 1 (configurable — default T+75s) ─────────────────────────────
     - delay:
         seconds: "{{ states('input_number.door_close_attempt1_secs') | int(75) }}"

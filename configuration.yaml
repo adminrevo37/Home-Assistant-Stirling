@@ -155,6 +155,16 @@ input_boolean:
     name: "Roller Door - Visual Open State"
     icon: mdi:garage-open
 
+  ###############################################################################
+  ##### ROLLER DOOR — Service Mode
+  # When ON: door was opened by staff and should stay open indefinitely.
+  # Blocks the auto-close automation from firing.
+  # Toggled by script.door_service_toggle (the dashboard button).
+  ###############################################################################
+  door_service_mode:
+    name: "Roller Door - Service Mode (Hold Open)"
+    icon: mdi:door-open
+
 ###############################################################################
 # INPUT TEXT HELPERS — DS3 Code Slot Trackers
 # Stores which code is currently programmed in each C4 DS3 slot.
