@@ -142,6 +142,18 @@ shell_command:
   c4_entry_log: python3 /config/c4_entry_log.py >> /config/www/entry_log_debug.txt 2>&1
   c4_lock_door: bash /config/c4_door_control.sh lock
   c4_unlock_door: bash /config/c4_door_control.sh unlock
+  c4_door_visual_check: python3 /config/c4_door_visual.py
+
+###############################################################################
+##### ROLLER DOOR — Visual sensor state helper
+# Updated every 15 seconds by the door_visual_sensor_poll automation.
+# on  = door visually open (brightness delta > 15 from baseline)
+# off = door visually closed
+###############################################################################
+input_boolean:
+  roller_door_visual_open:
+    name: "Roller Door - Visual Open State"
+    icon: mdi:garage-open
 
 ###############################################################################
 # INPUT TEXT HELPERS — DS3 Code Slot Trackers

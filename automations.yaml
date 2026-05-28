@@ -1657,6 +1657,45 @@
     - action: shell_command.c4_entry_log
 
 ###############################################################################
+# ROLLER DOOR — Visual sensor poll (every 15 seconds)
+# Grabs a snapshot from camera.pier_facing_entry, measures brightness in the
+# door ROI, and sets input_boolean.roller_door_visual_open accordingly.
+#
+# Calibrated 2026-05-29:
+#   Closed: avg ≈ 96.4  (baseline stable ±0.2)
+#   Open:   avg ≈ 127.4  Δ = +31
+#   Threshold: |avg − 96.4| > 15  →  on (open)
+###############################################################################
+- id: 'door_visual_sensor_poll'
+  alias: Roller Door - Visual Sensor Poll
+  description: >
+    Every 15 s: snapshot pier_facing_entry camera, run c4_door_visual.py,
+    update input_boolean.roller_door_visual_open.
+  triggers:
+    - trigger: time_pattern
+      seconds: "/15"
+  actions:
+    - action: camera.snapshot
+      target:
+        entity_id: camera.pier_facing_entry
+      data:
+        filename: /config/www/door_check_latest.jpg
+    - action: shell_command.c4_door_visual_check
+      response_variable: visual_result
+    - if:
+        - condition: template
+          value_template: "{{ 'open' in (visual_result.stdout | default('')) }}"
+      then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.roller_door_visual_open
+      else:
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.roller_door_visual_open
+  mode: single
+
+###############################################################################
 # ROLLER DOOR — Open/Close detection via Aqara contact sensor
 #
 # *** BEFORE THIS WORKS ***
