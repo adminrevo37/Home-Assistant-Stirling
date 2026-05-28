@@ -50,8 +50,11 @@ async def main():
 
     print("Authenticating with Control4 cloud...")
     try:
-        async with aiohttp.ClientSession() as session:
-            account = C4Account(username, password, session)
+        # Cloud auth uses normal SSL; Director uses self-signed cert so ssl=False
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession() as cloud_session, \
+                   aiohttp.ClientSession(connector=connector) as director_session:
+            account = C4Account(username, password, cloud_session)
             await account.get_account_bearer_token()
 
             token_dict = await account.get_director_bearer_token(controller_unique_id)
@@ -59,7 +62,7 @@ async def main():
             print("Authentication OK")
             print()
 
-            director = C4Director(host, token, session)
+            director = C4Director(host, token, director_session)
 
             # ----------------------------------------------------------------
             # Step 3: Get all items - search for DS3 / intercom / keypad
