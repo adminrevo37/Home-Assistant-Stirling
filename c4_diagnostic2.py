@@ -35,9 +35,32 @@ async def main():
     async with aiohttp.ClientSession() as cloud_session, \
                aiohttp.ClientSession(connector=connector) as dir_session:
 
-        account = C4Account(username, password, cloud_session)
-        await account.get_account_bearer_token()
-        token = (await account.get_director_bearer_token(controller_unique_id))['token']
+        # Try to reuse cached token from first diagnostic run
+        token = None
+        try:
+            with open('/config/c4_token_cache.txt', 'r') as f:
+                token = f.read().strip()
+            print("Using cached Director token")
+        except FileNotFoundError:
+            pass
+
+        if not token:
+            print("Authenticating with Control4 cloud...")
+            for attempt in range(3):
+                try:
+                    account = C4Account(username, password, cloud_session)
+                    await account.get_account_bearer_token()
+                    token = (await account.get_director_bearer_token(controller_unique_id))['token']
+                    # Cache for next run
+                    with open('/config/c4_token_cache.txt', 'w') as f:
+                        f.write(token)
+                    break
+                except Exception as e:
+                    print(f"  Auth attempt {attempt+1} failed: {e}")
+                    if attempt < 2:
+                        await asyncio.sleep(3)
+                    else:
+                        raise
         print("Auth OK")
 
         director = C4Director(host, token, dir_session)
