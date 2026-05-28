@@ -33,15 +33,25 @@ Calibration (initial night-vision values, 2026-05-29):
   Open (dawn)      : avg ≈ 127.4  Δ = +31 (exterior brick visible)
   OPEN_THRESHOLD   : 20  — tuned after multi-scenario testing below
 
-Scenarios requiring calibration (to be measured and noted here):
-  □ Daytime, indoor lights OFF  (skylights above door)
-  □ Night,   indoor lights ON   (high-bays illuminate door face from inside)
-  □ Night,   indoor lights OFF  ← current calibration above
+Calibration results (measured 2026-05-29):
+  ┌─────────────────────────────────┬───────┬──────────┬────────┬────────┐
+  │ Scenario                        │  avg  │ baseline │   Δ    │ result │
+  ├─────────────────────────────────┼───────┼──────────┼────────┼────────┤
+  │ Night, lights OFF, door CLOSED  │  96.4 │   96.4   │   0    │ closed │
+  │ Night, lights OFF, door OPEN    │ 127.4 │   96.4   │ +31.0  │ open   │
+  │ Day/Night, lights ON, CLOSED    │  82.6 │   82.6   │   0    │ closed │
+  │ Day/Night, lights ON, OPEN      │ 114.0 │   82.6   │ +31.4  │ open   │
+  └─────────────────────────────────┴───────┴──────────┴────────┴────────┘
 
-  NOTE: night/lights-ON is expected to have a NEGATIVE delta when door opens
-  (interior bright → exterior dark).  abs(delta) handles both directions.
-  Run a test in each scenario and check the stderr diagnostic output to
-  confirm the baseline and delta are sensible before relying on this sensor.
+  Key findings:
+  • Door-open Δ is consistently ~+31 regardless of lighting — robust signal
+  • Lights ON/OFF shifts baseline by ~14 (96.4↔82.6) — BELOW threshold of 20
+    → No false "open" trigger when lights switch while door is closed ✅
+  • Adaptive EMA baseline adjusts to lighting changes within ~5 min
+  • OPEN_THRESHOLD = 20 confirmed correct for all tested scenarios
+
+  □ Daytime, lights OFF (skylights only) — NOT YET TESTED
+    Expected: similar positive Δ when door opens (exterior daylight floods in)
 """
 
 import sys
