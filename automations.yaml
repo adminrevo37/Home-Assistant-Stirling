@@ -970,3 +970,689 @@
           - light.fluro_x_4
           - light.mezzanine_wall_lights
   mode: single
+
+###############################################################################
+# DOOR CODES — BAY 1 ACTIVATE (fires 15 min before booking start)
+# Finds first free slot (11/12/13), programs code on DS3, stores in helper.
+###############################################################################
+- id: 'bay1_code_activate'
+  alias: Bay 1 - Door Code Activate
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_1_bowling_machine
+      offset: "-0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+        customer_name: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_use: >-
+          {% if states('input_text.bay1_code_slot_a') == '' %}11
+          {% elif states('input_text.bay1_code_slot_b') == '' %}12
+          {% elif states('input_text.bay1_code_slot_c') == '' %}13
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_use | int > 0 }}"
+    - action: shell_command.c4_set_code
+      data:
+        slot: "{{ slot_to_use }}"
+        code: "{{ door_code }}"
+        name: "{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 11 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay1_code_slot_a
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 12 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay1_code_slot_b
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 13 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay1_code_slot_c
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+  mode: single
+
+###############################################################################
+# DOOR CODES — BAY 1 DEACTIVATE (fires 15 min after booking end)
+###############################################################################
+- id: 'bay1_code_deactivate'
+  alias: Bay 1 - Door Code Deactivate
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_1_bowling_machine
+      offset: "0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_clear: >-
+          {% if states('input_text.bay1_code_slot_a').split(':')[0] == door_code %}11
+          {% elif states('input_text.bay1_code_slot_b').split(':')[0] == door_code %}12
+          {% elif states('input_text.bay1_code_slot_c').split(':')[0] == door_code %}13
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_clear | int > 0 }}"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "{{ slot_to_clear }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 11 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay1_code_slot_a
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 12 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay1_code_slot_b
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 13 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay1_code_slot_c
+          data:
+            value: ""
+  mode: single
+
+###############################################################################
+# DOOR CODES — BAY 2 ACTIVATE / DEACTIVATE (slots 14/15/16)
+###############################################################################
+- id: 'bay2_code_activate'
+  alias: Bay 2 - Door Code Activate
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_2_bowling_machine
+      offset: "-0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+        customer_name: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_use: >-
+          {% if states('input_text.bay2_code_slot_a') == '' %}14
+          {% elif states('input_text.bay2_code_slot_b') == '' %}15
+          {% elif states('input_text.bay2_code_slot_c') == '' %}16
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_use | int > 0 }}"
+    - action: shell_command.c4_set_code
+      data:
+        slot: "{{ slot_to_use }}"
+        code: "{{ door_code }}"
+        name: "{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 14 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay2_code_slot_a
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 15 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay2_code_slot_b
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 16 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay2_code_slot_c
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+  mode: single
+
+- id: 'bay2_code_deactivate'
+  alias: Bay 2 - Door Code Deactivate
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_2_bowling_machine
+      offset: "0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_clear: >-
+          {% if states('input_text.bay2_code_slot_a').split(':')[0] == door_code %}14
+          {% elif states('input_text.bay2_code_slot_b').split(':')[0] == door_code %}15
+          {% elif states('input_text.bay2_code_slot_c').split(':')[0] == door_code %}16
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_clear | int > 0 }}"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "{{ slot_to_clear }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 14 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay2_code_slot_a
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 15 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay2_code_slot_b
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 16 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay2_code_slot_c
+          data:
+            value: ""
+  mode: single
+
+###############################################################################
+# DOOR CODES — BAY 3 ACTIVATE / DEACTIVATE (slots 17/18/19)
+###############################################################################
+- id: 'bay3_code_activate'
+  alias: Bay 3 - Door Code Activate
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_3_truman_or_bowling_machine
+      offset: "-0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+        customer_name: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_use: >-
+          {% if states('input_text.bay3_code_slot_a') == '' %}17
+          {% elif states('input_text.bay3_code_slot_b') == '' %}18
+          {% elif states('input_text.bay3_code_slot_c') == '' %}19
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_use | int > 0 }}"
+    - action: shell_command.c4_set_code
+      data:
+        slot: "{{ slot_to_use }}"
+        code: "{{ door_code }}"
+        name: "{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 17 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay3_code_slot_a
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 18 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay3_code_slot_b
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 19 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay3_code_slot_c
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+  mode: single
+
+- id: 'bay3_code_deactivate'
+  alias: Bay 3 - Door Code Deactivate
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_3_truman_or_bowling_machine
+      offset: "0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_clear: >-
+          {% if states('input_text.bay3_code_slot_a').split(':')[0] == door_code %}17
+          {% elif states('input_text.bay3_code_slot_b').split(':')[0] == door_code %}18
+          {% elif states('input_text.bay3_code_slot_c').split(':')[0] == door_code %}19
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_clear | int > 0 }}"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "{{ slot_to_clear }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 17 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay3_code_slot_a
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 18 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay3_code_slot_b
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 19 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay3_code_slot_c
+          data:
+            value: ""
+  mode: single
+
+###############################################################################
+# DOOR CODES — BAY 4 ACTIVATE / DEACTIVATE (slots 20/21/22)
+###############################################################################
+- id: 'bay4_code_activate'
+  alias: Bay 4 - Door Code Activate
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_4_run_up_net
+      offset: "-0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+        customer_name: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_use: >-
+          {% if states('input_text.bay4_code_slot_a') == '' %}20
+          {% elif states('input_text.bay4_code_slot_b') == '' %}21
+          {% elif states('input_text.bay4_code_slot_c') == '' %}22
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_use | int > 0 }}"
+    - action: shell_command.c4_set_code
+      data:
+        slot: "{{ slot_to_use }}"
+        code: "{{ door_code }}"
+        name: "{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 20 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay4_code_slot_a
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 21 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay4_code_slot_b
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 22 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay4_code_slot_c
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+  mode: single
+
+- id: 'bay4_code_deactivate'
+  alias: Bay 4 - Door Code Deactivate
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_4_run_up_net
+      offset: "0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_clear: >-
+          {% if states('input_text.bay4_code_slot_a').split(':')[0] == door_code %}20
+          {% elif states('input_text.bay4_code_slot_b').split(':')[0] == door_code %}21
+          {% elif states('input_text.bay4_code_slot_c').split(':')[0] == door_code %}22
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_clear | int > 0 }}"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "{{ slot_to_clear }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 20 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay4_code_slot_a
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 21 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay4_code_slot_b
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 22 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay4_code_slot_c
+          data:
+            value: ""
+  mode: single
+
+###############################################################################
+# DOOR CODES — BAY 5 ACTIVATE / DEACTIVATE (slots 23/24/25)
+###############################################################################
+- id: 'bay5_code_activate'
+  alias: Bay 5 - Door Code Activate
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_5_run_up_net
+      offset: "-0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+        customer_name: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_use: >-
+          {% if states('input_text.bay5_code_slot_a') == '' %}23
+          {% elif states('input_text.bay5_code_slot_b') == '' %}24
+          {% elif states('input_text.bay5_code_slot_c') == '' %}25
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_use | int > 0 }}"
+    - action: shell_command.c4_set_code
+      data:
+        slot: "{{ slot_to_use }}"
+        code: "{{ door_code }}"
+        name: "{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 23 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay5_code_slot_a
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 24 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay5_code_slot_b
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_use | int == 25 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay5_code_slot_c
+          data:
+            value: "{{ door_code }}:{{ customer_name }}"
+  mode: single
+
+- id: 'bay5_code_deactivate'
+  alias: Bay 5 - Door Code Deactivate
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_5_run_up_net
+      offset: "0:15:00"
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
+             | replace(' ', '') | trim }}
+    - condition: template
+      value_template: "{{ door_code != '' }}"
+    - variables:
+        slot_to_clear: >-
+          {% if states('input_text.bay5_code_slot_a').split(':')[0] == door_code %}23
+          {% elif states('input_text.bay5_code_slot_b').split(':')[0] == door_code %}24
+          {% elif states('input_text.bay5_code_slot_c').split(':')[0] == door_code %}25
+          {% else %}0{% endif %}
+    - condition: template
+      value_template: "{{ slot_to_clear | int > 0 }}"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "{{ slot_to_clear }}"
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 23 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay5_code_slot_a
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 24 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay5_code_slot_b
+          data:
+            value: ""
+    - if:
+        - condition: template
+          value_template: "{{ slot_to_clear | int == 25 }}"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.bay5_code_slot_c
+          data:
+            value: ""
+  mode: single
+
+###############################################################################
+# DOOR CODES — 10:30PM SAFETY WIPE
+# Clears all booking code slots 11-25 and resets all helper text.
+# Runs at same time as lights fallback. Assumes no legitimate booking runs
+# past 10:30pm. Staff codes (slots 1-10) are never touched.
+###############################################################################
+- id: 'fallback_1030pm_clear_codes'
+  alias: Fallback - Clear All Booking Codes at 10:30pm
+  triggers:
+    - trigger: time
+      at: "22:30:00"
+  actions:
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "11"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "12"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "13"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "14"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "15"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "16"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "17"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "18"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "19"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "20"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "21"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "22"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "23"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "24"
+    - action: shell_command.c4_clear_code
+      data:
+        slot: "25"
+    # Reset all slot trackers
+    - action: input_text.set_value
+      target:
+        entity_id:
+          - input_text.bay1_code_slot_a
+          - input_text.bay1_code_slot_b
+          - input_text.bay1_code_slot_c
+          - input_text.bay2_code_slot_a
+          - input_text.bay2_code_slot_b
+          - input_text.bay2_code_slot_c
+          - input_text.bay3_code_slot_a
+          - input_text.bay3_code_slot_b
+          - input_text.bay3_code_slot_c
+          - input_text.bay4_code_slot_a
+          - input_text.bay4_code_slot_b
+          - input_text.bay4_code_slot_c
+          - input_text.bay5_code_slot_a
+          - input_text.bay5_code_slot_b
+          - input_text.bay5_code_slot_c
+      data:
+        value: ""
+  mode: single
+
+###############################################################################
+# ENTRY LOG — Poll DS3 every minute for code usage
+###############################################################################
+- id: 'c4_entry_log_poll'
+  alias: C4 Entry Log - Poll Every Minute
+  triggers:
+    - trigger: time_pattern
+      minutes: "/1"
+  actions:
+    - action: shell_command.c4_entry_log
+  mode: single
