@@ -1,68 +1,100 @@
-- id: '1773215301454'
-  alias: Booking Bay 1 - Calendar
-  description: ''
-  use_blueprint:
-    path: Blackshome/calendar-notifications-and-actions.yaml
-    input:
-      calendar: calendar.lane_1_bowling_machine
-      include_calendar_trigger: disable_key_word
-      start_calendar_offset:
-        hours: 0
-        minutes: -5
-        seconds: 0
-        days: 0
-      start_action_1:
-      - action: script.turn_on
-        metadata: {}
-        target:
-          entity_id: script.bay1_activate_script
-        data: {}
-      - action: input_boolean.turn_on
-        metadata: {}
-        target:
-          entity_id: input_boolean.bay1_helper
-        data: {}
-      include_end_auto_actions:
-      - enable_end_action_1
-      include_start_auto_actions:
-      - enable_start_action_1
-      end_action_1:
-      - action: light.turn_off
-        metadata: {}
-        target:
-          entity_id: light.highbay_1
-        data: {}
-      - action: input_boolean.turn_off
-        metadata: {}
-        target:
-          entity_id: input_boolean.bay1_helper
-        data: {}
-      global_conditions:
-      - condition: state
-        entity_id: input_boolean.bay1_blocked
-        state:
-        - 'off'
-      end_time_delay:
-        hours: 0
-        minutes: 0
-        seconds: 0
-      end_calendar_offset:
-        hours: 0
-        minutes: 5
-        seconds: 0
-        days: 0
-      start_notify_device:
-      - 34199ea861173546a72af6f7fbb34b8f
-      start_title: Bay1 Booking Start
-      include_start_notify: enable_start_notify_options
-      include_end_notify: enable_end_notify_options
+###############################################################################
+# BAY 1 - NATIVE CALENDAR AUTOMATION (replaces Blackshome blueprint)
+# Fires 5 min before booking start; extracts door code from event description
+###############################################################################
+
+- id: 'bay1_booking_start'
+  alias: Bay 1 Booking - START
+  description: >
+    5 minutes before booking: program door code from calendar event,
+    turn on lights, send notification.
+  triggers:
+    - trigger: calendar
+      event: start
+      entity_id: calendar.lane_1_bowling_machine
+      offset: "-0:05:00"
+  conditions:
+    - condition: state
+      entity_id: input_boolean.bay1_blocked
+      state: 'off'
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: (\d+)') | first | default('') }}
+        customer_name: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
+        booking_title: "{{ trigger.calendar_event.summary | default('Booking') }}"
+    - if:
+        - condition: template
+          value_template: "{{ door_code != '' }}"
+      then:
+        - action: lock_code_manager.set_usercode
+          data:
+            lock_entity_id: lock.front_door_lock
+            code_slot: 1
+            usercode: "{{ door_code }}"
+    - action: script.bay1_activate_script
+      data: {}
+    - action: notify.notify
+      data:
+        title: "\U0001f3cf Bay 1 Starting in 5 min"
+        message: >-
+          {{ customer_name }} | {{ booking_title }}.
+          {% if door_code != '' %}Door code: {{ door_code }}.{% else %}No door code on this booking.{% endif %}
+  mode: single
+
+- id: 'bay1_booking_end'
+  alias: Bay 1 Booking - END
+  description: >
+    At booking end: clear door code from lock, turn off Bay 1 lights.
+    If no other bays are active, turn off general lights too.
+  triggers:
+    - trigger: calendar
+      event: end
+      entity_id: calendar.lane_1_bowling_machine
+  actions:
+    - variables:
+        door_code: >-
+          {{ (trigger.calendar_event.description or '')
+             | regex_findall('DOOR CODE: (\d+)') | first | default('') }}
+    - if:
+        - condition: template
+          value_template: "{{ door_code != '' }}"
+      then:
+        - action: lock_code_manager.clear_usercode
+          data:
+            lock_entity_id: lock.front_door_lock
+            code_slot: 1
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.bay1_helper
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_1
+    - condition: template
+      value_template: >-
+        {{ is_state('input_boolean.bay2_helper', 'off') and
+           is_state('input_boolean.bay3_helper', 'off') and
+           is_state('input_boolean.bay4_helper', 'off') and
+           is_state('input_boolean.bay5_helper', 'off') }}
+    - action: script.scene_general_off
+      data: {}
+  mode: single
+
+###############################################################################
+# BAY 2-5  - CALENDAR AUTOMATIONS (Blackshome blueprint)
+# NOTE: Bay 2 calendar was fixed from lane_1 → lane_2
+###############################################################################
+
 - id: '1773219674927'
   alias: Booking Bay 2 - Calendar
   description: ''
   use_blueprint:
     path: Blackshome/calendar-notifications-and-actions.yaml
     input:
-      calendar: calendar.lane_1_bowling_machine
+      calendar: calendar.lane_2_bowling_machine
       include_calendar_trigger: disable_key_word
       start_calendar_offset:
         hours: 0
@@ -234,6 +266,12 @@
           entity_id: input_boolean.bay5_blocked
           state:
           - 'off'
+
+###############################################################################
+# BAY 1 - WEBHOOK ACCESS
+# Opened manually via webhook (e.g. from booking platform or button)
+###############################################################################
+
 - id: '1773291498207'
   alias: Booking BAY1 Access - Webhook
   description: Open Door Turn on Lights
@@ -259,6 +297,11 @@
       entity_id: input_boolean.bay1_helper
     data: {}
   mode: single
+
+###############################################################################
+# OCCUPANCY / SAFETY
+###############################################################################
+
 - id: '1779256315851'
   alias: Lights ON Nobody There
   description: ''
@@ -296,4 +339,43 @@
   - action: script.notify_script
     metadata: {}
     data: {}
+  mode: single
+
+###############################################################################
+# GIT SYNC - GitHub bidirectional sync
+###############################################################################
+
+- id: 'auto_git_push'
+  alias: Auto Push Config to GitHub
+  description: Nightly 2am push of HA config changes to GitHub
+  triggers:
+    - trigger: time
+      at: "02:00:00"
+  actions:
+    - action: shell_command.git_push
+      response_variable: push_result
+    - if:
+        - condition: template
+          value_template: "{{ push_result.returncode != 0 }}"
+      then:
+        - action: persistent_notification.create
+          data:
+            title: "GitHub Push Failed"
+            message: >
+              Auto-push to GitHub failed at 2am.
+              Your PAT token may have expired.
+              Error: {{ push_result.stderr }}
+  mode: single
+
+- id: 'github_deploy_webhook'
+  alias: Deploy from GitHub
+  description: Pulls latest config from GitHub when a push is made to the repo
+  triggers:
+    - trigger: webhook
+      webhook_id: "7k2p9x4m3n8q1r5f"
+      local_only: false
+  actions:
+    - action: shell_command.git_pull
+    - delay: "00:00:05"
+    - action: homeassistant.reload_all
   mode: single

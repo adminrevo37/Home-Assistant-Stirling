@@ -131,6 +131,10 @@ sensor:
     max_sub_interval:
       minutes: 5
 
+shell_command:
+  git_push: bash /config/git_push.sh
+  git_pull: bash /config/git_pull.sh
+
 utility_meter:
   energy_meter_daily_light_bay1:
     source: sensor.energy_usage_kwh_light_bay1
