@@ -218,19 +218,6 @@ input_text:
     max: 100
     initial: ""
 
-###############################################################################
-# INPUT NUMBER HELPERS — Roller Door Settings
-###############################################################################
-input_number:
-  roller_door_auto_close_minutes:
-    name: "Roller Door - Auto Close After (minutes)"
-    min: 1
-    max: 60
-    step: 1
-    initial: 5
-    unit_of_measurement: min
-    icon: mdi:timer-outline
-
 utility_meter:
   energy_meter_daily_light_bay1:
     source: sensor.energy_usage_kwh_light_bay1

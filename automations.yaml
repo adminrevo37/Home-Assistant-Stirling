@@ -1662,13 +1662,20 @@
 # *** BEFORE THIS WORKS ***
 # 1. Pair your Aqara Door & Window sensor in Zigbee2MQTT
 # 2. Give it a friendly name (e.g. "Roller Door")
-# 3. Replace BOTH occurrences of  binary_sensor.roller_door_contact
-#    below with the actual entity_id HA created (check Developer Tools → States,
-#    search for your sensor name — it will be something like
-#    binary_sensor.roller_door_contact  or  binary_sensor.roller_door_opening)
+# 3. Replace ALL occurrences of  binary_sensor.roller_door_contact  below
+#    with the actual entity_id HA created (Developer Tools → States, search
+#    your sensor name — typically  binary_sensor.<name>_contact)
 #
 # Sensor states:  on = door OPEN (contact broken)
 #                 off = door CLOSED (contact made)
+#
+# Timeline after door opens:
+#   T+1:15  → attempt 1: send LOCK to Control4 (if still open)
+#   T+1:40  → attempt 2: send LOCK again (if still open)
+#   T+2:00  → if still open: snapshot camera.pier_facing_entry + notify all staff
+#
+# Mode restart: if door opens again mid-sequence, timer resets from zero.
+# Each close attempt is conditional — won't fire if door already closed.
 ###############################################################################
 
 - id: 'roller_door_opened_notify'
@@ -1687,31 +1694,48 @@
   mode: single
 
 - id: 'roller_door_auto_close'
-  alias: Roller Door - Auto Close if Left Open
+  alias: Roller Door - Auto Close + Alert if Left Open
   description: >
-    If the roller door is left open for longer than the configured timeout
-    (input_number.roller_door_auto_close_minutes), automatically closes it
-    via Control4 and notifies all staff.
-    Mode restart: if door opens again after closing, timer resets.
+    After door opens: tries to close at 1:15 and 1:40.
+    If still open at 2:00, takes a snapshot from camera.pier_facing_entry
+    and sends a push notification with the image to all staff.
   triggers:
     - trigger: state
       entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
       to: 'on'
   actions:
-    - variables:
-        timeout_minutes: "{{ states('input_number.roller_door_auto_close_minutes') | int(5) }}"
-    - delay:
-        minutes: "{{ timeout_minutes }}"
-    # Re-check: only close if door is STILL open after the delay
+    # ── Attempt 1 at T+1:15 ──────────────────────────────────────────────────
+    - delay: "00:01:15"
     - condition: state
       entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
       state: 'on'
     - action: shell_command.c4_lock_door
+
+    # ── Attempt 2 at T+1:40 ──────────────────────────────────────────────────
+    - delay: "00:00:25"
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      state: 'on'
+    - action: shell_command.c4_lock_door
+
+    # ── Alert at T+2:00 ──────────────────────────────────────────────────────
+    - delay: "00:00:20"
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      state: 'on'
+    # Grab a snapshot from the pier entry camera
+    - action: camera.snapshot
+      target:
+        entity_id: camera.pier_facing_entry
+      data:
+        filename: /config/www/door_alert_snapshot.jpg
+    # Brief pause to ensure the image file is fully written before sending
+    - delay: "00:00:02"
+    # Notify all staff with the snapshot attached
     - action: notify.notify
       data:
-        title: "🚨 Roller Door Auto-Closed"
-        message: >
-          The front roller door was left open for {{ timeout_minutes }} minute(s)
-          and has been automatically closed.
+        title: "🚨 Front Door Open 2 Min"
+        message: "The front roller door has been open for 2 minutes. Please check entry."
+        data:
+          image: /local/door_alert_snapshot.jpg
   mode: restart
-  mode: single
