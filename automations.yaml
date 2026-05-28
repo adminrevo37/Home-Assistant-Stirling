@@ -928,7 +928,7 @@
     motion (roller door opening etc).
   triggers:
     - trigger: state
-      entity_id: binary_sensor.pier_facing_entry_motion
+      entity_id: binary_sensor.pier_facing_entry_cctv_motion
       to: 'on'
   conditions:
     - condition: template
