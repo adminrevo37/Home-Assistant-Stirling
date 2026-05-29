@@ -138,13 +138,23 @@ def send_door_command(command: str) -> bool:
 
 
 def send_unlock(label: str = "") -> bool:
-    """Send UNLOCK, enforcing MIN_UNLOCK_INTERVAL since the previous UNLOCK.
+    """Toggle the door motor with a LOCK→UNLOCK sequence.
 
-    The motor silently ignores an UNLOCK that arrives sooner than
-    MIN_UNLOCK_INTERVAL after the previous one.  This function waits
-    as long as needed so every call is guaranteed to be effective.
-    LOCK commands are intentionally never sent — LOCK has no effect
-    on the physical motor; UNLOCK is the sole toggle command.
+    Always sends LOCK before UNLOCK.  LOCK resets the C4 state machine
+    to "locked" (no motor action); the subsequent UNLOCK then triggers the
+    physical motor because it causes a state transition LOCKED→UNLOCKED.
+
+    Without LOCK first, UNLOCK is a no-op when C4 is already in UNLOCKED
+    state (which can happen after any previous UNLOCK command — even one
+    that was motor-ignored due to the minimum re-trigger interval).
+
+    The motor also silently ignores an UNLOCK pulse that arrives within
+    MIN_UNLOCK_INTERVAL of the previous one, so this function enforces the
+    gap before sending the LOCK+UNLOCK pair.
+
+    Empirically confirmed 2026-05-29:
+      LOCK+UNLOCK → opens from CLOSED ✓  closes from OPEN ✓
+      plain UNLOCK → closes from OPEN ✓  does NOT open from CLOSED ✗
     """
     global _last_unlock_t
     elapsed = time.monotonic() - _last_unlock_t
@@ -153,6 +163,9 @@ def send_unlock(label: str = "") -> bool:
         print(f"  ⏳ Min-interval wait: {wait_secs:.0f}s remaining "
               f"({elapsed:.0f}s since last UNLOCK){' — ' + label if label else ''}")
         time.sleep(wait_secs)
+    # Reset C4 state → LOCKED, then trigger motor
+    send_door_command("LOCK")
+    time.sleep(1)
     ok = send_door_command("UNLOCK")
     _last_unlock_t = time.monotonic()
     return ok
