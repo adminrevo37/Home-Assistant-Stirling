@@ -53,23 +53,33 @@ Calibration (2026-05-29):
   │ → ROI moved to floor mat: door face reflected daylight causing inversion │
   └──────────────────────────────────────────────────────────────────────────┘
 
-  NEW ROI calibration (floor mat x=52%,y=29%,w=15%,h=8%) — 2026-05-29:
-  ┌─────────────────────────────────┬───────┬──────────┬────────┬────────┐
-  │ Scenario                        │  avg  │ baseline │   Δ    │ result │
-  ├─────────────────────────────────┼───────┼──────────┼────────┼────────┤
-  │ Day, lights ON, CLOSED (8am)    │  89.3 │   90.0   │  -0.8  │ closed │
-  │ Day, lights ON, OPEN   (8am)    │ 166.3 │   90.0   │ +76.3  │ open   │
-  │ Day, lights OFF, CLOSED         │  TBD  │   TBD    │  TBD   │ TBD    │
-  │ Day, lights OFF, OPEN           │  TBD  │   TBD    │  TBD   │ TBD    │
-  │ Night, lights OFF, CLOSED       │  TBD  │   TBD    │  TBD   │ TBD    │
-  │ Night, lights OFF, OPEN         │  TBD  │   TBD    │  TBD   │ TBD    │
-  └─────────────────────────────────┴───────┴──────────┴────────┴────────┘
+  BOT ROI calibration (floor mat x=52%,y=29%,w=15%,h=8%) — 2026-05-29:
+  ┌──────────────────────────────────────┬───────┬──────────┬────────┬────────┐
+  │ Scenario                             │  avg  │ baseline │   Δ    │ result │
+  ├──────────────────────────────────────┼───────┼──────────┼────────┼────────┤
+  │ Day, lights ON, CLOSED (8am)         │  89.3 │   90.0   │  -0.8  │ closed │
+  │ Day, lights ON, OPEN   (8am)         │ 166.3 │   90.0   │ +76.3  │ open   │
+  │ Day, partly cloudy, CLOSED (10am)    │  85.0 │   87.2   │  -2.2  │ closed │
+  │ Day, partly cloudy, OPEN   (10am)    │ 234.0 │   87.2   │+146.8  │ open   │
+  │ Night, lights OFF, CLOSED            │  TBD  │   TBD    │  TBD   │ TBD    │
+  │ Night, lights OFF, OPEN              │  TBD  │   TBD    │  TBD   │ TBD    │
+  └──────────────────────────────────────┴───────┴──────────┴────────┴────────┘
 
-  Key findings (new ROI):
-  • Floor mat is black → low luma when door closed (avg≈89, indoor light)
-  • Door OPEN: daylight floods onto mat → avg jumps to 166, Δ=+76 ✅
-  • Signal margin: +76 vs threshold of 20 → 3.8× headroom, very robust
-  • OPEN_THRESHOLD = 20 confirmed correct for daytime scenario
+  Secondary TOP ROI calibration (header zone x=47%,y=10%,w=16%,h=6%) — 2026-05-29:
+  ┌──────────────────────────────────────┬───────┬──────────┬────────┬────────┐
+  │ Scenario                             │  avg  │ baseline │   Δ    │ result │
+  ├──────────────────────────────────────┼───────┼──────────┼────────┼────────┤
+  │ Day, partly cloudy, CLOSED (10am)    │ 130.0 │   87.2   │ +42.8  │ (*1)   │
+  │ Day, partly cloudy, OPEN   (10am)    │ 220.0 │   87.2   │+132.8  │ open   │
+  └──────────────────────────────────────┴───────┴──────────┴────────┴────────┘
+  (*1) TOP zone uses a separate baseline — see c4_door_timing_test.py for dual-zone use.
+       Production sensor (this file) uses BOT zone only.
+
+  Key findings:
+  • BOT zone luma is LOW when closed, HIGH when open — good contrast in all conditions
+  • Signal margin: Δ>76 vs threshold of 20 → ≥3.8× headroom, very robust
+  • TOP zone also has large Δ (≈90 open−closed) and fires EARLIER during close
+  • OPEN_THRESHOLD = 20 confirmed correct for all daytime scenarios
 """
 
 import sys

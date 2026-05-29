@@ -241,7 +241,12 @@ door_service_toggle:
           entity_id: input_boolean.door_service_mode
           state: 'off'
       then:
-        # Currently closed / service mode off → OPEN the door
+        # Currently closed / service mode off → OPEN the door.
+        # LOCK resets C4 state to "locked"; the subsequent UNLOCK then
+        # triggers the motor.  Plain UNLOCK is a no-op if C4 state is
+        # already "unlocked" (can happen after testing or power events).
+        - action: shell_command.c4_lock_door
+        - delay: "00:00:01"
         - action: shell_command.c4_unlock_door
         - action: input_boolean.turn_on
           target:

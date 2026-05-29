@@ -59,6 +59,25 @@ ROI_W_PCT       = 0.15
 ROI_H_PCT       = 0.08
 OPEN_THRESHOLD  = 20.0   # abs(avg − baseline) > this → OPEN
 
+# ── TOP ROI (door-header zone) ────────────────────────────────────────────────
+# Positioned just below the header — captures the UPPER portion of the door face.
+# Calibrated 2026-05-29:
+#   CLOSED ≈ 130 luma  |  OPEN ≈ 220 luma  |  Δ ≈ 90  (4.5× headroom vs threshold)
+#
+# Timing behaviour (opposite of BOT zone):
+#   Opening: fires LATE  — door panels must retract all the way to the header
+#                          → marks motor-stop / "door fully open"
+#   Closing: fires EARLY — falling panels cover this zone almost immediately
+#                          → marks close initiation / "motor starting"
+#
+# Dual-zone timing:
+#   Open  motor run  ≈  t_top_open  − t_unlock_open
+#   Close motor run  ≈  t_bot_close − t_top_close
+TOP_ROI_X_PCT   = 0.47
+TOP_ROI_Y_PCT   = 0.10
+TOP_ROI_W_PCT   = 0.16
+TOP_ROI_H_PCT   = 0.06
+
 # ── Motor minimum re-trigger interval ────────────────────────────────────────
 # The motor ignores a second UNLOCK if sent within ~90 s of the previous one.
 # Confirmed empirically 2026-05-29: 45 s fails, 90 s succeeds.
@@ -150,10 +169,20 @@ def fetch_frame(frigate_url: str, timeout: int = 3) -> bytes | None:
 
 
 def roi_luma(jpeg_bytes: bytes) -> float:
+    """Luma of the primary BOT ROI (door threshold — floor mat zone)."""
     img  = Image.open(io.BytesIO(jpeg_bytes)).convert("L")
     W, H = img.size
     x, y = int(W * ROI_X_PCT), int(H * ROI_Y_PCT)
     w, h = int(W * ROI_W_PCT), int(H * ROI_H_PCT)
+    return sum(img.crop((x, y, x+w, y+h)).tobytes()) / (w * h)
+
+
+def roi_luma_top(jpeg_bytes: bytes) -> float:
+    """Luma of the secondary TOP ROI (door-header zone)."""
+    img  = Image.open(io.BytesIO(jpeg_bytes)).convert("L")
+    W, H = img.size
+    x, y = int(W * TOP_ROI_X_PCT), int(H * TOP_ROI_Y_PCT)
+    w, h = int(W * TOP_ROI_W_PCT), int(H * TOP_ROI_H_PCT)
     return sum(img.crop((x, y, x+w, y+h)).tobytes()) / (w * h)
 
 
@@ -315,17 +344,25 @@ def draw_summary_table(open_times: list[float], close_times: list[float]) -> Non
 # ─────────────────────────────────────────────────────────────────────────────
 
 def record_phase(frigate_url: str, baseline: float, target_status: str,
-                 interval: float = 0.5, max_secs: int = 60
-                 ) -> tuple[float | None, list]:
+                 interval: float = 0.5, max_secs: int = 60,
+                 secondary_luma_fn=None
+                 ) -> tuple[float | None, float | None, list]:
     """
     Poll Frigate at `interval` seconds until `target_status` is detected.
-    Returns (transition_time_or_None, samples).
-    samples: list of (t_rel, avg, status)
+
+    Returns (primary_transition_t, secondary_transition_t, samples).
+      primary_transition_t  – when the BOT (primary) zone crosses the threshold
+      secondary_transition_t– when the TOP (secondary) zone crosses, if provided
+      samples               – list of (t_rel, avg, status)
+
+    secondary_luma_fn: optional callable(jpeg_bytes) → float for the TOP zone.
+    The secondary zone uses the same OPEN_THRESHOLD and baseline.
     """
-    samples         = []
-    transition_t    = None
-    consecutive_tgt = 0       # require 2 back-to-back frames to confirm
-    t0              = time.monotonic()
+    samples           = []
+    transition_t      = None
+    sec_transition_t  = None
+    consecutive_tgt   = 0       # require 2 back-to-back frames to confirm
+    t0                = time.monotonic()
 
     while True:
         t_rel = time.monotonic() - t0
@@ -344,7 +381,19 @@ def record_phase(frigate_url: str, baseline: float, target_status: str,
         bar_pos = min(int(abs(delta) / (OPEN_THRESHOLD * 2) * bar_w), bar_w)
         bar     = "█" * bar_pos + "░" * (bar_w - bar_pos)
         marker  = " ◄◄◄" if status == target_status else ""
-        print(f"  {t_rel:6.1f}s │{bar}│ avg={avg:5.1f}  Δ={delta:+5.1f}  {status}{marker}",
+
+        # Secondary (TOP) zone readout
+        sec_str = ""
+        if secondary_luma_fn is not None:
+            sec_avg    = secondary_luma_fn(jpeg)
+            sec_delta  = sec_avg - baseline
+            sec_status = status_from_delta(sec_delta)
+            sec_str    = f"  TOP={sec_avg:5.1f}(Δ{sec_delta:+.0f})"
+            if sec_transition_t is None and sec_status == target_status:
+                sec_transition_t = t_rel
+                sec_str += " ★"
+
+        print(f"  {t_rel:6.1f}s │{bar}│ BOT={avg:5.1f}(Δ{delta:+.0f})  {status}{sec_str}{marker}",
               flush=True)
 
         if status == target_status:
@@ -366,7 +415,7 @@ def record_phase(frigate_url: str, baseline: float, target_status: str,
         if sleep_t > 0:
             time.sleep(sleep_t)
 
-    return transition_t, samples
+    return transition_t, sec_transition_t, samples
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -451,9 +500,10 @@ def main():
             else:
                 print("  Waiting — open the door now ...")
 
-            t_open, open_samples = record_phase(
+            t_open, _top_open_early, open_samples = record_phase(
                 args.frigate, baseline, "OPEN",
-                interval=interval, max_secs=45
+                interval=interval, max_secs=45,
+                secondary_luma_fn=roi_luma_top,
             )
 
             if t_open is not None:
@@ -480,11 +530,11 @@ def main():
             _STAB_TOL     = 2.0   # luma units — change < this = "stable"
             _STAB_FRAMES  = 3     # consecutive stable frames required
             _STAB_TIMEOUT = 25    # max wait (s) before proceeding anyway
-            _STAB_BUFFER  = 0     # no extra buffer — min-interval handles timing
-            print(f"  Monitoring motor stop (luma stabilisation ±{_STAB_TOL}) ...")
+            print(f"  Monitoring motor stop (stabilisation ±{_STAB_TOL}, TOP zone fires = fully open) ...")
             _stable_count = 0
             _last_luma    = None
             _stab_t0      = time.monotonic()
+            t_top_open    = None  # when TOP zone first shows OPEN = motor at open limit
             while True:
                 _elapsed = time.monotonic() - _stab_t0
                 if _elapsed > _STAB_TIMEOUT:
@@ -494,23 +544,30 @@ def main():
                 if _jpeg is None:
                     time.sleep(interval)
                     continue
-                _luma = roi_luma(_jpeg)
+                _luma     = roi_luma(_jpeg)
+                _top_luma = roi_luma_top(_jpeg)
+                _top_open = abs(_top_luma - baseline) > OPEN_THRESHOLD
+                if t_top_open is None and _top_open:
+                    t_top_open = _elapsed
+                _top_flag = " ★ TOP=OPEN (door fully open)" if (t_top_open is not None and abs(t_top_open - _elapsed) < interval + 0.05) else ""
                 if _last_luma is not None:
                     _diff = abs(_luma - _last_luma)
-                    print(f"  stab {_elapsed:5.1f}s  luma={_luma:.1f}  Δ={_diff:+.1f}"
-                          f"  stable={_stable_count}", flush=True)
+                    print(f"  stab {_elapsed:5.1f}s  BOT={_luma:.1f}  TOP={_top_luma:.1f}"
+                          f"  Δ={_diff:+.1f}  stbl={_stable_count}{_top_flag}", flush=True)
                     if _diff < _STAB_TOL:
                         _stable_count += 1
                         if _stable_count >= _STAB_FRAMES:
-                            print(f"  ✅ Motor stopped (open limit reached)")
+                            print(f"  ✅ Motor stopped — BOT stable, TOP={'OPEN' if _top_open else 'not yet open'}")
                             break
                     else:
                         _stable_count = 0
                 else:
-                    print(f"  stab {_elapsed:5.1f}s  luma={_luma:.1f}  (first sample)",
+                    print(f"  stab {_elapsed:5.1f}s  BOT={_luma:.1f}  TOP={_top_luma:.1f}  (first sample)",
                           flush=True)
                 _last_luma = _luma
                 time.sleep(interval)
+            if t_top_open is not None:
+                print(f"  🏁 TOP zone fired at stab+{t_top_open:.1f}s → door fully open")
 
             # ── CLOSE phase ───────────────────────────────────────────────────
             print()
@@ -530,23 +587,30 @@ def main():
             else:
                 print("  Waiting — close the door now ...")
 
-            t_close, close_samples = record_phase(
+            # TOP zone fires early (door starts descending ★), BOT fires late (door sealed ◄◄◄)
+            t_close, t_top_close, close_samples = record_phase(
                 args.frigate, baseline, "CLOSED",
-                interval=interval, max_secs=60
+                interval=interval, max_secs=60,
+                secondary_luma_fn=roi_luma_top,
             )
 
             if t_close is not None:
                 close_times.append(t_close)
-                print(f"\n  ✅ CLOSED detected at T+{t_close:.2f}s")
+                print(f"\n  ✅ CLOSED (BOT) detected at T+{t_close:.2f}s")
+                if t_top_close is not None:
+                    print(f"     TOP zone fired at T+{t_top_close:.2f}s  "
+                          f"(close initiation → motor run ≈ {t_close - t_top_close:.1f}s visible travel)")
                 draw_luma_chart(close_samples, baseline,
                                 f"Run {run} — CLOSE phase", t_close)
             else:
                 print(f"\n  ⚠️  CLOSED not detected this run")
 
             all_raw.append({
-                "run": run,
+                "run":           run,
                 "open_time":     t_open,
                 "close_time":    t_close,
+                "t_top_open":    t_top_open   if "t_top_open"   in dir() else None,
+                "t_top_close":   t_top_close  if t_top_close is not None else None,
                 "open_samples":  [(t, a, s) for t, a, s in open_samples],
                 "close_samples": [(t, a, s) for t, a, s in (close_samples or [])],
             })
