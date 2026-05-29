@@ -57,18 +57,19 @@ Calibration (2026-05-29):
   ┌─────────────────────────────────┬───────┬──────────┬────────┬────────┐
   │ Scenario                        │  avg  │ baseline │   Δ    │ result │
   ├─────────────────────────────────┼───────┼──────────┼────────┼────────┤
-  │ Day, lights ON, CLOSED          │  99.8 │   99.8   │   0    │ closed │
-  │ Day, lights ON, OPEN            │  TBD  │   TBD    │  TBD   │ TBD    │
+  │ Day, lights ON, CLOSED (8am)    │  89.3 │   90.0   │  -0.8  │ closed │
+  │ Day, lights ON, OPEN   (8am)    │ 166.3 │   90.0   │ +76.3  │ open   │
   │ Day, lights OFF, CLOSED         │  TBD  │   TBD    │  TBD   │ TBD    │
   │ Day, lights OFF, OPEN           │  TBD  │   TBD    │  TBD   │ TBD    │
   │ Night, lights OFF, CLOSED       │  TBD  │   TBD    │  TBD   │ TBD    │
   │ Night, lights OFF, OPEN         │  TBD  │   TBD    │  TBD   │ TBD    │
   └─────────────────────────────────┴───────┴──────────┴────────┴────────┘
 
-  Key finding (new ROI):
-  • Floor mat is black → low luma when door closed (indoor light only)
-  • When door opens, daylight or exterior light hits mat → avg increases
-  • Signal should be consistently POSITIVE delta, all lighting conditions
+  Key findings (new ROI):
+  • Floor mat is black → low luma when door closed (avg≈89, indoor light)
+  • Door OPEN: daylight floods onto mat → avg jumps to 166, Δ=+76 ✅
+  • Signal margin: +76 vs threshold of 20 → 3.8× headroom, very robust
+  • OPEN_THRESHOLD = 20 confirmed correct for daytime scenario
 """
 
 import sys
