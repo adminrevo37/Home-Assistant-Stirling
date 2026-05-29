@@ -1738,7 +1738,8 @@
 - id: 'roller_door_auto_close'
   alias: Roller Door - Auto Close + Alert if Left Open
   description: >
-    After door opens: two LOCK attempts then a snapshot + staff alert.
+    After door opens: two UNLOCK (toggle) close attempts then a snapshot + staff alert.
+    UNLOCK is the toggle command — closes from open limit, same as pressing the physical button.
     Timings are configurable via:
       input_number.door_close_attempt1_secs  (default 75s)
       input_number.door_close_attempt2_secs  (default 25s after attempt 1)
@@ -1761,7 +1762,7 @@
     - condition: state
       entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       state: 'on'
-    - action: shell_command.c4_lock_door
+    - action: shell_command.c4_unlock_door   # UNLOCK = toggle (closes from open limit)
 
     # ── Attempt 2 (configurable — default +25s after attempt 1) ─────────────
     - delay:
@@ -1769,7 +1770,7 @@
     - condition: state
       entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       state: 'on'
-    - action: shell_command.c4_lock_door
+    - action: shell_command.c4_unlock_door   # UNLOCK = toggle (closes from open limit)
 
     # ── Alert (configurable — default +20s after attempt 2) ──────────────────
     - delay:

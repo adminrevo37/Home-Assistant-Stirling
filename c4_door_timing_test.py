@@ -483,10 +483,10 @@ def main():
             print(f"  {'─'*8}  {'─'*32}  {'─'*25}")
 
             if not args.watch:
-                print(f"  {'T0':>8}  Sending LOCK ...")
-                ok = send_door_command("LOCK")
+                print(f"  {'T0':>8}  Sending UNLOCK (toggle — closes from open limit) ...")
+                ok = send_door_command("UNLOCK")
                 if not ok:
-                    print("  WARNING: LOCK may have failed")
+                    print("  WARNING: UNLOCK may have failed")
             else:
                 print("  Waiting — close the door now ...")
 
