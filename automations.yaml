@@ -800,6 +800,80 @@
   mode: single
 
 ###############################################################################
+# NIGHT — Late-start neighbour activation (race condition safety net)
+# Fires when any bay_helper turns ON while it is already dusk or dark.
+# Covers bookings that start after sunset_neighbour_activate has already fired,
+# or where the booking_start -7min offset fires just outside the 30-min window.
+# Uses a 45-min sunset threshold (vs 30-min in booking_start) to close the gap.
+###############################################################################
+- id: 'bay_helper_night_neighbour_activate'
+  alias: Night - Activate Neighbour Highbays on Bay Start
+  description: >
+    Safety net: when any bay_helper turns ON during dusk/night (sun within 45 min
+    of setting or already set), immediately activate the correct neighbour highbays.
+    Idempotent — turning on an already-on light has no effect.
+  triggers:
+    - trigger: state
+      entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        - input_boolean.bay3_helper
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+      to: 'on'
+  conditions:
+    - condition: template
+      value_template: >-
+        {{ is_state('sun.sun', 'below_horizon') or
+           (is_state('sun.sun', 'above_horizon') and
+            (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) < 2700) }}
+  actions:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_boolean.bay1_helper' }}"
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: light.highbay_2
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_boolean.bay2_helper' }}"
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id:
+                  - light.highbay_1
+                  - light.highbay_3
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_boolean.bay3_helper' }}"
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id:
+                  - light.highbay_2
+                  - light.highbay_4
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_boolean.bay4_helper' }}"
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id:
+                  - light.highbay_3
+                  - light.highbay_5
+        - conditions:
+            - condition: template
+              value_template: "{{ trigger.entity_id == 'input_boolean.bay5_helper' }}"
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: light.highbay_4
+  mode: parallel
+  max: 5
+
+###############################################################################
 # NIGHT — Staggered shutdown when all bays close after dark
 # When the last bay helper goes off after sunset: turn all highbays off, then
 # leave highbay 3 on as a residual safety light until the building clears.
