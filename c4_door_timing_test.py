@@ -585,16 +585,22 @@ def main():
             # The TOP zone (header area) only sees bright exterior once ALL panels
             # have cleared it — that marks the true motor-stop / "door fully open".
             #
-            # Calibrated (2026-05-29): TOP_BASELINE=126.8, TOP_OPEN≈221.
-            # TOP fires when delta > OPEN_THRESHOLD=20, i.e. TOP > ~147.
-            # Physically confirmed: open = close = ~18.5 s.
+            # Calibrated (2026-05-29): TOP_BASELINE=126.8.
+            #   Sunny/bright day:  TOP_open ≈ 217–221 (Δ≈90-93) → TOP fires first
+            #   Cloudy/dim day:    TOP_open ≈ 200–205 (Δ≈74)    → TOP never hits 90
+            # Physically confirmed: open = close = ~18.5 s in all conditions.
             #
-            # Exit condition: BOT stable (luma plateau) AND TOP has fired.
-            # The BOT plateau happens after ~6 s but TOP fires at ~14–15 s;
-            # we must NOT exit on BOT stability alone.
-            _STAB_TOL     = 2.0   # luma units — BOT change < this = "BOT plateau"
-            _STAB_FRAMES  = 3     # consecutive BOT-stable frames before we count
-            _STAB_TIMEOUT = 35    # absolute timeout (s) — allows full ~18.5 s motor run
+            # Dual-exit strategy:
+            #   Primary:  BOT plateau AND TOP Δ > TOP_STAB_OPEN_THRESHOLD (90)
+            #             → fires on sunny days at ~stab+14s  → true ≈ 18.5s ✓
+            #   Fallback: BOT has been stable for _STAB_FRAMES + _BOT_STAB_EXTRA frames
+            #             (3+6 = 9 frames = 4.5s of stability, first reached at ~stab+13.9s)
+            #             → fires on cloudy days when TOP never reaches 90  → true ≈ 18.4s ✓
+            _STAB_TOL       = 2.0   # luma units — BOT change < this = "BOT plateau"
+            _STAB_FRAMES    = 3     # consecutive BOT-stable frames before we start counting
+            _BOT_STAB_EXTRA = 6     # extra stable frames after plateau before fallback exit
+                                    # (6 × 0.5s = 3s; stbl=9 fires at stab+~13.9s → true≈18.4s)
+            _STAB_TIMEOUT   = 35    # absolute timeout (s) — allows full ~18.5 s motor run
             print(f"  Monitoring full open (TOP zone must fire before exit) ...")
             _stable_count = 0
             _last_luma    = None
@@ -633,12 +639,22 @@ def main():
                         _stable_count += 1
                         if _stable_count >= _STAB_FRAMES:
                             if t_top_open is not None:
-                                # BOT plateau AND TOP fired → door truly fully open
+                                # PRIMARY exit: BOT plateau AND TOP fired → door fully open
                                 print(f"  ✅ Fully open — BOT plateau, TOP fired at stab+{t_top_open:.1f}s")
                                 break
-                            # BOT plateau but TOP not yet fired — keep waiting
-                            print(f"  ⏸  BOT plateau (stbl={_stable_count}) — "
-                                  f"waiting for TOP to fire (door still retracting)...", flush=True)
+                            elif _stable_count >= _STAB_FRAMES + _BOT_STAB_EXTRA:
+                                # FALLBACK exit: BOT stable for 9+ frames but TOP never reached
+                                # TOP_STAB_OPEN_THRESHOLD (dim/cloudy lighting).
+                                # stbl=9 fires at ~stab+13.9s → true_open ≈ 18.4s ≈ physical 18.5s
+                                t_top_open = _elapsed
+                                print(f"  ✅ Fully open — BOT+fallback (stbl={_stable_count}, "
+                                      f"TOP Δ={abs(_top_luma - top_baseline):.0f} "
+                                      f"< thr {TOP_STAB_OPEN_THRESHOLD:.0f}, dim lighting)")
+                                break
+                            else:
+                                # BOT plateau but TOP not yet fired — keep waiting
+                                print(f"  ⏸  BOT plateau (stbl={_stable_count}) — "
+                                      f"waiting for TOP or fallback (door still retracting)...", flush=True)
                     else:
                         _stable_count = 0
                 else:
