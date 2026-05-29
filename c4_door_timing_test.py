@@ -6,6 +6,12 @@ Fully automated: opens the door, measures open time, closes it, measures
 close time, repeats N times.  Produces live luma trace + ASCII charts +
 statistics table + HA parameter recommendations.
 
+Motor behaviour (confirmed 2026-05-29):
+  • UNLOCK is the sole toggle — opens if closed, closes if open.
+  • LOCK has no physical effect on the motor.
+  • The motor ignores a second UNLOCK within ~90 s of the previous one.
+  • send_unlock() enforces MIN_UNLOCK_INTERVAL automatically.
+
 Frame source: Frigate HTTP API  (camera.pier_facing_entry)
   http://ccab4aaf-frigate:5000/api/pier_facing_entry/latest.jpg
 
@@ -52,6 +58,14 @@ ROI_Y_PCT       = 0.29
 ROI_W_PCT       = 0.15
 ROI_H_PCT       = 0.08
 OPEN_THRESHOLD  = 20.0   # abs(avg − baseline) > this → OPEN
+
+# ── Motor minimum re-trigger interval ────────────────────────────────────────
+# The motor ignores a second UNLOCK if sent within ~90 s of the previous one.
+# Confirmed empirically 2026-05-29: 45 s fails, 90 s succeeds.
+# This applies to ALL UNLOCK commands regardless of LOCK commands in between —
+# LOCK has no physical effect on the motor; UNLOCK is the sole toggle.
+MIN_UNLOCK_INTERVAL = 90.0   # seconds to enforce between any two UNLOCK sends
+_last_unlock_t: float = 0.0  # monotonic timestamp of last UNLOCK sent
 
 # ── Default Frigate camera URL ────────────────────────────────────────────────
 FRIGATE_BASE    = "http://ccab4aaf-frigate:5000"
@@ -102,6 +116,27 @@ def send_door_command(command: str) -> bool:
     except Exception as e:
         print(f"  [door-cmd] {e}", file=sys.stderr)
         return False
+
+
+def send_unlock(label: str = "") -> bool:
+    """Send UNLOCK, enforcing MIN_UNLOCK_INTERVAL since the previous UNLOCK.
+
+    The motor silently ignores an UNLOCK that arrives sooner than
+    MIN_UNLOCK_INTERVAL after the previous one.  This function waits
+    as long as needed so every call is guaranteed to be effective.
+    LOCK commands are intentionally never sent — LOCK has no effect
+    on the physical motor; UNLOCK is the sole toggle command.
+    """
+    global _last_unlock_t
+    elapsed = time.monotonic() - _last_unlock_t
+    if elapsed < MIN_UNLOCK_INTERVAL:
+        wait_secs = MIN_UNLOCK_INTERVAL - elapsed
+        print(f"  ⏳ Min-interval wait: {wait_secs:.0f}s remaining "
+              f"({elapsed:.0f}s since last UNLOCK){' — ' + label if label else ''}")
+        time.sleep(wait_secs)
+    ok = send_door_command("UNLOCK")
+    _last_unlock_t = time.monotonic()
+    return ok
 
 
 def fetch_frame(frigate_url: str, timeout: int = 3) -> bytes | None:
@@ -409,8 +444,8 @@ def main():
             print(f"  {'─'*8}  {'─'*32}  {'─'*25}")
 
             if not args.watch:
-                print(f"  {'T0':>8}  Sending UNLOCK ...")
-                ok = send_door_command("UNLOCK")
+                print(f"  {'T0':>8}  Sending UNLOCK (open) ...")
+                ok = send_unlock("open")
                 if not ok:
                     print("  WARNING: UNLOCK may have failed")
             else:
@@ -437,14 +472,16 @@ def main():
 
             # ── Wait for motor to fully stop (luma stabilisation) ────────────
             # Visual OPEN fires when luma first crosses threshold (~2–3 s),
-            # but the motor keeps running for ~10–12 s total.  We poll until
-            # the ROI luma stops changing before sending LOCK — otherwise the
-            # motor ignores the command (hardware anti-reversal protection).
+            # but the motor keeps running for ~10 s total.  We continue
+            # polling to measure when it stops (informational).  The actual
+            # close UNLOCK will not be sent until MIN_UNLOCK_INTERVAL has
+            # elapsed since the open UNLOCK — that gap far exceeds the
+            # motor's anti-reversal settle time, so no separate LOCK is needed.
             _STAB_TOL     = 2.0   # luma units — change < this = "stable"
             _STAB_FRAMES  = 3     # consecutive stable frames required
             _STAB_TIMEOUT = 25    # max wait (s) before proceeding anyway
-            _STAB_BUFFER  = 3     # extra seconds after luma is stable
-            print(f"  Waiting for motor to stop (luma stabilisation ±{_STAB_TOL}) ...")
+            _STAB_BUFFER  = 0     # no extra buffer — min-interval handles timing
+            print(f"  Monitoring motor stop (luma stabilisation ±{_STAB_TOL}) ...")
             _stable_count = 0
             _last_luma    = None
             _stab_t0      = time.monotonic()
@@ -465,8 +502,7 @@ def main():
                     if _diff < _STAB_TOL:
                         _stable_count += 1
                         if _stable_count >= _STAB_FRAMES:
-                            print(f"  ✅ Motor stopped — buffering {_STAB_BUFFER}s")
-                            time.sleep(_STAB_BUFFER)
+                            print(f"  ✅ Motor stopped (open limit reached)")
                             break
                     else:
                         _stable_count = 0
@@ -483,15 +519,12 @@ def main():
             print(f"  {'─'*8}  {'─'*32}  {'─'*25}")
 
             if not args.watch:
-                # C4 state machine: LOCK resets state to "locked"; the
-                # subsequent UNLOCK then sees a state change and sends the
-                # physical toggle to the motor.  Without LOCK first, C4
-                # sees the door already "unlocked" and ignores the command.
-                print(f"  {'T0':>8}  Sending LOCK (reset C4 state → locked) ...")
-                send_door_command("LOCK")
-                time.sleep(1)          # brief pause for C4 state to commit
-                print(f"  {'T0':>8}  Sending UNLOCK (C4 state: locked→unlocked = motor trigger) ...")
-                ok = send_door_command("UNLOCK")
+                # UNLOCK is the sole toggle for this motor.  LOCK has no
+                # physical effect.  send_unlock() enforces the minimum
+                # re-trigger interval (MIN_UNLOCK_INTERVAL) automatically,
+                # waiting if needed before transmitting the command.
+                print(f"  {'T0':>8}  Sending UNLOCK (close) — waiting for min interval if needed ...")
+                ok = send_unlock("close")
                 if not ok:
                     print("  WARNING: UNLOCK may have failed")
             else:
@@ -499,7 +532,7 @@ def main():
 
             t_close, close_samples = record_phase(
                 args.frigate, baseline, "CLOSED",
-                interval=interval, max_secs=45
+                interval=interval, max_secs=60
             )
 
             if t_close is not None:
