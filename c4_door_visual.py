@@ -13,8 +13,8 @@ Call flow (driven by HA automation every 15 seconds):
   2. shell_command.c4_door_visual_check  →  runs this script
   3. automation reads response_variable.stdout → sets input_boolean.roller_door_visual_open
 
-ROI (tuned from live test 2026-05-29 06:19):
-  x=55%, y=10%, w=17%, h=32% of image  (targets the roller door face)
+ROI (tuned from live test 2026-05-29):
+  x=52%, y=29%, w=15%, h=8% of image  (targets the black floor mat at door threshold)
 
 Adaptive baseline design
 ────────────────────────
@@ -42,24 +42,33 @@ Calibration (2026-05-29):
   │ Night, lights OFF, door OPEN    │ 127.4 │   96.4   │ +31.0  │ open   │
   │ Day/Night, lights ON, CLOSED    │  82.6 │   82.6   │   0    │ closed │
   │ Day/Night, lights ON, OPEN      │ 114.0 │   82.6   │ +31.4  │ open   │
-  │ Daytime, lights OFF, OPEN       │ 106.1 │   TBD    │  TBD   │ TBD    │
-  │ Daytime, lights OFF, CLOSED     │  TBD  │   TBD    │  TBD   │ TBD    │
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ OLD ROI (door face x=55%,y=10%,w=17%,h=32%) — superseded               │
+  │ Night, lights OFF, CLOSED  │  96.4 │  96.4 │   0   │ closed            │
+  │ Night, lights OFF, OPEN    │ 127.4 │  96.4 │ +31.0 │ open              │
+  │ Night, lights ON,  CLOSED  │  82.6 │  82.6 │   0   │ closed            │
+  │ Night, lights ON,  OPEN    │ 114.0 │  82.6 │ +31.4 │ open              │
+  │ Day,   lights OFF, OPEN    │ 106.1 │  82.6 │ +23.5 │ open (borderline) │
+  │ Day,   lights OFF, CLOSED  │ 110.1 │  96.4 │ +13.7 │ WRONG — inverted  │
+  │ → ROI moved to floor mat: door face reflected daylight causing inversion │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+  NEW ROI calibration (floor mat x=52%,y=29%,w=15%,h=8%) — 2026-05-29:
+  ┌─────────────────────────────────┬───────┬──────────┬────────┬────────┐
+  │ Scenario                        │  avg  │ baseline │   Δ    │ result │
+  ├─────────────────────────────────┼───────┼──────────┼────────┼────────┤
+  │ Day, lights ON, CLOSED          │  99.8 │   99.8   │   0    │ closed │
+  │ Day, lights ON, OPEN            │  TBD  │   TBD    │  TBD   │ TBD    │
+  │ Day, lights OFF, CLOSED         │  TBD  │   TBD    │  TBD   │ TBD    │
+  │ Day, lights OFF, OPEN           │  TBD  │   TBD    │  TBD   │ TBD    │
+  │ Night, lights OFF, CLOSED       │  TBD  │   TBD    │  TBD   │ TBD    │
+  │ Night, lights OFF, OPEN         │  TBD  │   TBD    │  TBD   │ TBD    │
   └─────────────────────────────────┴───────┴──────────┴────────┴────────┘
 
-  Key findings (night scenarios):
-  • Door-open Δ is consistently ~+31 regardless of lighting — robust signal
-  • Lights ON/OFF shifts baseline by ~14 (96.4↔82.6) — BELOW threshold of 20
-    → No false "open" trigger when lights switch while door is closed ✅
-  • Adaptive EMA baseline adjusts to lighting changes within ~5 min
-  • OPEN_THRESHOLD = 20 confirmed correct for all tested scenarios
-
-  Daytime + lights OFF findings (2026-05-29):
-  • Baseline drifted due to lights-off transition falling near grey zone.
-  • Root cause: door OPEN avg ≈ 106 was close enough to old baseline (82.6)
-    that some reads fell under threshold → baseline crept up incorrectly.
-  • Fix: consecutive-reads guard (BASELINE_ADAPT_AFTER = 3) prevents
-    isolated or transitional "closed" misreads from corrupting the baseline.
-  • Full daytime calibration pending (door-closed reading not yet captured).
+  Key finding (new ROI):
+  • Floor mat is black → low luma when door closed (indoor light only)
+  • When door opens, daylight or exterior light hits mat → avg increases
+  • Signal should be consistently POSITIVE delta, all lighting conditions
 """
 
 import sys
@@ -70,7 +79,7 @@ SNAPSHOT        = "/config/www/door_check_latest.jpg"
 STATE_FILE      = "/config/c4_door_visual_state.json"
 
 # Tuning parameters
-CLOSED_BASELINE_DEFAULT = 96.4   # initial value if state file doesn't exist
+CLOSED_BASELINE_DEFAULT = 99.8   # initial value if state file doesn't exist (day/lights-on closed reading)
 OPEN_THRESHOLD          = 20.0   # abs(delta) > this → OPEN
 ALPHA                   = 0.05   # EMA weight for baseline adaptation (~20 cycles to 64%)
 BASELINE_ADAPT_AFTER    = 3      # consecutive "closed" reads required before EMA moves
@@ -111,8 +120,8 @@ try:
 
     img  = Image.open(SNAPSHOT).convert("L")   # grayscale
     W, H = img.size
-    x, y = int(W * 0.55), int(H * 0.10)
-    w, h = int(W * 0.17), int(H * 0.32)
+    x, y = int(W * 0.52), int(H * 0.29)   # floor mat at door threshold
+    w, h = int(W * 0.15), int(H * 0.08)
 
     crop   = img.crop((x, y, x + w, y + h))
     # tobytes() returns raw pixel bytes for 'L' mode — each byte = one pixel value
