@@ -5,7 +5,7 @@ Detects when someone uses a code on the DS3 and appends to entry log CSV.
 Runs every 1 minute via HA automation -> shell_command.c4_entry_log
 
 Log file: /config/www/entry_log.csv
-State file: /config/c4_entry_log_state.json  (tracks last seen code ID)
+State file: /config/c4_entry_log_state.json  (tracks last seen code ID + timestamp)
 
 Slot -> Bay mapping:
   11-13 -> Bay 1
@@ -14,6 +14,13 @@ Slot -> Bay mapping:
   20-22 -> Bay 4
   23-25 -> Bay 5
   1-10  -> Staff
+
+Fixes applied 2026-05-29:
+  Bug 1: Same-slot repeat now detected via timestamp (REPEAT_ENTRY_MIN_MINUTES)
+  Bug 2: Staff slots 1-10 return 'staff-protected' instead of blank
+  Bug 3: get_slot_code() tries HA REST API first (requires /config/ha_token.txt),
+         falls back to core.restore_state
+  Bug 4: CODE:Name format stripped — returns just the 6-digit code
 """
 import asyncio
 import json
@@ -24,6 +31,12 @@ from datetime import datetime
 DS3_ITEM_ID = 39
 LOG_FILE = '/config/www/entry_log.csv'
 STATE_FILE = '/config/c4_entry_log_state.json'
+HA_TOKEN_FILE = '/config/ha_token.txt'
+HA_API = 'http://localhost:8123/api'
+
+# Minimum minutes between repeated same-slot entries — prevents duplicate logging
+# during a single session while still catching genuine re-entries
+REPEAT_ENTRY_MIN_MINUTES = 15
 
 SLOT_TO_BAY = {}
 for bay, start in enumerate([11, 14, 17, 20, 23], 1):
@@ -38,7 +51,7 @@ def load_state():
         with open(STATE_FILE) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"last_code_id": None, "last_name": None}
+        return {"last_code_id": None, "last_name": None, "last_logged_at": None}
 
 
 def save_state(state):
@@ -59,7 +72,6 @@ def append_log_entry(slot, name):
     ensure_log_header()
     bay = SLOT_TO_BAY.get(slot, f"Unknown (slot {slot})")
     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    # Read slot helpers to get the code for this slot
     code = get_slot_code(slot)
     with open(LOG_FILE, 'a', newline='') as f:
         writer = csv.writer(f)
@@ -67,24 +79,69 @@ def append_log_entry(slot, name):
     print(f"Logged: {ts} | {bay} | slot {slot} | {name} | code {code}")
 
 
-def get_slot_code(slot):
-    """Read the code stored in the input_text helper for this slot."""
+def get_ha_token():
+    """Read HA long-lived token from file, return None if unavailable."""
     try:
-        # Map slot to bay and helper name
-        for bay_num, start in enumerate([11, 14, 17, 20, 23], 1):
-            for i, offset in enumerate(range(3)):
-                if start + offset == slot:
-                    letter = ['a', 'b', 'c'][i]
-                    helper_path = f'/config/.storage/core.restore_state'
-                    # Try reading from HA states file
-                    with open(helper_path) as f:
-                        states = json.load(f)
-                    for s in states.get('data', {}).get('states', []):
-                        entity_id = f"input_text.bay{bay_num}_code_slot_{letter}"
-                        if s.get('entity_id') == entity_id:
-                            return s.get('state', '')
+        with open(HA_TOKEN_FILE) as f:
+            return f.read().strip()
+    except Exception:
+        return None
+
+
+def get_slot_code(slot):
+    """
+    Return the 6-digit code stored for this slot.
+    Staff slots (1-10): returns 'staff-protected'.
+    Bay slots (11-25): tries HA REST API first (requires /config/ha_token.txt),
+                       falls back to core.restore_state if no token.
+    Strips any trailing ':Name' suffix from stored value.
+    """
+    # Staff slots — codes are permanent and not stored in input_text helpers
+    if 1 <= slot <= 10:
+        return 'staff-protected'
+
+    # Map slot number to input_text entity_id
+    entity_id = None
+    for bay_num, start in enumerate([11, 14, 17, 20, 23], 1):
+        for i, offset in enumerate(range(3)):
+            if start + offset == slot:
+                letter = ['a', 'b', 'c'][i]
+                entity_id = f"input_text.bay{bay_num}_code_slot_{letter}"
+                break
+        if entity_id:
+            break
+
+    if not entity_id:
+        return ''
+
+    # Try HA REST API for live state (most accurate)
+    token = get_ha_token()
+    if token:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                f"{HA_API}/states/{entity_id}",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            with urllib.request.urlopen(req, timeout=3) as r:
+                data = json.loads(r.read())
+                raw = data.get('state', '')
+                return raw.split(':')[0].strip() if raw else ''
+        except Exception:
+            pass
+
+    # Fallback: core.restore_state (stale — only updated on HA restart)
+    # Create /config/ha_token.txt with a long-lived HA token to use the live API
+    try:
+        with open('/config/.storage/core.restore_state') as f:
+            states = json.load(f)
+        for s in states.get('data', {}).get('states', []):
+            if s.get('entity_id') == entity_id:
+                raw = s.get('state', '')
+                return raw.split(':')[0].strip() if raw else ''
     except Exception:
         pass
+
     return ''
 
 
@@ -127,12 +184,31 @@ async def poll():
     # Compare with last seen state
     state = load_state()
     last_id = state.get('last_code_id')
+    last_logged_at = state.get('last_logged_at')
 
-    if current_code_id is not None and current_code_id != last_id:
+    # Determine if this is a new loggable entry:
+    # - Different slot → always new
+    # - Same slot → only log again if REPEAT_ENTRY_MIN_MINUTES has elapsed
+    is_new_entry = False
+    if current_code_id is not None:
+        if current_code_id != last_id:
+            is_new_entry = True
+        elif last_logged_at is not None:
+            try:
+                last_dt = datetime.fromisoformat(last_logged_at)
+                elapsed = (datetime.now() - last_dt).total_seconds() / 60
+                if elapsed >= REPEAT_ENTRY_MIN_MINUTES:
+                    is_new_entry = True
+                    print(f"Same slot {current_code_id} re-entry after {elapsed:.1f} min")
+            except Exception:
+                is_new_entry = True  # Unparseable timestamp — log to be safe
+
+    if is_new_entry:
         print(f"New entry detected: slot={current_code_id} name={current_name}")
         append_log_entry(current_code_id, current_name or 'Unknown')
         state['last_code_id'] = current_code_id
         state['last_name'] = current_name
+        state['last_logged_at'] = datetime.now().isoformat()
         save_state(state)
     else:
         print(f"No new entry. Last slot={last_id}")

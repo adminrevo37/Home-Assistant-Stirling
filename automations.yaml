@@ -1,627 +1,505 @@
-###############################################################################
-# BAY 1 — BOOKING START
-# Fires 7 min before booking (gives ~5 min real-world lead time after calendar poll lag).
-# Night mode (within 30 min of sunset or sun below horizon): also turns on
-# neighbour highbay 2.
-# Extracts customer name and door code from calendar event for notification.
-###############################################################################
-- id: 'bay1_booking_start'
+- id: bay1_booking_start
   alias: Bay 1 Booking - START
-  description: >
-    7 min before booking: turn on highbay 1 and common lights (~5 min real-world lead time).
-    Night mode: also turns on neighbour highbay 2.
-  triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_1_bowling_machine
-      offset: "-0:07:00"
-  conditions:
-    - condition: state
-      entity_id: input_boolean.bay1_blocked
-      state: 'off'
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: (\d+)') | first | default('') }}
-        customer_name: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
-        booking_title: "{{ trigger.calendar_event.summary | default('Booking') }}"
-    - action: input_boolean.turn_on
-      target:
-        entity_id: input_boolean.bay1_helper
-    - action: light.turn_on
-      target:
-        entity_id: light.highbay_1
-    - action: light.turn_on
-      target:
-        entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-    # Night mode: also turn on neighbour highbay 2
-    - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'below_horizon') or
-               (is_state('sun.sun', 'above_horizon') and
-                (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) < 1800) }}
-      then:
-        - action: light.turn_on
-          target:
-            entity_id: light.highbay_2
-    # Notification disabled - re-enable and set target device when ready
-    # - action: notify.notify
-    #   data:
-    #     title: "Bay 1 - Starting in 5 min"
-    #     message: >-
-    #       {{ customer_name }} | {{ booking_title }}.
-    #       {% if door_code != '' %}Door code: {{ door_code }}.{% endif %}
-  mode: single
+  description: '7 min before booking: turn on highbay 1 and common lights (~5 min
+    real-world lead time). Night mode: also turns on neighbour highbay 2.
 
-###############################################################################
-# BAY 1 — BOOKING END
-# Fires 5 min after booking ends.
-# Day mode: turns off highbay 1; common lights off only if all bays empty.
-# Night mode: neighbour-aware highbay turn-off; common lights managed by
-#             occupancy automation, not here.
-###############################################################################
-- id: 'bay1_booking_end'
-  alias: Bay 1 Booking - END
-  description: >
-    5 min after booking: turn off highbay 1 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
+    '
   triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_1_bowling_machine
-      offset: "0:05:00"
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_1_bowling_machine
+    offset: -0:07:00
+  conditions:
+  - condition: state
+    entity_id: input_boolean.bay1_blocked
+    state: 'off'
   actions:
-    # Back-to-back check: abort if another booking is already running on Bay 1
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: (\\d+)') | first | default('') }}"
+      customer_name: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('Customer:
+        (.+)') | first | default('Guest') | trim }}"
+      booking_title: '{{ trigger.calendar_event.summary | default(''Booking'') }}'
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.bay1_helper
+  - action: light.turn_on
+    target:
+      entity_id: light.highbay_1
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  - if:
     - condition: template
-      value_template: "{{ is_state('calendar.lane_1_bowling_machine', 'off') }}"
-    - action: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.bay1_helper
-    - if:
-        # DAY MODE: sun is up and more than 30 min to sunset
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'above_horizon') and
-               (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) > 1800 }}
-      then:
-        - action: light.turn_off
-          target:
-            entity_id: light.highbay_1
-        # Turn off common lights only if all 5 bays are now empty
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id:
-                  - light.inside_wall_lights
-                  - light.fluro_x_4
-                  - light.mezzanine_wall_lights
-      else:
-        # NIGHT MODE: neighbour-aware turn-off
-        # hb1 off when bay1 + bay2 both done (bay1 and bay2 are its coverage zone)
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_1
-        # hb2 off when bay1 + bay2 + bay3 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_2
-  mode: single
-
-###############################################################################
-# BAY 2 — BOOKING START
-###############################################################################
-- id: 'bay2_booking_start'
-  alias: Bay 2 Booking - START
-  description: >
-    7 min before booking: turn on highbay 2 and common lights (~5 min real-world lead time).
-    Night mode: also turns on neighbour highbays 1 and 3.
-  triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_2_bowling_machine
-      offset: "-0:07:00"
-  conditions:
-    - condition: state
-      entity_id: input_boolean.bay2_blocked
-      state: 'off'
-  actions:
-    - action: input_boolean.turn_on
-      target:
-        entity_id: input_boolean.bay2_helper
+      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
+        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
+        - as_timestamp(now())) < 1800) }}"
+    then:
     - action: light.turn_on
       target:
         entity_id: light.highbay_2
-    - action: light.turn_on
+  mode: single
+- id: bay1_booking_end
+  alias: Bay 1 Booking - END
+  description: '5 min after booking: turn off highbay 1 (neighbour-aware at night).
+    Common lights off only when all bays empty (day mode only).
+
+    '
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_1_bowling_machine
+    offset: 0:05:00
+  actions:
+  - condition: template
+    value_template: '{{ is_state(''calendar.lane_1_bowling_machine'', ''off'') }}'
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.bay1_helper
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
+        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    then:
+    - action: light.turn_off
       target:
-        entity_id:
+        entity_id: light.highbay_1
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id:
           - light.inside_wall_lights
           - light.fluro_x_4
           - light.mezzanine_wall_lights
-    # Night mode: also turn on neighbour highbays 1 and 3
+    else:
     - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'below_horizon') or
-               (is_state('sun.sun', 'above_horizon') and
-                (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) < 1800) }}
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') }}"
       then:
-        - action: light.turn_on
-          target:
-            entity_id:
-              - light.highbay_1
-              - light.highbay_3
-  mode: single
-
-###############################################################################
-# BAY 2 — BOOKING END
-###############################################################################
-- id: 'bay2_booking_end'
-  alias: Bay 2 Booking - END
-  description: >
-    5 min after booking: turn off highbay 2 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_2_bowling_machine
-      offset: "0:05:00"
-  actions:
-    - condition: template
-      value_template: "{{ is_state('calendar.lane_2_bowling_machine', 'off') }}"
-    - action: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.bay2_helper
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_1
     - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'above_horizon') and
-               (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) > 1800 }}
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') }}"
       then:
-        - action: light.turn_off
-          target:
-            entity_id: light.highbay_2
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id:
-                  - light.inside_wall_lights
-                  - light.fluro_x_4
-                  - light.mezzanine_wall_lights
-      else:
-        # NIGHT MODE: neighbour-aware turn-off
-        # hb1 off when bay1 + bay2 both done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_1
-        # hb2 off when bay1 + bay2 + bay3 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_2
-        # hb3 off when bay2 + bay3 + bay4 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_3
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_2
   mode: single
+- id: bay2_booking_start
+  alias: Bay 2 Booking - START
+  description: '7 min before booking: turn on highbay 2 and common lights (~5 min
+    real-world lead time). Night mode: also turns on neighbour highbays 1 and 3.
 
-###############################################################################
-# BAY 3 — BOOKING START
-###############################################################################
-- id: 'bay3_booking_start'
-  alias: Bay 3 Booking - START
-  description: >
-    7 min before booking: turn on highbay 3 and common lights (~5 min real-world lead time).
-    Night mode: also turns on neighbour highbays 2 and 4.
+    '
   triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_3_truman_or_bowling_machine
-      offset: "-0:07:00"
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_2_bowling_machine
+    offset: -0:07:00
   conditions:
-    - condition: state
-      entity_id: input_boolean.bay3_blocked
-      state: 'off'
+  - condition: state
+    entity_id: input_boolean.bay2_blocked
+    state: 'off'
   actions:
-    - action: input_boolean.turn_on
-      target:
-        entity_id: input_boolean.bay3_helper
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.bay2_helper
+  - action: light.turn_on
+    target:
+      entity_id: light.highbay_2
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
+        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
+        - as_timestamp(now())) < 1800) }}"
+    then:
     - action: light.turn_on
+      target:
+        entity_id:
+        - light.highbay_1
+        - light.highbay_3
+  mode: single
+- id: bay2_booking_end
+  alias: Bay 2 Booking - END
+  description: '5 min after booking: turn off highbay 2 (neighbour-aware at night).
+    Common lights off only when all bays empty (day mode only).
+
+    '
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_2_bowling_machine
+    offset: 0:05:00
+  actions:
+  - condition: template
+    value_template: '{{ is_state(''calendar.lane_2_bowling_machine'', ''off'') }}'
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.bay2_helper
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
+        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    then:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_2
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+    else:
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_1
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_2
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay2_helper', 'off') and\n   is_state('input_boolean.bay3_helper',
+          'off') and\n   is_state('input_boolean.bay4_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_3
+  mode: single
+- id: bay3_booking_start
+  alias: Bay 3 Booking - START
+  description: '7 min before booking: turn on highbay 3 and common lights (~5 min
+    real-world lead time). Night mode: also turns on neighbour highbays 2 and 4.
+
+    '
+  triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    offset: -0:07:00
+  conditions:
+  - condition: state
+    entity_id: input_boolean.bay3_blocked
+    state: 'off'
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.bay3_helper
+  - action: light.turn_on
+    target:
+      entity_id: light.highbay_3
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
+        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
+        - as_timestamp(now())) < 1800) }}"
+    then:
+    - action: light.turn_on
+      target:
+        entity_id:
+        - light.highbay_2
+        - light.highbay_4
+  mode: single
+- id: bay3_booking_end
+  alias: Bay 3 Booking - END
+  description: '5 min after booking: turn off highbay 3 (neighbour-aware at night).
+    Common lights off only when all bays empty (day mode only).
+
+    '
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    offset: 0:05:00
+  actions:
+  - condition: template
+    value_template: '{{ is_state(''calendar.lane_3_truman_or_bowling_machine'', ''off'')
+      }}'
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.bay3_helper
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
+        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    then:
+    - action: light.turn_off
       target:
         entity_id: light.highbay_3
-    - action: light.turn_on
-      target:
-        entity_id:
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id:
           - light.inside_wall_lights
           - light.fluro_x_4
           - light.mezzanine_wall_lights
-    # Night mode: also turn on neighbour highbays 2 and 4
+    else:
     - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'below_horizon') or
-               (is_state('sun.sun', 'above_horizon') and
-                (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) < 1800) }}
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') }}"
       then:
-        - action: light.turn_on
-          target:
-            entity_id:
-              - light.highbay_2
-              - light.highbay_4
-  mode: single
-
-###############################################################################
-# BAY 3 — BOOKING END
-###############################################################################
-- id: 'bay3_booking_end'
-  alias: Bay 3 Booking - END
-  description: >
-    5 min after booking: turn off highbay 3 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_3_truman_or_bowling_machine
-      offset: "0:05:00"
-  actions:
-    - condition: template
-      value_template: "{{ is_state('calendar.lane_3_truman_or_bowling_machine', 'off') }}"
-    - action: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.bay3_helper
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_2
     - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'above_horizon') and
-               (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) > 1800 }}
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay2_helper', 'off') and\n   is_state('input_boolean.bay3_helper',
+          'off') and\n   is_state('input_boolean.bay4_helper', 'off') }}"
       then:
-        - action: light.turn_off
-          target:
-            entity_id: light.highbay_3
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id:
-                  - light.inside_wall_lights
-                  - light.fluro_x_4
-                  - light.mezzanine_wall_lights
-      else:
-        # NIGHT MODE: neighbour-aware turn-off
-        # hb2 off when bay1 + bay2 + bay3 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_2
-        # hb3 off when bay2 + bay3 + bay4 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_3
-        # hb4 off when bay3 + bay4 + bay5 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_4
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_3
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_4
   mode: single
-
-###############################################################################
-# BAY 4 — BOOKING START
-###############################################################################
-- id: 'bay4_booking_start'
+- id: bay4_booking_start
   alias: Bay 4 Booking - START
-  description: >
-    7 min before booking: turn on highbay 4 and common lights (~5 min real-world lead time).
-    Night mode: also turns on neighbour highbays 3 and 5.
+  description: '7 min before booking: turn on highbay 4 and common lights (~5 min
+    real-world lead time). Night mode: also turns on neighbour highbays 3 and 5.
+
+    '
   triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_4_run_up_net
-      offset: "-0:07:00"
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_4_run_up_net
+    offset: -0:07:00
   conditions:
-    - condition: state
-      entity_id: input_boolean.bay4_blocked
-      state: 'off'
+  - condition: state
+    entity_id: input_boolean.bay4_blocked
+    state: 'off'
   actions:
-    - action: input_boolean.turn_on
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.bay4_helper
+  - action: light.turn_on
+    target:
+      entity_id: light.highbay_4
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
+        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
+        - as_timestamp(now())) < 1800) }}"
+    then:
+    - action: light.turn_on
       target:
-        entity_id: input_boolean.bay4_helper
+        entity_id:
+        - light.highbay_3
+        - light.highbay_5
+  mode: single
+- id: bay4_booking_end
+  alias: Bay 4 Booking - END
+  description: '5 min after booking: turn off highbay 4 (neighbour-aware at night).
+    Common lights off only when all bays empty (day mode only).
+
+    '
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_4_run_up_net
+    offset: 0:05:00
+  actions:
+  - condition: template
+    value_template: '{{ is_state(''calendar.lane_4_run_up_net'', ''off'') }}'
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.bay4_helper
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
+        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    then:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_4
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id:
+          - light.inside_wall_lights
+          - light.fluro_x_4
+          - light.mezzanine_wall_lights
+    else:
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay2_helper', 'off') and\n   is_state('input_boolean.bay3_helper',
+          'off') and\n   is_state('input_boolean.bay4_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_3
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_4
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay4_helper', 'off') and\n   is_state('input_boolean.bay5_helper',
+          'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_5
+  mode: single
+- id: bay5_booking_start
+  alias: Bay 5 Booking - START
+  description: '7 min before booking: turn on highbay 5 and common lights (~5 min
+    real-world lead time). Night mode: also turns on neighbour highbay 4.
+
+    '
+  triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_5_run_up_net
+    offset: -0:07:00
+  conditions:
+  - condition: state
+    entity_id: input_boolean.bay5_blocked
+    state: 'off'
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.bay5_helper
+  - action: light.turn_on
+    target:
+      entity_id: light.highbay_5
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
+        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
+        - as_timestamp(now())) < 1800) }}"
+    then:
     - action: light.turn_on
       target:
         entity_id: light.highbay_4
-    - action: light.turn_on
-      target:
-        entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-    # Night mode: also turn on neighbour highbays 3 and 5
-    - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'below_horizon') or
-               (is_state('sun.sun', 'above_horizon') and
-                (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) < 1800) }}
-      then:
-        - action: light.turn_on
-          target:
-            entity_id:
-              - light.highbay_3
-              - light.highbay_5
   mode: single
-
-###############################################################################
-# BAY 4 — BOOKING END
-###############################################################################
-- id: 'bay4_booking_end'
-  alias: Bay 4 Booking - END
-  description: >
-    5 min after booking: turn off highbay 4 (neighbour-aware at night).
+- id: bay5_booking_end
+  alias: Bay 5 Booking - END
+  description: '5 min after booking: turn off highbay 5 (neighbour-aware at night).
     Common lights off only when all bays empty (day mode only).
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_4_run_up_net
-      offset: "0:05:00"
-  actions:
-    - condition: template
-      value_template: "{{ is_state('calendar.lane_4_run_up_net', 'off') }}"
-    - action: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.bay4_helper
-    - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'above_horizon') and
-               (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) > 1800 }}
-      then:
-        - action: light.turn_off
-          target:
-            entity_id: light.highbay_4
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id:
-                  - light.inside_wall_lights
-                  - light.fluro_x_4
-                  - light.mezzanine_wall_lights
-      else:
-        # NIGHT MODE: neighbour-aware turn-off
-        # hb3 off when bay2 + bay3 + bay4 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_3
-        # hb4 off when bay3 + bay4 + bay5 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_4
-        # hb5 off when bay4 + bay5 both done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_5
-  mode: single
 
-###############################################################################
-# BAY 5 — BOOKING START
-###############################################################################
-- id: 'bay5_booking_start'
-  alias: Bay 5 Booking - START
-  description: >
-    7 min before booking: turn on highbay 5 and common lights (~5 min real-world lead time).
-    Night mode: also turns on neighbour highbay 4.
+    '
   triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_5_run_up_net
-      offset: "-0:07:00"
-  conditions:
-    - condition: state
-      entity_id: input_boolean.bay5_blocked
-      state: 'off'
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_5_run_up_net
+    offset: 0:05:00
   actions:
-    - action: input_boolean.turn_on
-      target:
-        entity_id: input_boolean.bay5_helper
-    - action: light.turn_on
+  - condition: template
+    value_template: '{{ is_state(''calendar.lane_5_run_up_net'', ''off'') }}'
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.bay5_helper
+  - if:
+    - condition: template
+      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
+        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    then:
+    - action: light.turn_off
       target:
         entity_id: light.highbay_5
-    - action: light.turn_on
-      target:
-        entity_id:
+    - if:
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      then:
+      - action: light.turn_off
+        target:
+          entity_id:
           - light.inside_wall_lights
           - light.fluro_x_4
           - light.mezzanine_wall_lights
-    # Night mode: also turn on neighbour highbay 4
+    else:
     - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'below_horizon') or
-               (is_state('sun.sun', 'above_horizon') and
-                (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) < 1800) }}
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
       then:
-        - action: light.turn_on
-          target:
-            entity_id: light.highbay_4
-  mode: single
-
-###############################################################################
-# BAY 5 — BOOKING END
-###############################################################################
-- id: 'bay5_booking_end'
-  alias: Bay 5 Booking - END
-  description: >
-    5 min after booking: turn off highbay 5 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_5_run_up_net
-      offset: "0:05:00"
-  actions:
-    - condition: template
-      value_template: "{{ is_state('calendar.lane_5_run_up_net', 'off') }}"
-    - action: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.bay5_helper
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_4
     - if:
-        - condition: template
-          value_template: >-
-            {{ is_state('sun.sun', 'above_horizon') and
-               (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) > 1800 }}
+      - condition: template
+        value_template: "{{ is_state('input_boolean.bay4_helper', 'off') and\n   is_state('input_boolean.bay5_helper',
+          'off') }}"
       then:
-        - action: light.turn_off
-          target:
-            entity_id: light.highbay_5
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay1_helper', 'off') and
-                   is_state('input_boolean.bay2_helper', 'off') and
-                   is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id:
-                  - light.inside_wall_lights
-                  - light.fluro_x_4
-                  - light.mezzanine_wall_lights
-      else:
-        # NIGHT MODE: neighbour-aware turn-off
-        # hb4 off when bay3 + bay4 + bay5 all done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay3_helper', 'off') and
-                   is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_4
-        # hb5 off when bay4 + bay5 both done
-        - if:
-            - condition: template
-              value_template: >-
-                {{ is_state('input_boolean.bay4_helper', 'off') and
-                   is_state('input_boolean.bay5_helper', 'off') }}
-          then:
-            - action: light.turn_off
-              target:
-                entity_id: light.highbay_5
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_5
   mode: single
-
-###############################################################################
-# BAY 1 — WEBHOOK ACCESS (manual trigger, e.g. from booking platform)
-###############################################################################
 - id: '1773291498207'
   alias: Booking BAY1 Access - Webhook
   description: Open Door Turn on Lights
@@ -647,10 +525,6 @@
       entity_id: input_boolean.bay1_helper
     data: {}
   mode: single
-
-###############################################################################
-# SAFETY — Lights left on when nobody is there
-###############################################################################
 - id: '1779256315851'
   alias: Lights ON Nobody There
   description: ''
@@ -689,1116 +563,993 @@
     metadata: {}
     data: {}
   mode: single
-
-###############################################################################
-# GIT SYNC — Nightly push to GitHub at 2am
-###############################################################################
-- id: 'auto_git_push'
+- id: auto_git_push
   alias: Auto Push Config to GitHub
   description: Nightly 2am push of HA config changes to GitHub
   triggers:
-    - trigger: time
-      at: "02:00:00"
+  - trigger: time
+    at: 02:00:00
   actions:
-    - action: shell_command.git_push
-      response_variable: push_result
-    - if:
-        - condition: template
-          value_template: "{{ push_result.returncode != 0 }}"
-      then:
-        - action: persistent_notification.create
-          data:
-            title: "GitHub Push Failed"
-            message: >
-              Auto-push to GitHub failed at 2am.
-              Your PAT token may have expired.
-              Error: {{ push_result.stderr }}
-  mode: single
+  - action: shell_command.git_push
+    response_variable: push_result
+  - if:
+    - condition: template
+      value_template: '{{ push_result.returncode != 0 }}'
+    then:
+    - action: persistent_notification.create
+      data:
+        title: GitHub Push Failed
+        message: 'Auto-push to GitHub failed at 2am. Your PAT token may have expired.
+          Error: {{ push_result.stderr }}
 
-###############################################################################
-# GIT SYNC — Pull from GitHub when repo is updated
-###############################################################################
-- id: 'github_deploy_webhook'
+          '
+  mode: single
+- id: github_deploy_webhook
   alias: Deploy from GitHub
   description: Pulls latest config from GitHub when a push is made to the repo
   triggers:
-    - trigger: webhook
-      webhook_id: "7k2p9x4m3n8q1r5f"
-      local_only: false
+  - trigger: webhook
+    webhook_id: 7k2p9x4m3n8q1r5f
+    local_only: false
   actions:
-    - action: shell_command.git_pull
-    - delay: "00:00:05"
-    - action: homeassistant.reload_all
+  - action: shell_command.git_pull
+  - delay: 00:00:05
+  - action: homeassistant.reload_all
   mode: single
-
-###############################################################################
-# SUNSET TRANSITION — Activate neighbour highbays 30 min before sunset
-# Fires once per day at sunset-30min. For any bay that is currently booked,
-# turns on its neighbouring highbays so neighbour coverage starts before dark.
-###############################################################################
-- id: 'sunset_neighbour_activate'
+- id: sunset_neighbour_activate
   alias: Sunset - Activate Neighbour Highbays
-  description: >
-    30 min before sunset: for any active booking, turn on neighbour highbays.
+  description: '30 min before sunset: for any active booking, turn on neighbour highbays.
     Bay 1: +hb2 | Bay 2: +hb1,hb3 | Bay 3: +hb2,hb4 | Bay 4: +hb3,hb5 | Bay 5: +hb4
-  triggers:
-    - trigger: sun
-      event: sunset
-      offset: "-0:30:00"
-  actions:
-    # Bay 1 active: add highbay 2 as neighbour (hb1 already on)
-    - if:
-        - condition: state
-          entity_id: input_boolean.bay1_helper
-          state: 'on'
-      then:
-        - action: light.turn_on
-          target:
-            entity_id: light.highbay_2
-    # Bay 2 active: add highbays 1 and 3 (hb2 already on)
-    - if:
-        - condition: state
-          entity_id: input_boolean.bay2_helper
-          state: 'on'
-      then:
-        - action: light.turn_on
-          target:
-            entity_id:
-              - light.highbay_1
-              - light.highbay_3
-    # Bay 3 active: add highbays 2 and 4 (hb3 already on)
-    - if:
-        - condition: state
-          entity_id: input_boolean.bay3_helper
-          state: 'on'
-      then:
-        - action: light.turn_on
-          target:
-            entity_id:
-              - light.highbay_2
-              - light.highbay_4
-    # Bay 4 active: add highbays 3 and 5 (hb4 already on)
-    - if:
-        - condition: state
-          entity_id: input_boolean.bay4_helper
-          state: 'on'
-      then:
-        - action: light.turn_on
-          target:
-            entity_id:
-              - light.highbay_3
-              - light.highbay_5
-    # Bay 5 active: add highbay 4 (hb5 already on)
-    - if:
-        - condition: state
-          entity_id: input_boolean.bay5_helper
-          state: 'on'
-      then:
-        - action: light.turn_on
-          target:
-            entity_id: light.highbay_4
-  mode: single
 
-###############################################################################
-# NIGHT — Staggered shutdown when all bays close after dark
-# When the last bay helper goes off after sunset: turn all highbays off, then
-# leave highbay 3 on as a residual safety light until the building clears.
-###############################################################################
-- id: 'night_staggered_shutdown'
-  alias: Night - Staggered Shutdown
-  description: >
-    When all 5 bay helpers go off after dark: cut all highbays, then bring
-    highbay 3 back on as residual safety light.
+    '
   triggers:
-    - trigger: state
-      entity_id:
-        - input_boolean.bay1_helper
-        - input_boolean.bay2_helper
-        - input_boolean.bay3_helper
-        - input_boolean.bay4_helper
-        - input_boolean.bay5_helper
-      to: 'off'
-  conditions:
-    - condition: state
-      entity_id: sun.sun
-      state: below_horizon
-    - condition: template
-      value_template: >-
-        {{ is_state('input_boolean.bay1_helper', 'off') and
-           is_state('input_boolean.bay2_helper', 'off') and
-           is_state('input_boolean.bay3_helper', 'off') and
-           is_state('input_boolean.bay4_helper', 'off') and
-           is_state('input_boolean.bay5_helper', 'off') }}
+  - trigger: sun
+    event: sunset
+    offset: -0:30:00
   actions:
-    # Cut all highbays
-    - action: light.turn_off
-      target:
-        entity_id:
-          - light.highbay_1
-          - light.highbay_2
-          - light.highbay_3
-          - light.highbay_4
-          - light.highbay_5
-    # Residual: highbay 3 stays on as safety light while anyone remains
-    - action: light.turn_on
-      target:
-        entity_id: light.highbay_3
-  mode: single
-
-###############################################################################
-# NIGHT — Turn off highbay 3 residual when building clears
-# Fires when occupancy drops below 35% after dark with all bays empty.
-# No delay - turns off immediately at threshold.
-###############################################################################
-- id: 'night_highbay3_off'
-  alias: Night - Highbay 3 Residual Off
-  description: >
-    After dark, all bookings done: turn off residual highbay 3 when
-    occupancy drops below 35%.
-  triggers:
-    - trigger: numeric_state
-      entity_id: sensor.main_occupancy_probability
-      below: 40
-  conditions:
+  - if:
     - condition: state
-      entity_id: sun.sun
-      state: below_horizon
-    - condition: template
-      value_template: >-
-        {{ is_state('input_boolean.bay1_helper', 'off') and
-           is_state('input_boolean.bay2_helper', 'off') and
-           is_state('input_boolean.bay3_helper', 'off') and
-           is_state('input_boolean.bay4_helper', 'off') and
-           is_state('input_boolean.bay5_helper', 'off') }}
-    - condition: state
-      entity_id: light.highbay_3
+      entity_id: input_boolean.bay1_helper
       state: 'on'
-  actions:
-    - action: light.turn_off
+    then:
+    - action: light.turn_on
       target:
-        entity_id: light.highbay_3
-  mode: single
-
-###############################################################################
-# NIGHT — Common lights off when building is empty
-# Fires when occupancy is below 11% for 1 full minute after dark, all bays done.
-###############################################################################
-- id: 'night_common_lights_occupancy_off'
-  alias: Night - Common Lights Occupancy Off
-  description: >
-    After dark, all bookings done: turn off common lights when occupancy
-    stays below 11% for 1 minute.
-  triggers:
-    - trigger: numeric_state
-      entity_id: sensor.main_occupancy_probability
-      below: 40
-      for:
-        minutes: 1
-  conditions:
+        entity_id: light.highbay_2
+  - if:
     - condition: state
-      entity_id: sun.sun
-      state: below_horizon
-    - condition: template
-      value_template: >-
-        {{ is_state('input_boolean.bay1_helper', 'off') and
-           is_state('input_boolean.bay2_helper', 'off') and
-           is_state('input_boolean.bay3_helper', 'off') and
-           is_state('input_boolean.bay4_helper', 'off') and
-           is_state('input_boolean.bay5_helper', 'off') }}
-  actions:
-    - action: light.turn_off
-      target:
-        entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-  mode: single
-
-###############################################################################
-# NIGHT — Common lights on when entry motion detected
-# Fires when the Pier Facing Entry CCTV detects motion after dark.
-# Covers the scenario where a customer arrives before their bay light
-# turns on (bay light fires 7 min before booking, CCTV fires on arrival).
-# Entity: binary_sensor.pier_facing_entry_motion (Frigate)
-###############################################################################
-- id: 'night_common_lights_motion_on'
-  alias: Night - Common Lights On (Entry Motion)
-  description: >
-    After dark: turn on common lights when Pier Facing Entry CCTV detects
-    motion (roller door opening etc).
-  triggers:
-    - trigger: state
-      entity_id: binary_sensor.pier_facing_entry_cctv_motion
-      to: 'on'
-  conditions:
-    - condition: template
-      value_template: >-
-        {{ is_state('sun.sun', 'below_horizon') or
-           (is_state('sun.sun', 'above_horizon') and
-            (as_timestamp(state_attr('sun.sun', 'next_setting')) - as_timestamp(now())) < 1800) }}
-  actions:
+      entity_id: input_boolean.bay2_helper
+      state: 'on'
+    then:
     - action: light.turn_on
       target:
         entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-  mode: single
-
-###############################################################################
-# FALLBACK — Hard cutoff: all highbays + common lights off at 10:30pm
-# Safety net for lights left on after hours.
-###############################################################################
-- id: 'fallback_1030pm'
-  alias: Fallback - All Lights Off at 10:30pm
-  description: >
-    Hard fallback: force off all highbays and common lights at 10:30pm
-    regardless of booking state.
-  triggers:
-    - trigger: time
-      at: "22:30:00"
-  actions:
-    - action: light.turn_off
+        - light.highbay_1
+        - light.highbay_3
+  - if:
+    - condition: state
+      entity_id: input_boolean.bay3_helper
+      state: 'on'
+    then:
+    - action: light.turn_on
       target:
         entity_id:
-          - light.highbay_1
-          - light.highbay_2
-          - light.highbay_3
-          - light.highbay_4
-          - light.highbay_5
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
+        - light.highbay_2
+        - light.highbay_4
+  - if:
+    - condition: state
+      entity_id: input_boolean.bay4_helper
+      state: 'on'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id:
+        - light.highbay_3
+        - light.highbay_5
+  - if:
+    - condition: state
+      entity_id: input_boolean.bay5_helper
+      state: 'on'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_4
   mode: single
+- id: night_staggered_shutdown
+  alias: Night - Staggered Shutdown
+  description: 'When all 5 bay helpers go off after dark: cut all highbays, then bring
+    highbay 3 back on as residual safety light.
 
-###############################################################################
-# DOOR CODES — BAY 1 ACTIVATE (fires 15 min before booking start)
-# Finds first free slot (11/12/13), programs code on DS3, stores in helper.
-###############################################################################
-- id: 'bay1_code_activate'
+    '
+  triggers:
+  - trigger: state
+    entity_id:
+    - input_boolean.bay1_helper
+    - input_boolean.bay2_helper
+    - input_boolean.bay3_helper
+    - input_boolean.bay4_helper
+    - input_boolean.bay5_helper
+    to: 'off'
+  conditions:
+  - condition: state
+    entity_id: sun.sun
+    state: below_horizon
+  - condition: template
+    value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+      'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+      'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.highbay_1
+      - light.highbay_2
+      - light.highbay_3
+      - light.highbay_4
+      - light.highbay_5
+  - action: light.turn_on
+    target:
+      entity_id: light.highbay_3
+  mode: single
+- id: night_highbay3_off
+  alias: Night - Highbay 3 Residual Off
+  description: 'After dark, all bookings done: turn off residual highbay 3 when occupancy
+    drops below 35%.
+
+    '
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.main_occupancy_probability
+    below: 40
+  conditions:
+  - condition: state
+    entity_id: sun.sun
+    state: below_horizon
+  - condition: template
+    value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+      'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+      'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+  - condition: state
+    entity_id: light.highbay_3
+    state: 'on'
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id: light.highbay_3
+  mode: single
+- id: night_common_lights_occupancy_off
+  alias: Night - Common Lights Occupancy Off
+  description: 'After dark, all bookings done: turn off common lights when occupancy
+    stays below 11% for 1 minute.
+
+    '
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.main_occupancy_probability
+    below: 40
+    for:
+      minutes: 1
+  conditions:
+  - condition: state
+    entity_id: sun.sun
+    state: below_horizon
+  - condition: template
+    value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
+      'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
+      'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: night_common_lights_motion_on
+  alias: Night - Common Lights On (Entry Motion)
+  description: 'After dark: turn on common lights when Pier Facing Entry CCTV detects
+    motion (roller door opening etc).
+
+    '
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.pier_facing_entry_cctv_motion
+    to: 'on'
+  conditions:
+  - condition: template
+    value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
+      'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
+      - as_timestamp(now())) < 1800) }}"
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: fallback_1030pm
+  alias: Fallback - All Lights Off at 10:30pm
+  description: 'Hard fallback: force off all highbays and common lights at 10:30pm
+    regardless of booking state.
+
+    '
+  triggers:
+  - trigger: time
+    at: '22:30:00'
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.highbay_1
+      - light.highbay_2
+      - light.highbay_3
+      - light.highbay_4
+      - light.highbay_5
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: bay1_code_activate
   alias: Bay 1 - Door Code Activate
   triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_1_bowling_machine
-      offset: "-0:15:00"
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_1_bowling_machine
+    offset: -0:15:00
   actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-        customer_name: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+      customer_name: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('Customer:
+        (.+)') | first | default('Guest') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_use: '{% if states(''input_text.bay1_code_slot_a'') == '''' %}11 {%
+        elif states(''input_text.bay1_code_slot_b'') == '''' %}12 {% elif states(''input_text.bay1_code_slot_c'')
+        == '''' %}13 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_use | int > 0 }}'
+  - action: shell_command.c4_set_code
+    data:
+      slot: '{{ slot_to_use }}'
+      code: '{{ door_code }}'
+      name: '{{ customer_name }}'
+  - if:
     - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_use: >-
-          {% if states('input_text.bay1_code_slot_a') == '' %}11
-          {% elif states('input_text.bay1_code_slot_b') == '' %}12
-          {% elif states('input_text.bay1_code_slot_c') == '' %}13
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_use | int > 0 }}"
-    - action: shell_command.c4_set_code
-      data:
-        slot: "{{ slot_to_use }}"
-        code: "{{ door_code }}"
-        name: "{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 11 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay1_code_slot_a
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 12 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay1_code_slot_b
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 13 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay1_code_slot_c
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-  mode: single
-
-###############################################################################
-# DOOR CODES — BAY 1 DEACTIVATE (fires 15 min after booking end)
-###############################################################################
-- id: 'bay1_code_deactivate'
-  alias: Bay 1 - Door Code Deactivate
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_1_bowling_machine
-      offset: "0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_clear: >-
-          {% if states('input_text.bay1_code_slot_a').split(':')[0] == door_code %}11
-          {% elif states('input_text.bay1_code_slot_b').split(':')[0] == door_code %}12
-          {% elif states('input_text.bay1_code_slot_c').split(':')[0] == door_code %}13
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_clear | int > 0 }}"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "{{ slot_to_clear }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 11 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay1_code_slot_a
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 12 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay1_code_slot_b
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 13 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay1_code_slot_c
-          data:
-            value: ""
-  mode: single
-
-###############################################################################
-# DOOR CODES — BAY 2 ACTIVATE / DEACTIVATE (slots 14/15/16)
-###############################################################################
-- id: 'bay2_code_activate'
-  alias: Bay 2 - Door Code Activate
-  triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_2_bowling_machine
-      offset: "-0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-        customer_name: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_use: >-
-          {% if states('input_text.bay2_code_slot_a') == '' %}14
-          {% elif states('input_text.bay2_code_slot_b') == '' %}15
-          {% elif states('input_text.bay2_code_slot_c') == '' %}16
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_use | int > 0 }}"
-    - action: shell_command.c4_set_code
-      data:
-        slot: "{{ slot_to_use }}"
-        code: "{{ door_code }}"
-        name: "{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 14 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay2_code_slot_a
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 15 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay2_code_slot_b
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 16 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay2_code_slot_c
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-  mode: single
-
-- id: 'bay2_code_deactivate'
-  alias: Bay 2 - Door Code Deactivate
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_2_bowling_machine
-      offset: "0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_clear: >-
-          {% if states('input_text.bay2_code_slot_a').split(':')[0] == door_code %}14
-          {% elif states('input_text.bay2_code_slot_b').split(':')[0] == door_code %}15
-          {% elif states('input_text.bay2_code_slot_c').split(':')[0] == door_code %}16
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_clear | int > 0 }}"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "{{ slot_to_clear }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 14 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay2_code_slot_a
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 15 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay2_code_slot_b
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 16 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay2_code_slot_c
-          data:
-            value: ""
-  mode: single
-
-###############################################################################
-# DOOR CODES — BAY 3 ACTIVATE / DEACTIVATE (slots 17/18/19)
-###############################################################################
-- id: 'bay3_code_activate'
-  alias: Bay 3 - Door Code Activate
-  triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_3_truman_or_bowling_machine
-      offset: "-0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-        customer_name: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_use: >-
-          {% if states('input_text.bay3_code_slot_a') == '' %}17
-          {% elif states('input_text.bay3_code_slot_b') == '' %}18
-          {% elif states('input_text.bay3_code_slot_c') == '' %}19
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_use | int > 0 }}"
-    - action: shell_command.c4_set_code
-      data:
-        slot: "{{ slot_to_use }}"
-        code: "{{ door_code }}"
-        name: "{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 17 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay3_code_slot_a
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 18 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay3_code_slot_b
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 19 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay3_code_slot_c
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-  mode: single
-
-- id: 'bay3_code_deactivate'
-  alias: Bay 3 - Door Code Deactivate
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_3_truman_or_bowling_machine
-      offset: "0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_clear: >-
-          {% if states('input_text.bay3_code_slot_a').split(':')[0] == door_code %}17
-          {% elif states('input_text.bay3_code_slot_b').split(':')[0] == door_code %}18
-          {% elif states('input_text.bay3_code_slot_c').split(':')[0] == door_code %}19
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_clear | int > 0 }}"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "{{ slot_to_clear }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 17 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay3_code_slot_a
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 18 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay3_code_slot_b
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 19 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay3_code_slot_c
-          data:
-            value: ""
-  mode: single
-
-###############################################################################
-# DOOR CODES — BAY 4 ACTIVATE / DEACTIVATE (slots 20/21/22)
-###############################################################################
-- id: 'bay4_code_activate'
-  alias: Bay 4 - Door Code Activate
-  triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_4_run_up_net
-      offset: "-0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-        customer_name: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_use: >-
-          {% if states('input_text.bay4_code_slot_a') == '' %}20
-          {% elif states('input_text.bay4_code_slot_b') == '' %}21
-          {% elif states('input_text.bay4_code_slot_c') == '' %}22
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_use | int > 0 }}"
-    - action: shell_command.c4_set_code
-      data:
-        slot: "{{ slot_to_use }}"
-        code: "{{ door_code }}"
-        name: "{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 20 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay4_code_slot_a
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 21 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay4_code_slot_b
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 22 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay4_code_slot_c
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-  mode: single
-
-- id: 'bay4_code_deactivate'
-  alias: Bay 4 - Door Code Deactivate
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_4_run_up_net
-      offset: "0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_clear: >-
-          {% if states('input_text.bay4_code_slot_a').split(':')[0] == door_code %}20
-          {% elif states('input_text.bay4_code_slot_b').split(':')[0] == door_code %}21
-          {% elif states('input_text.bay4_code_slot_c').split(':')[0] == door_code %}22
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_clear | int > 0 }}"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "{{ slot_to_clear }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 20 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay4_code_slot_a
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 21 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay4_code_slot_b
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 22 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay4_code_slot_c
-          data:
-            value: ""
-  mode: single
-
-###############################################################################
-# DOOR CODES — BAY 5 ACTIVATE / DEACTIVATE (slots 23/24/25)
-###############################################################################
-- id: 'bay5_code_activate'
-  alias: Bay 5 - Door Code Activate
-  triggers:
-    - trigger: calendar
-      event: start
-      entity_id: calendar.lane_5_run_up_net
-      offset: "-0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-        customer_name: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('Customer: (.+)') | first | default('Guest') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_use: >-
-          {% if states('input_text.bay5_code_slot_a') == '' %}23
-          {% elif states('input_text.bay5_code_slot_b') == '' %}24
-          {% elif states('input_text.bay5_code_slot_c') == '' %}25
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_use | int > 0 }}"
-    - action: shell_command.c4_set_code
-      data:
-        slot: "{{ slot_to_use }}"
-        code: "{{ door_code }}"
-        name: "{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 23 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay5_code_slot_a
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 24 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay5_code_slot_b
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_use | int == 25 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay5_code_slot_c
-          data:
-            value: "{{ door_code }}:{{ customer_name }}"
-  mode: single
-
-- id: 'bay5_code_deactivate'
-  alias: Bay 5 - Door Code Deactivate
-  triggers:
-    - trigger: calendar
-      event: end
-      entity_id: calendar.lane_5_run_up_net
-      offset: "0:15:00"
-  actions:
-    - variables:
-        door_code: >-
-          {{ (trigger.calendar_event.description or '')
-             | regex_findall('DOOR CODE: ([\d ]+)') | first | default('')
-             | replace(' ', '') | trim }}
-    - condition: template
-      value_template: "{{ door_code != '' }}"
-    - variables:
-        slot_to_clear: >-
-          {% if states('input_text.bay5_code_slot_a').split(':')[0] == door_code %}23
-          {% elif states('input_text.bay5_code_slot_b').split(':')[0] == door_code %}24
-          {% elif states('input_text.bay5_code_slot_c').split(':')[0] == door_code %}25
-          {% else %}0{% endif %}
-    - condition: template
-      value_template: "{{ slot_to_clear | int > 0 }}"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "{{ slot_to_clear }}"
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 23 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay5_code_slot_a
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 24 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay5_code_slot_b
-          data:
-            value: ""
-    - if:
-        - condition: template
-          value_template: "{{ slot_to_clear | int == 25 }}"
-      then:
-        - action: input_text.set_value
-          target:
-            entity_id: input_text.bay5_code_slot_c
-          data:
-            value: ""
-  mode: single
-
-###############################################################################
-# DOOR CODES — 10:30PM SAFETY WIPE
-# Clears all booking code slots 11-25 and resets all helper text.
-# Runs at same time as lights fallback. Assumes no legitimate booking runs
-# past 10:30pm. Staff codes (slots 1-10) are never touched.
-###############################################################################
-- id: 'fallback_1030pm_clear_codes'
-  alias: Fallback - Clear All Booking Codes at 10:30pm
-  triggers:
-    - trigger: time
-      at: "22:30:00"
-  actions:
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "11"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "12"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "13"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "14"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "15"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "16"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "17"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "18"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "19"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "20"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "21"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "22"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "23"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "24"
-    - action: shell_command.c4_clear_code
-      data:
-        slot: "25"
-    # Reset all slot trackers
+      value_template: '{{ slot_to_use | int == 11 }}'
+    then:
     - action: input_text.set_value
       target:
-        entity_id:
-          - input_text.bay1_code_slot_a
-          - input_text.bay1_code_slot_b
-          - input_text.bay1_code_slot_c
-          - input_text.bay2_code_slot_a
-          - input_text.bay2_code_slot_b
-          - input_text.bay2_code_slot_c
-          - input_text.bay3_code_slot_a
-          - input_text.bay3_code_slot_b
-          - input_text.bay3_code_slot_c
-          - input_text.bay4_code_slot_a
-          - input_text.bay4_code_slot_b
-          - input_text.bay4_code_slot_c
-          - input_text.bay5_code_slot_a
-          - input_text.bay5_code_slot_b
-          - input_text.bay5_code_slot_c
+        entity_id: input_text.bay1_code_slot_a
       data:
-        value: ""
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 12 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay1_code_slot_b
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 13 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay1_code_slot_c
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
   mode: single
-
-###############################################################################
-# ENTRY LOG — Poll DS3 every minute for code usage
-###############################################################################
-- id: 'c4_entry_log_poll'
+- id: bay1_code_deactivate
+  alias: Bay 1 - Door Code Deactivate
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_1_bowling_machine
+    offset: 0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_clear: '{% if states(''input_text.bay1_code_slot_a'').split('':'')[0]
+        == door_code %}11 {% elif states(''input_text.bay1_code_slot_b'').split('':'')[0]
+        == door_code %}12 {% elif states(''input_text.bay1_code_slot_c'').split('':'')[0]
+        == door_code %}13 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_clear | int > 0 }}'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '{{ slot_to_clear }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 11 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay1_code_slot_a
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 12 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay1_code_slot_b
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 13 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay1_code_slot_c
+      data:
+        value: ''
+  mode: single
+- id: bay2_code_activate
+  alias: Bay 2 - Door Code Activate
+  triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_2_bowling_machine
+    offset: -0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+      customer_name: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('Customer:
+        (.+)') | first | default('Guest') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_use: '{% if states(''input_text.bay2_code_slot_a'') == '''' %}14 {%
+        elif states(''input_text.bay2_code_slot_b'') == '''' %}15 {% elif states(''input_text.bay2_code_slot_c'')
+        == '''' %}16 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_use | int > 0 }}'
+  - action: shell_command.c4_set_code
+    data:
+      slot: '{{ slot_to_use }}'
+      code: '{{ door_code }}'
+      name: '{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 14 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay2_code_slot_a
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 15 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay2_code_slot_b
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 16 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay2_code_slot_c
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  mode: single
+- id: bay2_code_deactivate
+  alias: Bay 2 - Door Code Deactivate
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_2_bowling_machine
+    offset: 0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_clear: '{% if states(''input_text.bay2_code_slot_a'').split('':'')[0]
+        == door_code %}14 {% elif states(''input_text.bay2_code_slot_b'').split('':'')[0]
+        == door_code %}15 {% elif states(''input_text.bay2_code_slot_c'').split('':'')[0]
+        == door_code %}16 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_clear | int > 0 }}'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '{{ slot_to_clear }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 14 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay2_code_slot_a
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 15 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay2_code_slot_b
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 16 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay2_code_slot_c
+      data:
+        value: ''
+  mode: single
+- id: bay3_code_activate
+  alias: Bay 3 - Door Code Activate
+  triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    offset: -0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+      customer_name: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('Customer:
+        (.+)') | first | default('Guest') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_use: '{% if states(''input_text.bay3_code_slot_a'') == '''' %}17 {%
+        elif states(''input_text.bay3_code_slot_b'') == '''' %}18 {% elif states(''input_text.bay3_code_slot_c'')
+        == '''' %}19 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_use | int > 0 }}'
+  - action: shell_command.c4_set_code
+    data:
+      slot: '{{ slot_to_use }}'
+      code: '{{ door_code }}'
+      name: '{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 17 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay3_code_slot_a
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 18 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay3_code_slot_b
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 19 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay3_code_slot_c
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  mode: single
+- id: bay3_code_deactivate
+  alias: Bay 3 - Door Code Deactivate
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    offset: 0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_clear: '{% if states(''input_text.bay3_code_slot_a'').split('':'')[0]
+        == door_code %}17 {% elif states(''input_text.bay3_code_slot_b'').split('':'')[0]
+        == door_code %}18 {% elif states(''input_text.bay3_code_slot_c'').split('':'')[0]
+        == door_code %}19 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_clear | int > 0 }}'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '{{ slot_to_clear }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 17 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay3_code_slot_a
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 18 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay3_code_slot_b
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 19 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay3_code_slot_c
+      data:
+        value: ''
+  mode: single
+- id: bay4_code_activate
+  alias: Bay 4 - Door Code Activate
+  triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_4_run_up_net
+    offset: -0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+      customer_name: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('Customer:
+        (.+)') | first | default('Guest') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_use: '{% if states(''input_text.bay4_code_slot_a'') == '''' %}20 {%
+        elif states(''input_text.bay4_code_slot_b'') == '''' %}21 {% elif states(''input_text.bay4_code_slot_c'')
+        == '''' %}22 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_use | int > 0 }}'
+  - action: shell_command.c4_set_code
+    data:
+      slot: '{{ slot_to_use }}'
+      code: '{{ door_code }}'
+      name: '{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 20 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay4_code_slot_a
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 21 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay4_code_slot_b
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 22 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay4_code_slot_c
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  mode: single
+- id: bay4_code_deactivate
+  alias: Bay 4 - Door Code Deactivate
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_4_run_up_net
+    offset: 0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_clear: '{% if states(''input_text.bay4_code_slot_a'').split('':'')[0]
+        == door_code %}20 {% elif states(''input_text.bay4_code_slot_b'').split('':'')[0]
+        == door_code %}21 {% elif states(''input_text.bay4_code_slot_c'').split('':'')[0]
+        == door_code %}22 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_clear | int > 0 }}'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '{{ slot_to_clear }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 20 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay4_code_slot_a
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 21 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay4_code_slot_b
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 22 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay4_code_slot_c
+      data:
+        value: ''
+  mode: single
+- id: bay5_code_activate
+  alias: Bay 5 - Door Code Activate
+  triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_5_run_up_net
+    offset: -0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+      customer_name: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('Customer:
+        (.+)') | first | default('Guest') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_use: '{% if states(''input_text.bay5_code_slot_a'') == '''' %}23 {%
+        elif states(''input_text.bay5_code_slot_b'') == '''' %}24 {% elif states(''input_text.bay5_code_slot_c'')
+        == '''' %}25 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_use | int > 0 }}'
+  - action: shell_command.c4_set_code
+    data:
+      slot: '{{ slot_to_use }}'
+      code: '{{ door_code }}'
+      name: '{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 23 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay5_code_slot_a
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 24 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay5_code_slot_b
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_use | int == 25 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay5_code_slot_c
+      data:
+        value: '{{ door_code }}:{{ customer_name }}'
+  mode: single
+- id: bay5_code_deactivate
+  alias: Bay 5 - Door Code Deactivate
+  triggers:
+  - trigger: calendar
+    event: end
+    entity_id: calendar.lane_5_run_up_net
+    offset: 0:15:00
+  actions:
+  - variables:
+      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
+        CODE: ([\\d ]+)') | first | default('')\n   | replace(' ', '') | trim }}"
+  - condition: template
+    value_template: '{{ door_code != '''' }}'
+  - variables:
+      slot_to_clear: '{% if states(''input_text.bay5_code_slot_a'').split('':'')[0]
+        == door_code %}23 {% elif states(''input_text.bay5_code_slot_b'').split('':'')[0]
+        == door_code %}24 {% elif states(''input_text.bay5_code_slot_c'').split('':'')[0]
+        == door_code %}25 {% else %}0{% endif %}'
+  - condition: template
+    value_template: '{{ slot_to_clear | int > 0 }}'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '{{ slot_to_clear }}'
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 23 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay5_code_slot_a
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 24 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay5_code_slot_b
+      data:
+        value: ''
+  - if:
+    - condition: template
+      value_template: '{{ slot_to_clear | int == 25 }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.bay5_code_slot_c
+      data:
+        value: ''
+  mode: single
+- id: fallback_1030pm_clear_codes
+  alias: Fallback - Clear All Booking Codes at 10:30pm
+  triggers:
+  - trigger: time
+    at: '22:30:00'
+  actions:
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '11'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '12'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '13'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '14'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '15'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '16'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '17'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '18'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '19'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '20'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '21'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '22'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '23'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '24'
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '25'
+  - action: input_text.set_value
+    target:
+      entity_id:
+      - input_text.bay1_code_slot_a
+      - input_text.bay1_code_slot_b
+      - input_text.bay1_code_slot_c
+      - input_text.bay2_code_slot_a
+      - input_text.bay2_code_slot_b
+      - input_text.bay2_code_slot_c
+      - input_text.bay3_code_slot_a
+      - input_text.bay3_code_slot_b
+      - input_text.bay3_code_slot_c
+      - input_text.bay4_code_slot_a
+      - input_text.bay4_code_slot_b
+      - input_text.bay4_code_slot_c
+      - input_text.bay5_code_slot_a
+      - input_text.bay5_code_slot_b
+      - input_text.bay5_code_slot_c
+    data:
+      value: ''
+  mode: single
+- id: c4_entry_log_poll
   alias: C4 Entry Log - Poll Every Minute
   triggers:
-    - trigger: time_pattern
-      minutes: "/1"
+  - trigger: time_pattern
+    minutes: /1
   actions:
-    - action: shell_command.c4_entry_log
-
-###############################################################################
-# ROLLER DOOR — Visual sensor poll (every 15 seconds)
-# Grabs a snapshot from camera.pier_facing_entry, measures brightness in the
-# door ROI, and sets input_boolean.roller_door_visual_open accordingly.
-#
-# Calibrated 2026-05-29 (BOT zone — floor mat x=52%,y=29%,w=15%,h=8%):
-#   Closed: avg ≈ 86-90  (adaptive baseline, CLOSED_BASELINE_DEFAULT = 99.8)
-#   Open:   avg ≈ 166-234  Δ > +76 (daytime, sunny or cloudy)
-#   Threshold: |avg − adaptive_baseline| > 20  →  on (open)
-#   See c4_door_visual.py for full calibration table and adaptive baseline logic.
-###############################################################################
-- id: 'door_visual_sensor_poll'
+  - action: shell_command.c4_entry_log
+- id: door_visual_sensor_poll
   alias: Roller Door - Visual Sensor Poll
-  description: >
-    Every 15 s: snapshot pier_facing_entry camera, run c4_door_visual.py,
+  description: 'Every 15 s: snapshot pier_facing_entry camera, run c4_door_visual.py,
     update input_boolean.roller_door_visual_open.
+
+    '
   triggers:
-    - trigger: time_pattern
-      seconds: "/15"
+  - trigger: time_pattern
+    seconds: /15
   actions:
-    - action: camera.snapshot
+  - action: camera.snapshot
+    target:
+      entity_id: camera.pier_facing_entry
+    data:
+      filename: /config/www/door_check_latest.jpg
+  - action: shell_command.c4_door_visual_check
+    response_variable: visual_result
+  - if:
+    - condition: template
+      value_template: '{{ ''open'' in (visual_result.stdout | default('''')) }}'
+    then:
+    - action: input_boolean.turn_on
       target:
-        entity_id: camera.pier_facing_entry
-      data:
-        filename: /config/www/door_check_latest.jpg
-    - action: shell_command.c4_door_visual_check
-      response_variable: visual_result
-    - if:
-        - condition: template
-          value_template: "{{ 'open' in (visual_result.stdout | default('')) }}"
-      then:
-        - action: input_boolean.turn_on
-          target:
-            entity_id: input_boolean.roller_door_visual_open
-      else:
-        - action: input_boolean.turn_off
-          target:
-            entity_id: input_boolean.roller_door_visual_open
+        entity_id: input_boolean.roller_door_visual_open
+    else:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.roller_door_visual_open
   mode: single
-
-###############################################################################
-# ROLLER DOOR — Open/Close detection
-#
-# *** CURRENT STATE: visual camera sensor (temporary) ***
-# Trigger entity: input_boolean.roller_door_visual_open
-#   Polled every 15 s by door_visual_sensor_poll automation.
-#   on = door OPEN (floor-mat luma Δ > 20 from adaptive baseline)
-#   off = door CLOSED
-#
-# *** WHEN ZIGBEE SENSOR ARRIVES ***
-# 1. Pair Aqara Door & Window sensor in Zigbee2MQTT
-# 2. Give it friendly name "Roller Door" → HA creates binary_sensor.roller_door_contact
-# 3. Replace ALL occurrences of  input_boolean.roller_door_visual_open  below
-#    with  binary_sensor.roller_door_contact
-#    (5 occurrences: 2 triggers + 3 conditions — use Find & Replace)
-#
-# Timeline after door opens:
-#   T+1:15  → attempt 1: send LOCK to Control4 (if still open)
-#   T+1:40  → attempt 2: send LOCK again (if still open)
-#   T+2:00  → if still open: snapshot camera.pier_facing_entry + notify all staff
-#
-# Mode restart: if door opens again mid-sequence, timer resets from zero.
-# Each close attempt is conditional — won't fire if door already closed.
-###############################################################################
-
-- id: 'roller_door_opened_notify'
+- id: roller_door_opened_notify
   alias: Roller Door - Notify Staff on Open
-  description: >
-    Immediately notifies all staff when the roller door opens.
+  description: 'Immediately notifies all staff when the roller door opens.
+
+    '
   triggers:
-    - trigger: state
-      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
-      to: 'on'
+  - trigger: state
+    entity_id: input_boolean.roller_door_visual_open
+    to: 'on'
   actions:
-    - action: notify.notify
-      data:
-        title: "🚪 Roller Door Opened"
-        message: "The front roller door has been opened."
+  - action: notify.notify
+    data:
+      title: "\U0001F6AA Roller Door Opened"
+      message: The front roller door has been opened.
   mode: single
-
-- id: 'roller_door_auto_close'
+- id: roller_door_auto_close
   alias: Roller Door - Auto Close + Alert if Left Open
-  description: >
-    After door opens: two LOCK+UNLOCK close attempts then a snapshot + staff alert.
-    LOCK resets C4 state; UNLOCK triggers the motor (toggle close from open limit).
-    Timings are configurable via:
-      input_number.door_close_attempt1_secs  (calibrated 60s = 19s motor travel + 41s entry buffer)
-      input_number.door_close_attempt2_secs  (calibrated 35s after attempt 1 — ensures visual sensor has updated after close)
-      input_number.door_close_alert_secs     (calibrated 20s after attempt 2)
-    Total window = 115s. Mode restart: resets if door reopens.
+  description: "After door opens: two LOCK+UNLOCK close attempts then a snapshot +
+    staff alert. LOCK resets C4 state; UNLOCK triggers the motor (toggle close from
+    open limit). Timings are configurable via:\n  input_number.door_close_attempt1_secs
+    \ (calibrated 60s = 19s motor travel + 41s entry buffer)\n  input_number.door_close_attempt2_secs
+    \ (calibrated 35s after attempt 1 — ensures visual sensor has updated after close)\n
+    \ input_number.door_close_alert_secs     (calibrated 20s after attempt 2)\nTotal
+    window = 115s. Mode restart: resets if door reopens.\n"
   triggers:
-    - trigger: state
-      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
-      to: 'on'
+  - trigger: state
+    entity_id: input_boolean.roller_door_visual_open
+    to: 'on'
   actions:
-    # ── Service mode guard ────────────────────────────────────────────────────
-    # Skip entirely if staff manually opened the door via the dashboard button.
-    - condition: state
-      entity_id: input_boolean.door_service_mode
-      state: 'off'
-
-    # ── Attempt 1 (configurable — calibrated T+60s) ─────────────────────────
-    - delay:
-        seconds: "{{ states('input_number.door_close_attempt1_secs') | int(75) }}"
-    - condition: state
-      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
-      state: 'on'
-    # Close sequence: LOCK resets C4's internal state to "locked";
-    # UNLOCK then sees a state change and sends the physical motor trigger.
-    # Without LOCK first, C4 treats UNLOCK as a no-op (already unlocked).
-    - action: shell_command.c4_lock_door
-    - delay: "00:00:01"
-    - action: shell_command.c4_unlock_door
-
-    # ── Attempt 2 (configurable — calibrated +35s after attempt 1) ─────────
-    - delay:
-        seconds: "{{ states('input_number.door_close_attempt2_secs') | int(25) }}"
-    - condition: state
-      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
-      state: 'on'
-    - action: shell_command.c4_lock_door
-    - delay: "00:00:01"
-    - action: shell_command.c4_unlock_door
-
-    # ── Alert (configurable — default +20s after attempt 2) ──────────────────
-    - delay:
-        seconds: "{{ states('input_number.door_close_alert_secs') | int(20) }}"
-    - condition: state
-      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
-      state: 'on'
-    # Grab a snapshot from the pier entry camera
-    - action: camera.snapshot
-      target:
-        entity_id: camera.pier_facing_entry
+  - condition: state
+    entity_id: input_boolean.door_service_mode
+    state: 'off'
+  - delay:
+      seconds: '{{ states(''input_number.door_close_attempt1_secs'') | int(75) }}'
+  - condition: state
+    entity_id: input_boolean.roller_door_visual_open
+    state: 'on'
+  - action: shell_command.c4_lock_door
+  - delay: 00:00:01
+  - action: shell_command.c4_unlock_door
+  - delay:
+      seconds: '{{ states(''input_number.door_close_attempt2_secs'') | int(25) }}'
+  - condition: state
+    entity_id: input_boolean.roller_door_visual_open
+    state: 'on'
+  - action: shell_command.c4_lock_door
+  - delay: 00:00:01
+  - action: shell_command.c4_unlock_door
+  - delay:
+      seconds: '{{ states(''input_number.door_close_alert_secs'') | int(20) }}'
+  - condition: state
+    entity_id: input_boolean.roller_door_visual_open
+    state: 'on'
+  - action: camera.snapshot
+    target:
+      entity_id: camera.pier_facing_entry
+    data:
+      filename: /config/www/door_alert_snapshot.jpg
+  - delay: 00:00:02
+  - action: notify.notify
+    data:
+      title: "\U0001F6A8 Front Door Open 2 Min"
+      message: The front roller door has been open for 2 minutes. Please check entry.
       data:
-        filename: /config/www/door_alert_snapshot.jpg
-    # Brief pause to ensure the image file is fully written before sending
-    - delay: "00:00:02"
-    # Notify all staff with the snapshot attached
-    - action: notify.notify
-      data:
-        title: "🚨 Front Door Open 2 Min"
-        message: "The front roller door has been open for 2 minutes. Please check entry."
-        data:
-          image: /local/door_alert_snapshot.jpg
+        image: /local/door_alert_snapshot.jpg
   mode: restart
+- id: '1780070397691'
+  alias: Night - Activate Neighbour Highbays on Bay Start
+  description: 'Safety net: when any bay_helper turns ON during dusk/night (sun within
+    45 min of setting or already set), immediately activate the correct neighbour
+    highbays. Closes race condition where booking_start fires just outside the 30-min
+    night window. Idempotent — turning on an already-on light has no effect.'
+  triggers:
+  - trigger: state
+    entity_id:
+    - input_boolean.bay1_helper
+    - input_boolean.bay2_helper
+    - input_boolean.bay3_helper
+    - input_boolean.bay4_helper
+    - input_boolean.bay5_helper
+    to: 'on'
+  conditions:
+  - condition: template
+    value_template: '{{ is_state(''sun.sun'', ''below_horizon'') or (is_state(''sun.sun'',
+      ''above_horizon'') and (as_timestamp(state_attr(''sun.sun'', ''next_setting''))
+      - as_timestamp(now())) < 2700) }}'
+  actions:
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.entity_id == ''input_boolean.bay1_helper'' }}'
+      sequence:
+      - action: light.turn_on
+        target:
+          entity_id: light.highbay_2
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.entity_id == ''input_boolean.bay2_helper'' }}'
+      sequence:
+      - action: light.turn_on
+        target:
+          entity_id:
+          - light.highbay_1
+          - light.highbay_3
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.entity_id == ''input_boolean.bay3_helper'' }}'
+      sequence:
+      - action: light.turn_on
+        target:
+          entity_id:
+          - light.highbay_2
+          - light.highbay_4
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.entity_id == ''input_boolean.bay4_helper'' }}'
+      sequence:
+      - action: light.turn_on
+        target:
+          entity_id:
+          - light.highbay_3
+          - light.highbay_5
+    - conditions:
+      - condition: template
+        value_template: '{{ trigger.entity_id == ''input_boolean.bay5_helper'' }}'
+      sequence:
+      - action: light.turn_on
+        target:
+          entity_id: light.highbay_4
+  mode: parallel
+  max: 5
