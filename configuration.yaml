@@ -81,6 +81,8 @@ sensor:
     max_sub_interval:
       minutes: 5
   - platform: integration
+    # BUG-CONFIG-1: power_9 also used for Light Office below — one mapping is wrong.
+    # Inspector to verify: which physical sensor is the Runup light vs Office light?
     source: sensor.non_dimmable_light_centralized_power_9
     name: Energy Usage kWh Light Runup
     unique_id: energy_usage_kwh_light_runup
@@ -246,7 +248,7 @@ input_text:
 # Attempt 1: how many seconds after door opens before first LOCK command.
 # Attempt 2: how many seconds after attempt 1 before second LOCK command.
 # Alert:     how many seconds after attempt 2 before snapshot + staff notify.
-# Defaults: 75 + 25 + 20 = 120 seconds (2 min) total.
+# Calibrated: 75 + 35 + 20 = 130 seconds total. Attempt 2 = 35s gives visual sensor time to update.
 ###############################################################################
 input_number:
   door_close_attempt1_secs:
@@ -263,7 +265,7 @@ input_number:
     min: 5
     max: 120
     step: 5
-    initial: 25
+    initial: 35
     unit_of_measurement: "s"
     mode: box
     icon: mdi:timer
