@@ -586,21 +586,27 @@ def main():
             # have cleared it — that marks the true motor-stop / "door fully open".
             #
             # Calibrated (2026-05-29): TOP_BASELINE=126.8.
-            #   Sunny/bright day:  TOP_open ≈ 217–221 (Δ≈90-93) → TOP fires first
+            #   Sunny/bright day:  TOP_open ≈ 217–221 (Δ≈90-93) → TOP fires first (~stab+14s)
             #   Cloudy/dim day:    TOP_open ≈ 200–205 (Δ≈74)    → TOP never hits 90
             # Physically confirmed: open = close = ~18.5 s in all conditions.
             #
             # Dual-exit strategy:
             #   Primary:  BOT plateau AND TOP Δ > TOP_STAB_OPEN_THRESHOLD (90)
             #             → fires on sunny days at ~stab+14s  → true ≈ 18.5s ✓
-            #   Fallback: BOT has been stable for _STAB_FRAMES + _BOT_STAB_EXTRA frames
-            #             (3+6 = 9 frames = 4.5s of stability, first reached at ~stab+13.9s)
-            #             → fires on cloudy days when TOP never reaches 90  → true ≈ 18.4s ✓
-            _STAB_TOL       = 2.0   # luma units — BOT change < this = "BOT plateau"
-            _STAB_FRAMES    = 3     # consecutive BOT-stable frames before we start counting
-            _BOT_STAB_EXTRA = 6     # extra stable frames after plateau before fallback exit
-                                    # (6 × 0.5s = 3s; stbl=9 fires at stab+~13.9s → true≈18.4s)
-            _STAB_TIMEOUT   = 35    # absolute timeout (s) — allows full ~18.5 s motor run
+            #   Fallback: BOT is plateau AND elapsed ≥ _MIN_STAB_ELAPSED (14.0s)
+            #             → fires on cloudy days when TOP never reaches threshold
+            #             → true ≈ (2+2)+14 = 18s ≈ 18.5s ✓
+            #   Safety:   Hard timeout at _STAB_TIMEOUT (20s)
+            #
+            # IMPORTANT: BOT can briefly have 3 consecutive stable frames mid-travel
+            # (random noise lull), so stbl=3 alone is NOT a reliable "fully open" signal.
+            # _MIN_STAB_ELAPSED ensures the fallback can't fire until the door has had
+            # enough physical time to reach the end stop (~stab+14.5s = 18.5-2-2s).
+            _STAB_TOL         = 2.0   # luma units — BOT change < this = "BOT plateau"
+            _STAB_FRAMES      = 3     # consecutive BOT-stable frames to start plateau tracking
+            _MIN_STAB_ELAPSED = 14.0  # minimum stab elapsed (s) before fallback fires
+                                      # ≈ MOTOR_TRAVEL_TIME(18.5) - t_open_bot(~2) - record_extra(2) - 0.5
+            _STAB_TIMEOUT     = 20    # hard timeout (s) — safety net if all else fails
             print(f"  Monitoring full open (TOP zone must fire before exit) ...")
             _stable_count = 0
             _last_luma    = None
@@ -642,19 +648,23 @@ def main():
                                 # PRIMARY exit: BOT plateau AND TOP fired → door fully open
                                 print(f"  ✅ Fully open — BOT plateau, TOP fired at stab+{t_top_open:.1f}s")
                                 break
-                            elif _stable_count >= _STAB_FRAMES + _BOT_STAB_EXTRA:
-                                # FALLBACK exit: BOT stable for 9+ frames but TOP never reached
-                                # TOP_STAB_OPEN_THRESHOLD (dim/cloudy lighting).
-                                # stbl=9 fires at ~stab+13.9s → true_open ≈ 18.4s ≈ physical 18.5s
+                            elif _elapsed >= _MIN_STAB_ELAPSED:
+                                # FALLBACK exit: BOT is stable AND enough time has passed for
+                                # the door to physically reach the end stop.
+                                # Prevents premature exit if BOT happens to plateau mid-travel
+                                # (random 3-frame lull); _MIN_STAB_ELAPSED ensures we wait for
+                                # the door to actually stop before declaring "fully open".
                                 t_top_open = _elapsed
-                                print(f"  ✅ Fully open — BOT+fallback (stbl={_stable_count}, "
+                                print(f"  ✅ Fully open — elapsed fallback "
+                                      f"(stab+{_elapsed:.1f}s ≥ {_MIN_STAB_ELAPSED:.0f}s, "
                                       f"TOP Δ={abs(_top_luma - top_baseline):.0f} "
-                                      f"< thr {TOP_STAB_OPEN_THRESHOLD:.0f}, dim lighting)")
+                                      f"< thr {TOP_STAB_OPEN_THRESHOLD:.0f})")
                                 break
                             else:
-                                # BOT plateau but TOP not yet fired — keep waiting
+                                # BOT plateau but not enough time elapsed yet — keep waiting
                                 print(f"  ⏸  BOT plateau (stbl={_stable_count}) — "
-                                      f"waiting for TOP or fallback (door still retracting)...", flush=True)
+                                      f"waiting for TOP or elapsed≥{_MIN_STAB_ELAPSED:.0f}s "
+                                      f"(now {_elapsed:.1f}s)...", flush=True)
                     else:
                         _stable_count = 0
                 else:
