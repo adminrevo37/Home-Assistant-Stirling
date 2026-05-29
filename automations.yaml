@@ -1743,9 +1743,9 @@
     LOCK resets C4 state; UNLOCK triggers the motor (toggle close from open limit).
     Timings are configurable via:
       input_number.door_close_attempt1_secs  (calibrated 60s = 19s motor travel + 41s entry buffer)
-      input_number.door_close_attempt2_secs  (calibrated 30s after attempt 1)
+      input_number.door_close_attempt2_secs  (calibrated 35s after attempt 1 — ensures visual sensor has updated after close)
       input_number.door_close_alert_secs     (calibrated 20s after attempt 2)
-    Total window = 110s. Mode restart: resets if door reopens.
+    Total window = 115s. Mode restart: resets if door reopens.
   triggers:
     - trigger: state
       entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
@@ -1770,7 +1770,7 @@
     - delay: "00:00:01"
     - action: shell_command.c4_unlock_door
 
-    # ── Attempt 2 (configurable — calibrated +30s after attempt 1) ─────────
+    # ── Attempt 2 (configurable — calibrated +35s after attempt 1) ─────────
     - delay:
         seconds: "{{ states('input_number.door_close_attempt2_secs') | int(25) }}"
     - condition: state
