@@ -96,6 +96,14 @@ TOP_ROI_H_PCT        = 0.06
 # TOP_BASELINE_DEFAULT: measured 2026-05-29 10:39 (day/partly-cloudy, door CLOSED)
 #   BOT=85.0  TOP=126.8  → TOP_BASELINE_DEFAULT = 126.8
 TOP_BASELINE_DEFAULT = 126.8
+# TOP_STAB_OPEN_THRESHOLD: used only in the stab-phase monitoring (NOT in record_phase).
+# The OPEN_THRESHOLD=20 is correct for BOT (sharp transition) but fires too early for
+# TOP during opening — panels rise gradually so TOP climbs from 127 to 221 over ~14s.
+# We want TOP to fire only when panels are nearly fully retracted (TOP ≈ 217-221).
+#   Analysis (2026-05-29):  TOP crosses Δ>20 at stab+10.3s (door ~75% open)
+#                            TOP reaches Δ>90 at ~stab+14.3s (door ~97% open, ≈ motor stop)
+#   Δ>90 from TOP_baseline (126.8+90=216.8) matches physically measured open time of 18.5s.
+TOP_STAB_OPEN_THRESHOLD = 90.0
 
 # ── Motor minimum re-trigger interval ────────────────────────────────────────
 # The motor ignores a second UNLOCK if sent within ~90 s of the previous one.
@@ -604,14 +612,16 @@ def main():
                     continue
                 _luma     = roi_luma(_jpeg)
                 _top_luma = roi_luma_top(_jpeg)
-                # Use TOP's own calibrated baseline — NOT the BOT baseline
-                _top_open = abs(_top_luma - top_baseline) > OPEN_THRESHOLD
+                # Use TOP's own calibrated baseline AND its own higher threshold
+                # (TOP_STAB_OPEN_THRESHOLD=90, not OPEN_THRESHOLD=20, so TOP fires
+                #  only when door is ~97% open, matching physical motor-stop at 18.5s)
+                _top_open = abs(_top_luma - top_baseline) > TOP_STAB_OPEN_THRESHOLD
                 if t_top_open is None and _top_open:
                     t_top_open = _elapsed
                 _top_flag = (
                     f" ★ TOP=OPEN (door fully open, stab+{t_top_open:.1f}s)"
                     if (t_top_open is not None and abs(t_top_open - _elapsed) < interval + 0.05)
-                    else (f" [TOP waiting… Δ={abs(_top_luma - top_baseline):.0f}/{OPEN_THRESHOLD:.0f}]"
+                    else (f" [TOP waiting… Δ={abs(_top_luma - top_baseline):.0f}/{TOP_STAB_OPEN_THRESHOLD:.0f}]"
                           if t_top_open is None else "")
                 )
                 if _last_luma is not None:
