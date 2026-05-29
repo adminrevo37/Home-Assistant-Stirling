@@ -1661,10 +1661,11 @@
 # Grabs a snapshot from camera.pier_facing_entry, measures brightness in the
 # door ROI, and sets input_boolean.roller_door_visual_open accordingly.
 #
-# Calibrated 2026-05-29:
-#   Closed: avg ≈ 96.4  (baseline stable ±0.2)
-#   Open:   avg ≈ 127.4  Δ = +31
-#   Threshold: |avg − 96.4| > 15  →  on (open)
+# Calibrated 2026-05-29 (BOT zone — floor mat x=52%,y=29%,w=15%,h=8%):
+#   Closed: avg ≈ 86-90  (adaptive baseline, CLOSED_BASELINE_DEFAULT = 99.8)
+#   Open:   avg ≈ 166-234  Δ > +76 (daytime, sunny or cloudy)
+#   Threshold: |avg − adaptive_baseline| > 20  →  on (open)
+#   See c4_door_visual.py for full calibration table and adaptive baseline logic.
 ###############################################################################
 - id: 'door_visual_sensor_poll'
   alias: Roller Door - Visual Sensor Poll
@@ -1738,13 +1739,13 @@
 - id: 'roller_door_auto_close'
   alias: Roller Door - Auto Close + Alert if Left Open
   description: >
-    After door opens: two UNLOCK (toggle) close attempts then a snapshot + staff alert.
-    UNLOCK is the toggle command — closes from open limit, same as pressing the physical button.
+    After door opens: two LOCK+UNLOCK close attempts then a snapshot + staff alert.
+    LOCK resets C4 state; UNLOCK triggers the motor (toggle close from open limit).
     Timings are configurable via:
-      input_number.door_close_attempt1_secs  (default 75s)
-      input_number.door_close_attempt2_secs  (default 25s after attempt 1)
-      input_number.door_close_alert_secs     (default 20s after attempt 2)
-    Total default = 120s (2 min). Mode restart: resets if door reopens.
+      input_number.door_close_attempt1_secs  (calibrated 60s = 19s motor travel + 41s entry buffer)
+      input_number.door_close_attempt2_secs  (calibrated 30s after attempt 1)
+      input_number.door_close_alert_secs     (calibrated 20s after attempt 2)
+    Total window = 110s. Mode restart: resets if door reopens.
   triggers:
     - trigger: state
       entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
@@ -1756,7 +1757,7 @@
       entity_id: input_boolean.door_service_mode
       state: 'off'
 
-    # ── Attempt 1 (configurable — default T+75s) ─────────────────────────────
+    # ── Attempt 1 (configurable — calibrated T+60s) ─────────────────────────
     - delay:
         seconds: "{{ states('input_number.door_close_attempt1_secs') | int(75) }}"
     - condition: state
@@ -1769,7 +1770,7 @@
     - delay: "00:00:01"
     - action: shell_command.c4_unlock_door
 
-    # ── Attempt 2 (configurable — default +25s after attempt 1) ─────────────
+    # ── Attempt 2 (configurable — calibrated +30s after attempt 1) ─────────
     - delay:
         seconds: "{{ states('input_number.door_close_attempt2_secs') | int(25) }}"
     - condition: state
