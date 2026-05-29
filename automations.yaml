@@ -1696,17 +1696,20 @@
   mode: single
 
 ###############################################################################
-# ROLLER DOOR — Open/Close detection via Aqara contact sensor
+# ROLLER DOOR — Open/Close detection
 #
-# *** BEFORE THIS WORKS ***
-# 1. Pair your Aqara Door & Window sensor in Zigbee2MQTT
-# 2. Give it a friendly name (e.g. "Roller Door")
-# 3. Replace ALL occurrences of  binary_sensor.roller_door_contact  below
-#    with the actual entity_id HA created (Developer Tools → States, search
-#    your sensor name — typically  binary_sensor.<name>_contact)
+# *** CURRENT STATE: visual camera sensor (temporary) ***
+# Trigger entity: input_boolean.roller_door_visual_open
+#   Polled every 15 s by door_visual_sensor_poll automation.
+#   on = door OPEN (floor-mat luma Δ > 20 from adaptive baseline)
+#   off = door CLOSED
 #
-# Sensor states:  on = door OPEN (contact broken)
-#                 off = door CLOSED (contact made)
+# *** WHEN ZIGBEE SENSOR ARRIVES ***
+# 1. Pair Aqara Door & Window sensor in Zigbee2MQTT
+# 2. Give it friendly name "Roller Door" → HA creates binary_sensor.roller_door_contact
+# 3. Replace ALL occurrences of  input_boolean.roller_door_visual_open  below
+#    with  binary_sensor.roller_door_contact
+#    (5 occurrences: 2 triggers + 3 conditions — use Find & Replace)
 #
 # Timeline after door opens:
 #   T+1:15  → attempt 1: send LOCK to Control4 (if still open)
@@ -1723,7 +1726,7 @@
     Immediately notifies all staff when the roller door opens.
   triggers:
     - trigger: state
-      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       to: 'on'
   actions:
     - action: notify.notify
@@ -1743,7 +1746,7 @@
     Total default = 120s (2 min). Mode restart: resets if door reopens.
   triggers:
     - trigger: state
-      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       to: 'on'
   actions:
     # ── Service mode guard ────────────────────────────────────────────────────
@@ -1756,7 +1759,7 @@
     - delay:
         seconds: "{{ states('input_number.door_close_attempt1_secs') | int(75) }}"
     - condition: state
-      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       state: 'on'
     - action: shell_command.c4_lock_door
 
@@ -1764,7 +1767,7 @@
     - delay:
         seconds: "{{ states('input_number.door_close_attempt2_secs') | int(25) }}"
     - condition: state
-      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       state: 'on'
     - action: shell_command.c4_lock_door
 
@@ -1772,7 +1775,7 @@
     - delay:
         seconds: "{{ states('input_number.door_close_alert_secs') | int(20) }}"
     - condition: state
-      entity_id: binary_sensor.roller_door_contact   # <-- UPDATE after pairing
+      entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       state: 'on'
     # Grab a snapshot from the pier entry camera
     - action: camera.snapshot
