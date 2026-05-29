@@ -435,9 +435,46 @@ def main():
                     time.sleep(args.pause)
                 continue
 
-            # Brief settle
-            print(f"  Settling 3s ...")
-            time.sleep(3)
+            # ── Wait for motor to fully stop (luma stabilisation) ────────────
+            # Visual OPEN fires when luma first crosses threshold (~2–3 s),
+            # but the motor keeps running for ~10–12 s total.  We poll until
+            # the ROI luma stops changing before sending LOCK — otherwise the
+            # motor ignores the command (hardware anti-reversal protection).
+            _STAB_TOL     = 2.0   # luma units — change < this = "stable"
+            _STAB_FRAMES  = 3     # consecutive stable frames required
+            _STAB_TIMEOUT = 25    # max wait (s) before proceeding anyway
+            _STAB_BUFFER  = 3     # extra seconds after luma is stable
+            print(f"  Waiting for motor to stop (luma stabilisation ±{_STAB_TOL}) ...")
+            _stable_count = 0
+            _last_luma    = None
+            _stab_t0      = time.monotonic()
+            while True:
+                _elapsed = time.monotonic() - _stab_t0
+                if _elapsed > _STAB_TIMEOUT:
+                    print(f"  ⚠️  Stabilisation timeout {_STAB_TIMEOUT}s — proceeding")
+                    break
+                _jpeg = fetch_frame(args.frigate)
+                if _jpeg is None:
+                    time.sleep(interval)
+                    continue
+                _luma = roi_luma(_jpeg)
+                if _last_luma is not None:
+                    _diff = abs(_luma - _last_luma)
+                    print(f"  stab {_elapsed:5.1f}s  luma={_luma:.1f}  Δ={_diff:+.1f}"
+                          f"  stable={_stable_count}", flush=True)
+                    if _diff < _STAB_TOL:
+                        _stable_count += 1
+                        if _stable_count >= _STAB_FRAMES:
+                            print(f"  ✅ Motor stopped — buffering {_STAB_BUFFER}s")
+                            time.sleep(_STAB_BUFFER)
+                            break
+                    else:
+                        _stable_count = 0
+                else:
+                    print(f"  stab {_elapsed:5.1f}s  luma={_luma:.1f}  (first sample)",
+                          flush=True)
+                _last_luma = _luma
+                time.sleep(interval)
 
             # ── CLOSE phase ───────────────────────────────────────────────────
             print()
