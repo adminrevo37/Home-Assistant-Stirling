@@ -1762,7 +1762,12 @@
     - condition: state
       entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       state: 'on'
-    - action: shell_command.c4_unlock_door   # UNLOCK = toggle (closes from open limit)
+    # Close sequence: LOCK resets C4's internal state to "locked";
+    # UNLOCK then sees a state change and sends the physical motor trigger.
+    # Without LOCK first, C4 treats UNLOCK as a no-op (already unlocked).
+    - action: shell_command.c4_lock_door
+    - delay: "00:00:01"
+    - action: shell_command.c4_unlock_door
 
     # ── Attempt 2 (configurable — default +25s after attempt 1) ─────────────
     - delay:
@@ -1770,7 +1775,9 @@
     - condition: state
       entity_id: input_boolean.roller_door_visual_open   # VISUAL (swap → binary_sensor.roller_door_contact when Zigbee paired)
       state: 'on'
-    - action: shell_command.c4_unlock_door   # UNLOCK = toggle (closes from open limit)
+    - action: shell_command.c4_lock_door
+    - delay: "00:00:01"
+    - action: shell_command.c4_unlock_door
 
     # ── Alert (configurable — default +20s after attempt 2) ──────────────────
     - delay:

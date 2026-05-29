@@ -483,7 +483,14 @@ def main():
             print(f"  {'─'*8}  {'─'*32}  {'─'*25}")
 
             if not args.watch:
-                print(f"  {'T0':>8}  Sending UNLOCK (toggle — closes from open limit) ...")
+                # C4 state machine: LOCK resets state to "locked"; the
+                # subsequent UNLOCK then sees a state change and sends the
+                # physical toggle to the motor.  Without LOCK first, C4
+                # sees the door already "unlocked" and ignores the command.
+                print(f"  {'T0':>8}  Sending LOCK (reset C4 state → locked) ...")
+                send_door_command("LOCK")
+                time.sleep(1)          # brief pause for C4 state to commit
+                print(f"  {'T0':>8}  Sending UNLOCK (C4 state: locked→unlocked = motor trigger) ...")
                 ok = send_door_command("UNLOCK")
                 if not ok:
                     print("  WARNING: UNLOCK may have failed")

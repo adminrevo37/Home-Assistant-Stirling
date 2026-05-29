@@ -248,7 +248,10 @@ door_service_toggle:
             entity_id: input_boolean.door_service_mode
       else:
         # Currently open / service mode on → CLOSE the door
-        # UNLOCK is the toggle: closes from the open limit (same physical button behaviour)
+        # LOCK resets C4 state to "locked"; UNLOCK then triggers the motor.
+        # Without LOCK first, C4 sees state already "unlocked" and ignores UNLOCK.
+        - action: shell_command.c4_lock_door
+        - delay: "00:00:01"
         - action: shell_command.c4_unlock_door
         - action: input_boolean.turn_off
           target:
