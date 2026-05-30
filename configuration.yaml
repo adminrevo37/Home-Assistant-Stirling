@@ -280,6 +280,68 @@ input_number:
     mode: box
     icon: mdi:timer-alert
 
+  ###############################################################################
+  ##### LIGHTING — tunable values (single source of truth)
+  # Adjust in HA (Settings -> Helpers) without touching automations.yaml.
+  # See cricket/home-assistant/SPEC_HA_LIGHTING_AUTOMATIONS.md.
+  ###############################################################################
+  lighting_occupancy_threshold:
+    name: "Lighting - Occupancy threshold (%)"
+    min: 0
+    max: 100
+    step: 5
+    initial: 40
+    unit_of_measurement: "%"
+    mode: box
+    icon: mdi:account-group
+  lighting_common_off_debounce_min:
+    name: "Lighting - Common-off debounce (min below threshold)"
+    min: 1
+    max: 30
+    step: 1
+    initial: 4
+    unit_of_measurement: "min"
+    mode: box
+    icon: mdi:timer-sand
+  lighting_endofday_delay_min:
+    name: "Lighting - End-of-day hard-off delay after last booking (min)"
+    min: 5
+    max: 180
+    step: 5
+    initial: 30
+    unit_of_measurement: "min"
+    mode: box
+    icon: mdi:timer-off
+
+###############################################################################
+##### LIGHTING / OFFICE — scheduled off-sweep times (single source of truth)
+###############################################################################
+input_datetime:
+  lighting_hard_off_catchall:
+    name: "Lighting - Absolute all-off catch-all time"
+    has_date: false
+    has_time: true
+    initial: "23:00:00"
+    icon: mdi:clock-end
+  office_off_1:
+    name: "Office Lights - Off sweep 1"
+    has_date: false
+    has_time: true
+    initial: "18:00:00"
+    icon: mdi:lightbulb-off
+  office_off_2:
+    name: "Office Lights - Off sweep 2"
+    has_date: false
+    has_time: true
+    initial: "20:00:00"
+    icon: mdi:lightbulb-off
+  office_off_3:
+    name: "Office Lights - Off sweep 3"
+    has_date: false
+    has_time: true
+    initial: "22:00:00"
+    icon: mdi:lightbulb-off
+
 utility_meter:
   energy_meter_daily_light_bay1:
     source: sensor.energy_usage_kwh_light_bay1
