@@ -1,4 +1,4 @@
 #!/bin/bash
 cd /config
-git fetch origin master
-git reset --hard origin/master
+git fetch origin main
+git reset --hard origin/main
