@@ -145,6 +145,7 @@ shell_command:
   c4_lock_door: bash /config/c4_door_control.sh lock
   c4_unlock_door: bash /config/c4_door_control.sh unlock
   c4_door_visual_check: python3 /config/c4_door_visual.py
+  c4_item_dump: python3 /config/c4_item_dump.py
 
 ###############################################################################
 ##### ROLLER DOOR — Visual sensor state helper
