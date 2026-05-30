@@ -30,3 +30,20 @@ OZW_Log.txt
 
 # Editor
 .vscode/
+
+# HA runtime state, secrets, and generated artifacts (written LIVE on the box).
+# Must NOT be tracked — git_pull does `reset --hard`, which would otherwise
+# overwrite the live token / sensor baselines with stale committed copies.
+c4_token_cache.txt            # Control4 director bearer token (secret + short-lived)
+c4_door_visual_state.json     # visual sensor baseline (self-maintaining)
+c4_entry_log_state.json       # entry-log state (self-maintaining)
+c4_output.txt
+c4_output2.txt
+www/c4_output3.txt
+www/entry_log_debug.txt
+www/door_timing.json
+www/door_check_latest.jpg
+www/door_alert_snapshot.jpg
+www/door_grid.jpg
+www/door_roi_annotated.jpg
+www/door_roi_compare.jpg
