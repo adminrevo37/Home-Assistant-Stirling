@@ -1,9 +1,8 @@
 - id: bay1_booking_start
   alias: Bay 1 Booking - START
-  description: '7 min before booking: turn on highbay 1 and common lights (~5 min
-    real-world lead time). Night mode: also turns on neighbour highbay 2.
-
-    '
+  description: '7 min before booking: turn on highbay 1 + bay-1 helper (if not blocked).
+    Neighbour highbays handled by the night-neighbour automation; common lights by
+    door-open/occupancy.'
   triggers:
   - trigger: calendar
     event: start
@@ -14,95 +13,65 @@
     entity_id: input_boolean.bay1_blocked
     state: 'off'
   actions:
-  - variables:
-      door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
-        CODE: (\\d+)') | first | default('') }}"
-      customer_name: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('Customer:
-        (.+)') | first | default('Guest') | trim }}"
-      booking_title: '{{ trigger.calendar_event.summary | default(''Booking'') }}'
   - action: input_boolean.turn_on
     target:
       entity_id: input_boolean.bay1_helper
   - action: light.turn_on
     target:
       entity_id: light.highbay_1
-  - action: light.turn_on
-    target:
-      entity_id:
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
-  - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
-        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
-        - as_timestamp(now())) < 1800) }}"
-    then:
-    - action: light.turn_on
-      target:
-        entity_id: light.highbay_2
   mode: single
 - id: bay1_booking_end
   alias: Bay 1 Booking - END
   description: '5 min after booking: turn off highbay 1 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-
-    '
+    Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
   - trigger: calendar
     event: end
     entity_id: calendar.lane_1_bowling_machine
     offset: 0:05:00
   actions:
-  - condition: template
-    value_template: '{{ is_state(''calendar.lane_1_bowling_machine'', ''off'') }}'
+  - condition: state
+    entity_id: calendar.lane_1_bowling_machine
+    state: 'off'
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay1_helper
   - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
-        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    - condition: sun
+      after: sunset
+      after_offset: -00:30:00
     then:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_1
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-    else:
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_1
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        - input_boolean.bay3_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_2
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_1
   mode: single
 - id: bay2_booking_start
   alias: Bay 2 Booking - START
-  description: '7 min before booking: turn on highbay 2 and common lights (~5 min
-    real-world lead time). Night mode: also turns on neighbour highbays 1 and 3.
-
-    '
+  description: '7 min before booking: turn on highbay 2 + bay-2 helper (if not blocked).
+    Neighbour highbays handled by the night-neighbour automation; common lights by
+    door-open/occupancy.'
   triggers:
   - trigger: calendar
     event: start
@@ -119,93 +88,59 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_2
-  - action: light.turn_on
-    target:
-      entity_id:
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
-  - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
-        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
-        - as_timestamp(now())) < 1800) }}"
-    then:
-    - action: light.turn_on
-      target:
-        entity_id:
-        - light.highbay_1
-        - light.highbay_3
   mode: single
 - id: bay2_booking_end
   alias: Bay 2 Booking - END
   description: '5 min after booking: turn off highbay 2 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-
-    '
+    Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
   - trigger: calendar
     event: end
     entity_id: calendar.lane_2_bowling_machine
     offset: 0:05:00
   actions:
-  - condition: template
-    value_template: '{{ is_state(''calendar.lane_2_bowling_machine'', ''off'') }}'
+  - condition: state
+    entity_id: calendar.lane_2_bowling_machine
+    state: 'off'
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay2_helper
   - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
-        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    - condition: sun
+      after: sunset
+      after_offset: -00:30:00
     then:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_2
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-    else:
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_1
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        - input_boolean.bay3_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_2
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay2_helper', 'off') and\n   is_state('input_boolean.bay3_helper',
-          'off') and\n   is_state('input_boolean.bay4_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id: light.highbay_3
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_2
   mode: single
 - id: bay3_booking_start
   alias: Bay 3 Booking - START
-  description: '7 min before booking: turn on highbay 3 and common lights (~5 min
-    real-world lead time). Night mode: also turns on neighbour highbays 2 and 4.
-
-    '
+  description: '7 min before booking: turn on highbay 3 + bay-3 helper (if not blocked).
+    Neighbour highbays handled by the night-neighbour automation; common lights by
+    door-open/occupancy.'
   triggers:
   - trigger: calendar
     event: start
@@ -222,94 +157,60 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_3
-  - action: light.turn_on
-    target:
-      entity_id:
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
-  - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
-        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
-        - as_timestamp(now())) < 1800) }}"
-    then:
-    - action: light.turn_on
-      target:
-        entity_id:
-        - light.highbay_2
-        - light.highbay_4
   mode: single
 - id: bay3_booking_end
   alias: Bay 3 Booking - END
-  description: '5 min after booking: turn off highbay 3 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-
-    '
+  description: '5 min after booking: turn off highbay 3 in daylight; at night reserve
+    highbay 3 (residual) and only drop neighbours. Common lights handled separately.'
   triggers:
   - trigger: calendar
     event: end
     entity_id: calendar.lane_3_truman_or_bowling_machine
     offset: 0:05:00
   actions:
-  - condition: template
-    value_template: '{{ is_state(''calendar.lane_3_truman_or_bowling_machine'', ''off'')
-      }}'
+  - condition: state
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    state: 'off'
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay3_helper
   - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
-        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    - condition: sun
+      after: sunset
+      after_offset: -00:30:00
     then:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_3
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-    else:
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        - input_boolean.bay3_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_2
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay2_helper', 'off') and\n   is_state('input_boolean.bay3_helper',
-          'off') and\n   is_state('input_boolean.bay4_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id: light.highbay_3
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay3_helper
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_4
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_3
   mode: single
 - id: bay4_booking_start
   alias: Bay 4 Booking - START
-  description: '7 min before booking: turn on highbay 4 and common lights (~5 min
-    real-world lead time). Night mode: also turns on neighbour highbays 3 and 5.
-
-    '
+  description: '7 min before booking: turn on highbay 4 + bay-4 helper (if not blocked).
+    Neighbour highbays handled by the night-neighbour automation; common lights by
+    door-open/occupancy.'
   triggers:
   - trigger: calendar
     event: start
@@ -326,93 +227,59 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_4
-  - action: light.turn_on
-    target:
-      entity_id:
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
-  - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
-        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
-        - as_timestamp(now())) < 1800) }}"
-    then:
-    - action: light.turn_on
-      target:
-        entity_id:
-        - light.highbay_3
-        - light.highbay_5
   mode: single
 - id: bay4_booking_end
   alias: Bay 4 Booking - END
   description: '5 min after booking: turn off highbay 4 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-
-    '
+    Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
   - trigger: calendar
     event: end
     entity_id: calendar.lane_4_run_up_net
     offset: 0:05:00
   actions:
-  - condition: template
-    value_template: '{{ is_state(''calendar.lane_4_run_up_net'', ''off'') }}'
+  - condition: state
+    entity_id: calendar.lane_4_run_up_net
+    state: 'off'
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay4_helper
   - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
-        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    - condition: sun
+      after: sunset
+      after_offset: -00:30:00
     then:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_4
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-    else:
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay2_helper', 'off') and\n   is_state('input_boolean.bay3_helper',
-          'off') and\n   is_state('input_boolean.bay4_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id: light.highbay_3
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay3_helper
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_4
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay4_helper', 'off') and\n   is_state('input_boolean.bay5_helper',
-          'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_5
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_4
   mode: single
 - id: bay5_booking_start
   alias: Bay 5 Booking - START
-  description: '7 min before booking: turn on highbay 5 and common lights (~5 min
-    real-world lead time). Night mode: also turns on neighbour highbay 4.
-
-    '
+  description: '7 min before booking: turn on highbay 5 + bay-5 helper (if not blocked).
+    Neighbour highbays handled by the night-neighbour automation; common lights by
+    door-open/occupancy.'
   triggers:
   - trigger: calendar
     event: start
@@ -429,76 +296,53 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_5
-  - action: light.turn_on
-    target:
-      entity_id:
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
-  - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
-        'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
-        - as_timestamp(now())) < 1800) }}"
-    then:
-    - action: light.turn_on
-      target:
-        entity_id: light.highbay_4
   mode: single
 - id: bay5_booking_end
   alias: Bay 5 Booking - END
   description: '5 min after booking: turn off highbay 5 (neighbour-aware at night).
-    Common lights off only when all bays empty (day mode only).
-
-    '
+    Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
   - trigger: calendar
     event: end
     entity_id: calendar.lane_5_run_up_net
     offset: 0:05:00
   actions:
-  - condition: template
-    value_template: '{{ is_state(''calendar.lane_5_run_up_net'', ''off'') }}'
+  - condition: state
+    entity_id: calendar.lane_5_run_up_net
+    state: 'off'
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay5_helper
   - if:
-    - condition: template
-      value_template: "{{ is_state('sun.sun', 'above_horizon') and\n   (as_timestamp(state_attr('sun.sun',
-        'next_setting')) - as_timestamp(now())) > 1800 }}"
+    - condition: sun
+      after: sunset
+      after_offset: -00:30:00
     then:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_5
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-          'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
-      then:
-      - action: light.turn_off
-        target:
-          entity_id:
-          - light.inside_wall_lights
-          - light.fluro_x_4
-          - light.mezzanine_wall_lights
-    else:
-    - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-          'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay3_helper
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_4
     - if:
-      - condition: template
-        value_template: "{{ is_state('input_boolean.bay4_helper', 'off') and\n   is_state('input_boolean.bay5_helper',
-          'off') }}"
+      - condition: state
+        entity_id:
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+        state: 'off'
       then:
       - action: light.turn_off
         target:
           entity_id: light.highbay_5
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_5
   mode: single
 - id: '1773291498207'
   alias: Booking BAY1 Access - Webhook
@@ -523,44 +367,6 @@
     metadata: {}
     target:
       entity_id: input_boolean.bay1_helper
-    data: {}
-  mode: single
-- id: '1779256315851'
-  alias: Lights ON Nobody There
-  description: ''
-  triggers:
-  - trigger: numeric_state
-    entity_id:
-    - sensor.main_occupancy_probability
-    for:
-      hours: 1
-      minutes: 0
-      seconds: 0
-    below: 30
-  conditions:
-  - condition: state
-    entity_id:
-    - light.office_downlights
-    - light.fluro_x_4
-    - light.inside_wall_lights
-    - light.mezzanine_wall_lights
-    - light.outside_wall_lights
-    - light.exhaust_fan_1
-    - light.exhaust_fan_2
-    - light.highbay_1
-    - light.highbay_2
-    - light.highbay_3
-    - light.highbay_4
-    - light.highbay_5
-    state:
-    - 'on'
-    for:
-      hours: 1
-      minutes: 0
-      seconds: 0
-  actions:
-  - action: script.notify_script
-    metadata: {}
     data: {}
   mode: single
 - id: auto_git_push
@@ -655,11 +461,10 @@
         entity_id: light.highbay_4
   mode: single
 - id: night_staggered_shutdown
-  alias: Night - Staggered Shutdown
-  description: 'When all 5 bay helpers go off after dark: cut all highbays, then bring
-    highbay 3 back on as residual safety light.
-
-    '
+  alias: Night - All Off + Highbay 3 Residual
+  description: 'When all 5 bay helpers are off after dark: turn off highbays 1/2/4/5
+    and keep highbay 3 on as the residual safety light while customers pack up. Seamless
+    handover, no dark gap. (Was Night - Staggered Shutdown.)'
   triggers:
   - trigger: state
     entity_id:
@@ -670,20 +475,23 @@
     - input_boolean.bay5_helper
     to: 'off'
   conditions:
+  - condition: sun
+    after: sunset
+    after_offset: -00:30:00
   - condition: state
-    entity_id: sun.sun
-    state: below_horizon
-  - condition: template
-    value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-      'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-      'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+    entity_id:
+    - input_boolean.bay1_helper
+    - input_boolean.bay2_helper
+    - input_boolean.bay3_helper
+    - input_boolean.bay4_helper
+    - input_boolean.bay5_helper
+    state: 'off'
   actions:
   - action: light.turn_off
     target:
       entity_id:
       - light.highbay_1
       - light.highbay_2
-      - light.highbay_3
       - light.highbay_4
       - light.highbay_5
   - action: light.turn_on
@@ -692,22 +500,30 @@
   mode: single
 - id: night_highbay3_off
   alias: Night - Highbay 3 Residual Off
-  description: 'After dark, all bookings done: turn off residual highbay 3 when occupancy
-    drops below 35%.
-
-    '
+  description: After dark with no active bookings, turn off residual highbay 3 once
+    occupancy drops below the configured threshold. Re-checking (threshold-cross +
+    every 5 min) so an already-empty building is always caught.
   triggers:
   - trigger: numeric_state
     entity_id: sensor.main_occupancy_probability
-    below: 40
+    below: input_number.lighting_occupancy_threshold
+  - trigger: time_pattern
+    minutes: /5
   conditions:
+  - condition: sun
+    after: sunset
+    after_offset: -00:30:00
   - condition: state
-    entity_id: sun.sun
-    state: below_horizon
-  - condition: template
-    value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-      'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-      'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
+    entity_id:
+    - input_boolean.bay1_helper
+    - input_boolean.bay2_helper
+    - input_boolean.bay3_helper
+    - input_boolean.bay4_helper
+    - input_boolean.bay5_helper
+    state: 'off'
+  - condition: numeric_state
+    entity_id: sensor.main_occupancy_probability
+    below: input_number.lighting_occupancy_threshold
   - condition: state
     entity_id: light.highbay_3
     state: 'on'
@@ -715,79 +531,6 @@
   - action: light.turn_off
     target:
       entity_id: light.highbay_3
-  mode: single
-- id: night_common_lights_occupancy_off
-  alias: Night - Common Lights Occupancy Off
-  description: 'After dark, all bookings done: turn off common lights when occupancy
-    stays below 11% for 1 minute.
-
-    '
-  triggers:
-  - trigger: numeric_state
-    entity_id: sensor.main_occupancy_probability
-    below: 40
-    for:
-      minutes: 1
-  conditions:
-  - condition: state
-    entity_id: sun.sun
-    state: below_horizon
-  - condition: template
-    value_template: "{{ is_state('input_boolean.bay1_helper', 'off') and\n   is_state('input_boolean.bay2_helper',
-      'off') and\n   is_state('input_boolean.bay3_helper', 'off') and\n   is_state('input_boolean.bay4_helper',
-      'off') and\n   is_state('input_boolean.bay5_helper', 'off') }}"
-  actions:
-  - action: light.turn_off
-    target:
-      entity_id:
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
-  mode: single
-- id: night_common_lights_motion_on
-  alias: Night - Common Lights On (Entry Motion)
-  description: 'After dark: turn on common lights when Pier Facing Entry CCTV detects
-    motion (roller door opening etc).
-
-    '
-  triggers:
-  - trigger: state
-    entity_id: binary_sensor.pier_facing_entry_cctv_motion
-    to: 'on'
-  conditions:
-  - condition: template
-    value_template: "{{ is_state('sun.sun', 'below_horizon') or\n   (is_state('sun.sun',
-      'above_horizon') and\n    (as_timestamp(state_attr('sun.sun', 'next_setting'))
-      - as_timestamp(now())) < 1800) }}"
-  actions:
-  - action: light.turn_on
-    target:
-      entity_id:
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
-  mode: single
-- id: fallback_1030pm
-  alias: Fallback - All Lights Off at 10:30pm
-  description: 'Hard fallback: force off all highbays and common lights at 10:30pm
-    regardless of booking state.
-
-    '
-  triggers:
-  - trigger: time
-    at: '22:30:00'
-  actions:
-  - action: light.turn_off
-    target:
-      entity_id:
-      - light.highbay_1
-      - light.highbay_2
-      - light.highbay_3
-      - light.highbay_4
-      - light.highbay_5
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
   mode: single
 - id: bay1_code_activate
   alias: Bay 1 - Door Code Activate
@@ -1553,3 +1296,233 @@
           entity_id: light.highbay_4
   mode: parallel
   max: 5
+- id: '1780149350644'
+  alias: Common Lights - On (Front Door Opened)
+  description: 'Front door unlocked (booking code entry / exit button) -> turn on
+    common lights. Primary arrival trigger; occupancy>threshold is the backstop. NOTE:
+    assumes a DS3 code entry surfaces as lock.front_door_lock -> unlocked; verify
+    on-site.'
+  triggers:
+  - trigger: state
+    entity_id: lock.front_door_lock
+    to: unlocked
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: '1780149352883'
+  alias: Common Lights - On (Occupancy Rises)
+  description: Occupancy rises above the configured threshold -> ensure common lights
+    on. Backstop to door-open arrival trigger.
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.main_occupancy_probability
+    above: input_number.lighting_occupancy_threshold
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: '1780149356921'
+  alias: Common Lights - Off (Empty + No Booking)
+  description: Occupancy at/below threshold AND no active booking -> turn off common
+    lights. Re-checking (debounced threshold-cross + every 5 min) catches an already-empty
+    building. Booking-active guard prevents mid-session darkness.
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.main_occupancy_probability
+    below: input_number.lighting_occupancy_threshold
+    for:
+      minutes: '{{ states(''input_number.lighting_common_off_debounce_min'') | int(4)
+        }}'
+  - trigger: time_pattern
+    minutes: /5
+  conditions:
+  - condition: numeric_state
+    entity_id: sensor.main_occupancy_probability
+    below: input_number.lighting_occupancy_threshold
+  - condition: state
+    entity_id:
+    - calendar.lane_1_bowling_machine
+    - calendar.lane_2_bowling_machine
+    - calendar.lane_3_truman_or_bowling_machine
+    - calendar.lane_4_run_up_net
+    - calendar.lane_5_run_up_net
+    state: 'off'
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: '1780149360935'
+  alias: Lighting - End-of-Day Hard Off (after last booking)
+  description: Configurable delay after a booking ends with no active booking -> force
+    all highbays + common lights off. Time-based backstop (not occupancy-gated) so
+    lights can't be stranded on.
+  triggers:
+  - trigger: state
+    entity_id:
+    - calendar.lane_1_bowling_machine
+    - calendar.lane_2_bowling_machine
+    - calendar.lane_3_truman_or_bowling_machine
+    - calendar.lane_4_run_up_net
+    - calendar.lane_5_run_up_net
+    to: 'off'
+    for:
+      minutes: '{{ states(''input_number.lighting_endofday_delay_min'') | int(30)
+        }}'
+  conditions:
+  - condition: state
+    entity_id:
+    - calendar.lane_1_bowling_machine
+    - calendar.lane_2_bowling_machine
+    - calendar.lane_3_truman_or_bowling_machine
+    - calendar.lane_4_run_up_net
+    - calendar.lane_5_run_up_net
+    state: 'off'
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.highbay_1
+      - light.highbay_2
+      - light.highbay_3
+      - light.highbay_4
+      - light.highbay_5
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: '1780149364218'
+  alias: Lighting - Absolute All-Off Catch-All
+  description: 'Absolute backstop: at the configured catch-all time (default 23:00),
+    force all highbays + common lights off regardless of state. Covers zero-booking
+    days and any night the dynamic hard-off did not arm.'
+  triggers:
+  - trigger: time
+    at: input_datetime.lighting_hard_off_catchall
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.highbay_1
+      - light.highbay_2
+      - light.highbay_3
+      - light.highbay_4
+      - light.highbay_5
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+  mode: single
+- id: '1780149365937'
+  alias: Office Lights - Scheduled Off Sweep
+  description: At the three configured times (default 18:00/20:00/22:00) turn off
+    office downlights - catches staff leaving them on. Default hard-off (no occupancy
+    guard; binary_sensor.pier_facing_office_all_occupancy available if a guard is
+    wanted later).
+  triggers:
+  - trigger: time
+    at: input_datetime.office_off_1
+  - trigger: time
+    at: input_datetime.office_off_2
+  - trigger: time
+    at: input_datetime.office_off_3
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id: light.office_downlights
+  mode: single
+- id: '1780149372942'
+  alias: Exterior Lights - Manage (Stay On / Off)
+  description: 'Every 15 min: keep exterior on while a booking is active and it''s
+    dark; turn exterior off when no booking is active (~15 min departure buffer).
+    Only acts in the dark / when already on.'
+  triggers:
+  - trigger: time_pattern
+    minutes: /15
+  actions:
+  - choose:
+    - conditions:
+      - condition: sun
+        after: sunset
+      - condition: or
+        conditions:
+        - condition: state
+          entity_id: calendar.lane_1_bowling_machine
+          state: 'on'
+        - condition: state
+          entity_id: calendar.lane_2_bowling_machine
+          state: 'on'
+        - condition: state
+          entity_id: calendar.lane_3_truman_or_bowling_machine
+          state: 'on'
+        - condition: state
+          entity_id: calendar.lane_4_run_up_net
+          state: 'on'
+        - condition: state
+          entity_id: calendar.lane_5_run_up_net
+          state: 'on'
+      sequence:
+      - action: light.turn_on
+        target:
+          entity_id: light.outside_wall_lights
+    - conditions:
+      - condition: state
+        entity_id:
+        - calendar.lane_1_bowling_machine
+        - calendar.lane_2_bowling_machine
+        - calendar.lane_3_truman_or_bowling_machine
+        - calendar.lane_4_run_up_net
+        - calendar.lane_5_run_up_net
+        state: 'off'
+      - condition: state
+        entity_id: light.outside_wall_lights
+        state: 'on'
+      sequence:
+      - action: light.turn_off
+        target:
+          entity_id: light.outside_wall_lights
+  mode: single
+- id: '1780149384391'
+  alias: Exterior Lights - On (Before Booking, Dark Only)
+  description: 12 min before any booking start, if dark (sun below horizon), turn
+    on the outside wall lights.
+  triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_1_bowling_machine
+    offset: -0:12:00
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_2_bowling_machine
+    offset: -0:12:00
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    offset: -0:12:00
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_4_run_up_net
+    offset: -0:12:00
+  - trigger: calendar
+    event: start
+    entity_id: calendar.lane_5_run_up_net
+    offset: -0:12:00
+  conditions:
+  - condition: sun
+    after: sunset
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.outside_wall_lights
+  mode: single
