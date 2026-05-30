@@ -68,6 +68,35 @@ activate aborts silently (no alert). Worth adding an admin alert on slot exhaust
 
 ---
 
+## Lighting automations (rebuilt 2026-05-30, commit `9ce0b24`)
+
+Full rebuild per `../cricket/home-assistant/SPEC_HA_LIGHTING_AUTOMATIONS.md` (that doc is the
+deployment record). Shape:
+
+- **Bay highbays:** `bay{1-5}_booking_start` turns on the bay highbay + helper (T−7m, if not
+  blocked); `bay{1-5}_booking_end` turns off neighbour-aware (T+5m), using native
+  `condition: sun after sunset offset -30m` for the night check. **Highbay 3 is reserved at
+  night** (never turned off by booking_end) — it's the residual.
+- **Common lights** (`inside_wall_lights`, `fluro_x_4`, `mezzanine_wall_lights`): ON via front-
+  door unlock OR occupancy>threshold; OFF when occupancy ≤threshold AND no active booking
+  (re-checking: debounced threshold-cross + `/5` time-pattern, so the already-empty case is
+  caught). Booking-active guard prevents mid-session darkness.
+- **Night residual:** "Night - All Off + Highbay 3 Residual" (reworked `night_staggered_shutdown`)
+  drops hb1/2/4/5 + turns hb3 ON when all helpers off after dark; "Night - Highbay 3 Residual
+  Off" turns hb3 off once occupancy <threshold (re-checking).
+- **End-of-day:** dynamic hard-off (configurable delay after last booking) + absolute 23:00
+  catch-all. **Office:** off-sweep at 18/20/22. **Exterior:** on −12m before booking (dark only)
+  + `/15` manage (stay-on/off).
+- **Tunable values** live in helpers (Settings → Helpers, no redeploy):
+  `input_number.lighting_occupancy_threshold` / `_common_off_debounce_min` / `_endofday_delay_min`,
+  `input_datetime.lighting_hard_off_catchall` / `office_off_1..3`. Calendar-trigger offsets stay
+  static (HA can't reference helpers in trigger offsets).
+- **On-site calibration still pending** (see the spec): 40% occupancy threshold, the door-open→
+  common-lights assumption (`lock.front_door_lock`→unlocked on a code entry), exterior timing,
+  residual handover on a real night booking.
+
+---
+
 ## Key files
 
 | File | Purpose |
