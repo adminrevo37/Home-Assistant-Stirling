@@ -77,14 +77,19 @@ activate aborts silently (no alert). Worth adding an admin alert on slot exhaust
 | `c4_auth.py` | Shared Control4 token (expiry-aware) |
 | `c4_manage_codes.py` | Program/clear DS3 door codes |
 | `c4_entry_log.py` | Poll DS3 for code usage → CSV |
-| `c4_door_visual.py` | Roller-door visual state sensor (PIL) |
+| `c4_door_visual.py` | Roller-door visual state sensor (PIL) — *to be retired, see roller-door spec* |
+| `c4_item_dump.py` | List all Control4 Director items to stdout (`shell_command.c4_item_dump`) — diagnostic |
 | `git_pull.sh` / `git_push.sh` | Deploy from / backup to GitHub `main` |
-| `c4_token_cache.txt` | Cached director JWT (auto-managed; do not edit) |
+| `c4_token_cache.txt` | Cached director JWT (auto-managed, **gitignored**; do not edit/commit) |
 
 ## Gotchas
 - `.env.local`/dev: N/A here (that warning is Krickora). This repo runs live on the box.
 - Windows clone: `core.fileMode false` is set so exec-bit noise doesn't pollute diffs.
   Scripts run via `bash`/`python3 <path>`, so the exec bit is irrelevant.
+- **Runtime state + the token are gitignored** (`c4_token_cache.txt`, `c4_door_visual_state.json`,
+  `c4_entry_log_state.json`, `www/` artifacts). Reason: `git_pull` does `reset --hard`, which would
+  otherwise overwrite the LIVE token/baselines with stale committed copies each deploy. They
+  self-heal (missing token → clean re-auth; state files → defaults). Don't re-add them to git.
 - `ha_token.txt` (HA long-lived token) still not created — `c4_entry_log.py`'s
   "Code Used" column falls back to `core.restore_state` until it exists.
 - HA changes via MCP edit `automations.yaml` on the box directly; they reach GitHub
