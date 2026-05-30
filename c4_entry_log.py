@@ -26,7 +26,11 @@ import asyncio
 import json
 import csv
 import os
+import sys
+import traceback
 from datetime import datetime
+
+import c4_auth  # shared, expiry-aware token management
 
 DS3_ITEM_ID = 39
 LOG_FILE = '/config/www/entry_log.csv'
@@ -148,14 +152,8 @@ def get_slot_code(slot):
 async def poll():
     import aiohttp
 
-    # Load credentials
-    with open('/config/.storage/core.config_entries') as f:
-        config = json.load(f)
-    c4 = next(e for e in config['data']['entries'] if e['domain'] == 'control4')
-    host = c4['data']['host']
-
-    with open('/config/c4_token_cache.txt') as f:
-        token = f.read().strip()
+    # Expiry-aware token (re-auths automatically if cache is missing/expired)
+    host, token = await c4_auth.get_valid_token_and_host()
 
     headers = {"Authorization": f"Bearer {token}"}
     url = f"https://{host}/api/v1/items/{DS3_ITEM_ID}/variables"
@@ -214,4 +212,15 @@ async def poll():
         print(f"No new entry. Last slot={last_id}")
 
 
-asyncio.run(poll())
+if __name__ == '__main__':
+    try:
+        asyncio.run(poll())
+    except Exception as e:
+        # Log one clean line instead of crashing with exit 1 every minute
+        # (the previous behaviour flooded home-assistant.log). A persistent
+        # failure is still visible here in /config/www/entry_log_debug.txt.
+        print(f"{datetime.now().isoformat()} poll() failed: {e}")
+        traceback.print_exc()
+        # Exit 0 so HA's shell_command doesn't flag a recurring ERROR; the
+        # message above remains in the debug log for diagnosis.
+        sys.exit(0)

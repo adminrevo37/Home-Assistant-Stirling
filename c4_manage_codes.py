@@ -23,35 +23,14 @@ import sys
 import aiohttp
 from datetime import datetime
 
+import c4_auth  # shared, expiry-aware token management
+
 DS3_ITEM_ID = 39
 DIRECTOR_HOST = None  # loaded from config
 
-
-async def get_token_and_host():
-    """Load host from HA config entries and token from cache."""
-    with open('/config/.storage/core.config_entries') as f:
-        config = json.load(f)
-    c4 = next(e for e in config['data']['entries'] if e['domain'] == 'control4')
-    host = c4['data']['host']
-
-    try:
-        with open('/config/c4_token_cache.txt') as f:
-            token = f.read().strip()
-    except FileNotFoundError:
-        # Fall back to fresh auth if cache missing
-        from pyControl4.account import C4Account
-        username = c4['data']['username']
-        password = c4['data']['password']
-        controller_id = c4['data']['controller_unique_id']
-        async with aiohttp.ClientSession() as cloud:
-            account = C4Account(username, password, cloud)
-            await account.get_account_bearer_token()
-            result = await account.get_director_bearer_token(controller_id)
-            token = result['token']
-        with open('/config/c4_token_cache.txt', 'w') as f:
-            f.write(token)
-
-    return host, token
+# Token loading + expiry-aware refresh lives in c4_auth.get_valid_token_and_host().
+# (Previously a local get_token_and_host() re-authed only on a MISSING cache file,
+#  never on an EXPIRED token — see c4_auth.py for the full explanation.)
 
 
 async def set_code(host, token, slot, code, name):
@@ -124,7 +103,7 @@ async def main():
     action = sys.argv[1].lower()
     slot = sys.argv[2]
 
-    host, token = await get_token_and_host()
+    host, token = await c4_auth.get_valid_token_and_host()
 
     if action == 'set':
         if len(sys.argv) < 5:
@@ -133,10 +112,18 @@ async def main():
         code = sys.argv[3].replace(' ', '')  # strip spaces from code
         name = ' '.join(sys.argv[4:])        # name may have spaces
         success = await set_code(host, token, slot, code, name)
+        if not success:
+            # Token may have been revoked/invalidated server-side — force a
+            # fresh token and retry once before giving up.
+            host, token = await c4_auth.get_valid_token_and_host(force_refresh=True)
+            success = await set_code(host, token, slot, code, name)
         sys.exit(0 if success else 1)
 
     elif action == 'clear':
         success = await clear_code(host, token, slot)
+        if not success:
+            host, token = await c4_auth.get_valid_token_and_host(force_refresh=True)
+            success = await clear_code(host, token, slot)
         sys.exit(0 if success else 1)
 
     else:
