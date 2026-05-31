@@ -41,6 +41,16 @@ branches were consolidated to `main`; `master` retired. Safety tag:
 
 ## Control4 door codes (token auto-refresh)
 
+> **⚠️ 2026-05-31 — DOOR-CODE PROGRAMMING DOES NOT WORK AND CANNOT VIA THIS API.**
+> On-site test + live API probe proved the Control4 **local Director REST API exposes no
+> add-access-code command**. `SET_USER_CODE` to the DS3 (item 39) returns `result=1` but is a
+> no-op; the keypad rejects every API-written code (a known app-managed staff code works fine).
+> Access agent (87) is empty over REST; lock (93) only does LOCK/UNLOCK/TOGGLE. Codes are managed
+> only via the Control4 app/cloud. **`c4_manage_codes.py` is effectively dead** until the access
+> strategy changes (HA-unlock-on-booking, a HA-programmable smart lock, or the C4 cloud API). Full
+> analysis + options: `../cricket/home-assistant/DIAG_DOOR_CODE_KEYPAD_REJECT_2026-05-31.md`.
+> The token/auth path below is still healthy and is shared with the entry logger.
+
 The front-door Control4 DS3 (item 39, `192.168.1.107`, self-signed cert) is reached
 only from this box via `pyControl4`. Director bearer tokens are **~24h JWTs**.
 
