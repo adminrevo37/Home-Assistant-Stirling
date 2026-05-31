@@ -25,7 +25,22 @@ from datetime import datetime
 
 import c4_auth  # shared, expiry-aware token management
 
-DS3_ITEM_ID = 39
+# Target Control4 item for SET_USER_CODE / DELETE_USER_CODE.
+#   39 = DS3 Door Station proxy (lua_gen) — ORIGINAL target. Accepts the command
+#        (result=1) but the physical keypad REJECTS codes written here: the DS3
+#        station only relays code-entry events, it is not the code authority.
+#   93 = "DS2 Lock - Front Door" (lock driver) — owns the keypad's user-code
+#        table natively. Under test 2026-05-31 to fix the keypad-reject bug.
+# Read from /config/c4_code_item.txt if present (1 line, an item id), else 39.
+def _target_item():
+    try:
+        with open('/config/c4_code_item.txt') as _f:
+            return int(_f.read().strip())
+    except Exception:
+        return 39
+
+
+DS3_ITEM_ID = _target_item()
 DIRECTOR_HOST = None  # loaded from config
 
 # Token loading + expiry-aware refresh lives in c4_auth.get_valid_token_and_host().
@@ -55,7 +70,7 @@ async def set_code(host, token, slot, code, name):
                           timeout=aiohttp.ClientTimeout(total=10)) as r:
             body = await r.json(content_type=None)
             result = body.get('result', -1)
-            print(f"SET slot={slot} code={code} name={name} => status={r.status} result={result}")
+            print(f"SET item={DS3_ITEM_ID} slot={slot} code={code} name={name} => status={r.status} result={result}")
             return r.status == 200
 
 
