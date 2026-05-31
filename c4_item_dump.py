@@ -53,5 +53,32 @@ async def main():
     for it in sorted(items, key=lambda x: str(x.get('type', ''))):
         print(line(it))
 
+    # --- Door-code variable probe (read-only) -------------------------------
+    # Dumps live variables for the items that could hold the DS3 keypad's
+    # user-code table, to find WHERE codes must be written. Context: codes
+    # pushed via SET_USER_CODE to the DS3 station (39) return result=1 but the
+    # keypad rejects them. Candidates: Access agent (87), DS2 Lock proxy (93),
+    # door-lock relay (94). GET-only — never writes a code.
+    PROBE_IDS = [39, 87, 93, 94]
+    async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=False)) as s2:
+        for pid in PROBE_IDS:
+            print(f"\n=== ITEM {pid} VARIABLES ===")
+            try:
+                async with s2.get(
+                        f"https://{host}/api/v1/items/{pid}/variables",
+                        headers={"Authorization": f"Bearer {token}"},
+                        timeout=aiohttp.ClientTimeout(total=8)) as r:
+                    body = await r.json(content_type=None)
+                if isinstance(body, list):
+                    if not body:
+                        print("  (no variables)")
+                    for v in body:
+                        print(f"  varName={v.get('varName')!r}  value={v.get('value')!r}")
+                else:
+                    print(f"  status={r.status} body={body}")
+            except Exception as e:
+                print(f"  <error: {e}>")
+
 
 asyncio.run(main())
