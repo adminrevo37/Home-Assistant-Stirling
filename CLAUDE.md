@@ -107,6 +107,21 @@ deployment record). Shape:
 
 ---
 
+## Zigbee (Zigbee2MQTT)
+
+Zigbee runs on **Zigbee2MQTT** (bridge v2.10.1, USB antenna coordinator `0xd878f0fffe6815f9`), via
+the MQTT integration. Pair from HA by toggling `switch.zigbee2mqtt_bridge_permit_join` on, putting the
+device in pairing mode, then toggling it off. Rename via MQTT: publish to
+`zigbee2mqtt/bridge/request/device/rename` with `{"from":"<ieee>","to":"<name>"}` (updates the Z2M
+friendly_name + MQTT topic; pre-existing HA entity_ids keep their join-time ieee slug).
+
+Paired devices (2026-05-31):
+- **roller_door_contact** — Aqara door/window sensor T1 (`0x54ef4410014ae72a`) → `binary_sensor.roller_door_contact` (roller-door spec).
+- **Plug 1** — Tuya smart plug w/ power monitoring (`0xa4c138074803a9a9`) → `switch.0xa4c138074803a9a9` + power/current/voltage/energy sensors. Registered + named only; **not yet assigned a purpose or automation** (parked 2026-05-31). Mains-powered → also a Zigbee router.
+- **Plug 2** — Tuya smart plug w/ power monitoring (`0xa4c138ba345696ae`) → `switch.0xa4c138ba345696ae` + same sensors. Same parked status. Entity_ids still ieee-based (tidy to `plug_2` later if wanted).
+
+---
+
 ## Key files
 
 | File | Purpose |
