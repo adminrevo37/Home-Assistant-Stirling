@@ -53,34 +53,15 @@ async def main():
     for it in sorted(items, key=lambda x: str(x.get('type', ''))):
         print(line(it))
 
-    # --- Access-agent / door-code API probe (read-only) ---------------------
-    # On-site test 2026-05-31 ruled out the DS3 station (39) AND the lock driver
-    # (93) as the code authority — a code accepted by SET_USER_CODE on either is
-    # still rejected at the keypad, while a known staff code (managed in the
-    # Control4 app) works. The keypad validates against the Access agent (87).
-    # This dumps the API surface (detail/commands/bindings/variables) of the
-    # access-relevant items so we can find the real add-access-code command.
-    # GET-only — never writes a code or fires a command.
-    PROBE_IDS = [87, 40, 42, 39, 92, 93]
-    ENDPOINTS = ['', '/commands', '/bindings', '/variables']
-    headers = {"Authorization": f"Bearer {token}"}
-    async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=False)) as s2:
-        for pid in PROBE_IDS:
-            print(f"\n{'='*60}\n=== ITEM {pid} API PROBE ===\n{'='*60}")
-            for ep in ENDPOINTS:
-                url = f"https://{host}/api/v1/items/{pid}{ep}"
-                print(f"\n--- GET /items/{pid}{ep or ' (detail)'} ---")
-                try:
-                    async with s2.get(url, headers=headers,
-                                      timeout=aiohttp.ClientTimeout(total=8)) as r:
-                        body = await r.json(content_type=None)
-                    text = json.dumps(body, indent=2, default=str)
-                    if len(text) > 4000:
-                        text = text[:4000] + "\n  ...[truncated]"
-                    print(f"  status={r.status}\n{text}")
-                except Exception as e:
-                    print(f"  <error: {e}>")
+    # NOTE (2026-05-31): a deeper per-item API probe (detail/commands/bindings/
+    # variables for the access-relevant items 87/40/42/39/92/93) was run from
+    # here during the door-code-keypad-reject investigation. It proved the
+    # Director REST API exposes NO add-access-code command (DS3 commands =
+    # Restart/Send-Snapshot only; Access agent 87 = empty; lock 93 = LOCK/
+    # UNLOCK/TOGGLE only). Findings recorded in
+    # cricket/home-assistant/DIAG_DOOR_CODE_KEYPAD_REJECT_2026-05-31.md.
+    # Probe code removed afterwards (96KB output); recover from git history
+    # (commit 7149309) if it needs re-running.
 
 
 asyncio.run(main())
