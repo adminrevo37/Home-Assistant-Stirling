@@ -44,3 +44,6 @@ frontend:
   port: 8099
 homeassistant:
   enabled: true
+devices:
+  '0x54ef4410014ae72a':
+    friendly_name: roller_door_contact

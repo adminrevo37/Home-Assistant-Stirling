@@ -1167,13 +1167,16 @@
   mode: single
 - id: roller_door_opened_notify
   alias: Roller Door - Notify Staff on Open
-  description: 'Immediately notifies all staff when the roller door opens.
-
-    '
+  description: Notifies staff when the front roller door opens. Rewired 2026-05-31
+    from the vision boolean to the Zigbee contact sensor (binary_sensor.roller_door_contact)
+    — clean signal, ends the vision false-positives.
   triggers:
   - trigger: state
-    entity_id: input_boolean.roller_door_visual_open
+    entity_id: binary_sensor.roller_door_contact
+    from: 'off'
     to: 'on'
+    for: 00:00:03
+  conditions: []
   actions:
   - action: notify.notify
     data:
@@ -1525,4 +1528,57 @@
   - action: light.turn_on
     target:
       entity_id: light.outside_wall_lights
+  mode: single
+- id: temp_clear_keypad_test_slot12
+  alias: TEMP - Clear keypad test code slot 12
+  description: 'One-shot: clears the manual keypad-test code from DS3 slot 12 at 17:23
+    AWST, then disables itself. Created for on-site door-code test 2026-05-31.'
+  triggers:
+  - trigger: time
+    at: '17:23:00'
+  conditions: []
+  actions:
+  - action: shell_command.c4_clear_code
+    data:
+      slot: '12'
+  - action: persistent_notification.create
+    data:
+      title: Keypad test code cleared
+      message: Slot 12 (code 8164) auto-cleared from the DS3 at 17:23. This temp automation
+        has disabled itself.
+  - action: automation.turn_off
+    target:
+      entity_id: automation.temp_clear_keypad_test_code_slot_12
+  mode: single
+- id: roller_door_failed_to_close
+  alias: Roller Door - Failed to Close Alert
+  description: 'Fault alert: if the contact sensor stays OPEN longer than a full normal
+    auto-close cycle (~67s = 18s open + 30s ACLS dwell + 18s close), the operator''s
+    auto-close likely failed (obstruction / beam fault / power). Threshold 110s. Snapshot
+    + notify. Suppressed in service/hold-open mode. Built 2026-05-31 to replace the
+    retired vision-based auto-close (operator now closes itself via ACLS; HA only
+    monitors).'
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.roller_door_contact
+    to: 'on'
+    for: 00:01:50
+  conditions:
+  - condition: state
+    entity_id: input_boolean.door_service_mode
+    state: 'off'
+  actions:
+  - action: camera.snapshot
+    target:
+      entity_id: camera.pier_facing_entry
+    data:
+      filename: /config/www/door_alert_snapshot.jpg
+  - delay: 00:00:02
+  - action: notify.notify
+    data:
+      title: "\U0001F6A8 Roller Door Failed to Close"
+      message: The front roller door has been open ~2 min — the operator auto-close
+        may have failed (obstruction, safety-beam fault, or power). Please check entry.
+      data:
+        image: /local/door_alert_snapshot.jpg
   mode: single
