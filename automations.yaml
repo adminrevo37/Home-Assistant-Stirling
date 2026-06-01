@@ -1,13 +1,13 @@
 - id: bay1_booking_start
   alias: Bay 1 Booking - START
-  description: '7 min before booking: turn on highbay 1 + bay-1 helper (if not blocked).
+  description: '11 min before booking: turn on highbay 1 + bay-1 helper (if not blocked).
     Neighbour highbays handled by the night-neighbour automation; common lights by
     door-open/occupancy.'
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_1_bowling_machine
-    offset: -0:07:00
+    offset: -0:11:00
+    platform: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay1_blocked
@@ -22,13 +22,13 @@
   mode: single
 - id: bay1_booking_end
   alias: Bay 1 Booking - END
-  description: '5 min after booking: turn off highbay 1 (neighbour-aware at night).
+  description: '10 min after booking: turn off highbay 1 (neighbour-aware at night).
     Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_1_bowling_machine
-    offset: 0:05:00
+    offset: 0:10:00
+    platform: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_1_bowling_machine
@@ -69,14 +69,14 @@
   mode: single
 - id: bay2_booking_start
   alias: Bay 2 Booking - START
-  description: '7 min before booking: turn on highbay 2 + bay-2 helper (if not blocked).
+  description: '11 min before booking: turn on highbay 2 + bay-2 helper (if not blocked).
     Neighbour highbays handled by the night-neighbour automation; common lights by
     door-open/occupancy.'
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_2_bowling_machine
-    offset: -0:07:00
+    offset: -0:11:00
+    platform: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay2_blocked
@@ -91,13 +91,13 @@
   mode: single
 - id: bay2_booking_end
   alias: Bay 2 Booking - END
-  description: '5 min after booking: turn off highbay 2 (neighbour-aware at night).
+  description: '10 min after booking: turn off highbay 2 (neighbour-aware at night).
     Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_2_bowling_machine
-    offset: 0:05:00
+    offset: 0:10:00
+    platform: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_2_bowling_machine
@@ -138,14 +138,14 @@
   mode: single
 - id: bay3_booking_start
   alias: Bay 3 Booking - START
-  description: '7 min before booking: turn on highbay 3 + bay-3 helper (if not blocked).
+  description: '11 min before booking: turn on highbay 3 + bay-3 helper (if not blocked).
     Neighbour highbays handled by the night-neighbour automation; common lights by
     door-open/occupancy.'
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_3_truman_or_bowling_machine
-    offset: -0:07:00
+    offset: -0:11:00
+    platform: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay3_blocked
@@ -160,13 +160,13 @@
   mode: single
 - id: bay3_booking_end
   alias: Bay 3 Booking - END
-  description: '5 min after booking: turn off highbay 3 in daylight; at night reserve
+  description: '10 min after booking: turn off highbay 3 in daylight; at night reserve
     highbay 3 (residual) and only drop neighbours. Common lights handled separately.'
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_3_truman_or_bowling_machine
-    offset: 0:05:00
+    offset: 0:10:00
+    platform: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_3_truman_or_bowling_machine
@@ -208,14 +208,14 @@
   mode: single
 - id: bay4_booking_start
   alias: Bay 4 Booking - START
-  description: '7 min before booking: turn on highbay 4 + bay-4 helper (if not blocked).
+  description: '11 min before booking: turn on highbay 4 + bay-4 helper (if not blocked).
     Neighbour highbays handled by the night-neighbour automation; common lights by
     door-open/occupancy.'
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_4_run_up_net
-    offset: -0:07:00
+    offset: -0:11:00
+    platform: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay4_blocked
@@ -230,13 +230,13 @@
   mode: single
 - id: bay4_booking_end
   alias: Bay 4 Booking - END
-  description: '5 min after booking: turn off highbay 4 (neighbour-aware at night).
+  description: '10 min after booking: turn off highbay 4 (neighbour-aware at night).
     Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_4_run_up_net
-    offset: 0:05:00
+    offset: 0:10:00
+    platform: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_4_run_up_net
@@ -277,14 +277,14 @@
   mode: single
 - id: bay5_booking_start
   alias: Bay 5 Booking - START
-  description: '7 min before booking: turn on highbay 5 + bay-5 helper (if not blocked).
+  description: '11 min before booking: turn on highbay 5 + bay-5 helper (if not blocked).
     Neighbour highbays handled by the night-neighbour automation; common lights by
     door-open/occupancy.'
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_5_run_up_net
-    offset: -0:07:00
+    offset: -0:11:00
+    platform: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay5_blocked
@@ -299,13 +299,13 @@
   mode: single
 - id: bay5_booking_end
   alias: Bay 5 Booking - END
-  description: '5 min after booking: turn off highbay 5 (neighbour-aware at night).
+  description: '10 min after booking: turn off highbay 5 (neighbour-aware at night).
     Common lights handled separately; highbay 3 reserved as night residual.'
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_5_run_up_net
-    offset: 0:05:00
+    offset: 0:10:00
+    platform: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_5_run_up_net
@@ -1369,12 +1369,13 @@
   mode: single
 - id: '1780149360935'
   alias: Lighting - End-of-Day Hard Off (after last booking)
-  description: Configurable delay after a booking ends with no active booking -> force
-    all highbays + common lights off. Time-based backstop (not occupancy-gated) so
-    lights can't be stranded on.
+  description: 'Force all highbays + common lights off when the building is empty
+    (occupancy at/below the Lighting Occupancy threshold helper, default 40%) AND
+    no active booking. Triggers: configurable delay after a booking ends + a 5-min
+    re-check backstop. Occupancy-gated so an early-arriving coach (occupancy above
+    threshold) keeps their lights; office handled by its own sweep.'
   triggers:
-  - trigger: state
-    entity_id:
+  - entity_id:
     - calendar.lane_1_bowling_machine
     - calendar.lane_2_bowling_machine
     - calendar.lane_3_truman_or_bowling_machine
@@ -1384,6 +1385,9 @@
     for:
       minutes: '{{ states(''input_number.lighting_endofday_delay_min'') | int(30)
         }}'
+    platform: state
+  - platform: time_pattern
+    minutes: /5
   conditions:
   - condition: state
     entity_id:
@@ -1393,6 +1397,9 @@
     - calendar.lane_4_run_up_net
     - calendar.lane_5_run_up_net
     state: 'off'
+  - condition: numeric_state
+    entity_id: sensor.main_occupancy_probability
+    below: input_number.lighting_occupancy_threshold
   actions:
   - action: light.turn_off
     target:
