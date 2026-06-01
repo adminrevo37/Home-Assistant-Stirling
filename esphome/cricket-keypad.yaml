@@ -1,0 +1,118 @@
+# =============================================================================
+# Cricket Revolution - Customer Entry Keypad (Path A)
+# Hardware: Olimex ESP32-POE-ISO  +  Jaycar LA5353 (Sebury W1-C) Wiegand keypad
+# Role: read the typed PIN off the keypad and fire it to Home Assistant as an
+#       event. HA validates the PIN against the active-booking codes it already
+#       holds and opens the roller door. THIS DEVICE NEVER OPENS THE DOOR ITSELF.
+#
+# Build doc:  ../cricket/home-assistant/BUILD_KEYPAD_PATH_A_JAYCAR.md
+# Wiring:     keypad Green=D0 -> GPIO4, White=D1 -> GPIO5 (via level shifter),
+#             keypad Pink/Black GND tied to ESP32 GND (Wiegand needs a common GND).
+# Network:    Ethernet/PoE only. Wi-Fi and Bluetooth are intentionally absent
+#             (no wireless attack surface on an unstaffed access device).
+#
+# BENCH-CALIBRATION NOTE (do this tomorrow before trusting it):
+#   The on_raw log line below prints every Wiegand frame (bit count + value).
+#   Type a KNOWN code e.g. 482193# and watch the ESPHome logs:
+#     * If you see ONE 26-bit frame on '#'  -> the on_tag path carries the PIN.
+#     * If you see a 4-bit frame PER KEY    -> the on_key path collects the PIN.
+#   This config handles BOTH automatically; the log just confirms which fired.
+# =============================================================================
+
+esphome:
+  name: cricket-keypad
+  friendly_name: Cricket Keypad
+
+esp32:
+  board: esp32-poe-iso
+
+# --- Wired networking only (Olimex ESP32-POE-ISO LAN8720 PHY) ---------------
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk_mode: GPIO17_OUT
+  phy_addr: 0
+  power_pin: GPIO12
+
+logger:
+  level: INFO
+
+# --- Connection to Home Assistant (native API over Ethernet) ----------------
+# Add this device under Settings -> Devices & Services -> ESPHome in HA and
+# paste the encryption key below when prompted.
+api:
+  encryption:
+    key: "RP82A8P0w9jsTtT9B9zC+0fbtsfjyk0ahHBdzvK1DfY="
+
+ota:
+  - platform: esphome
+    password: "680c9d315ed2b54251b9133e052186e5"
+
+# Holds digits as they are typed (on_key path). 9-char cap = safety against a
+# stuck key flooding the buffer (codes are 4-8 digits).
+globals:
+  - id: pin_buffer
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+script:
+  # Single chokepoint: hand a complete typed PIN to Home Assistant, then clear.
+  - id: submit_pin
+    parameters:
+      pin: string
+    then:
+      - logger.log:
+          format: "Keypad PIN submitted to HA: %s"
+          args: [ 'pin.c_str()' ]
+      - homeassistant.event:
+          event: esphome.keypad_code
+          data_template:
+            pin: "{{ pin }}"
+          variables:
+            pin: !lambda 'return pin;'
+      - lambda: 'id(pin_buffer).clear();'
+
+  # Clears a half-typed PIN if the customer walks off mid-entry. Restarted on
+  # every keypress so a steady typist is never cut off.
+  - id: buffer_timeout
+    mode: restart
+    then:
+      - delay: 10s
+      - lambda: 'id(pin_buffer).clear();'
+
+wiegand:
+  - id: keypad
+    d0: GPIO4
+    d1: GPIO5
+
+    # Per-keypress path: most keypads in Wiegand mode send each key as a 4-bit
+    # frame. Digits 0-9 buffer; 11='#' submits; 10='*' clears.
+    on_key:
+      - lambda: |-
+          id(buffer_timeout).execute();
+          if (x >= 0 && x <= 9) {
+            id(pin_buffer) += to_string(x);
+            if (id(pin_buffer).length() > 9) id(pin_buffer).clear();
+          } else if (x == 11) {            // '#' = submit
+            if (id(pin_buffer).length() >= 4) {
+              id(submit_pin)->execute(id(pin_buffer));
+            } else {
+              id(pin_buffer).clear();
+            }
+          } else if (x == 10) {            // '*' = clear
+            id(pin_buffer).clear();
+          }
+
+    # Whole-PIN path: if THIS keypad instead sends the full PIN as one 26-bit
+    # frame on '#', it arrives here as a decimal string. Submit it directly.
+    on_tag:
+      - lambda: |-
+          id(submit_pin)->execute(x);
+
+    # Calibration aid only: prints raw frames so the bench test can confirm
+    # which path above is in use. Safe to lower to DEBUG or remove later.
+    on_raw:
+      - lambda: |-
+          ESP_LOGI("wiegand", "RAW frame: %d bits, value 0x%llx", bits, value);

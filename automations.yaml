@@ -1582,3 +1582,53 @@
       data:
         image: /local/door_alert_snapshot.jpg
   mode: single
+- id: keypad_validate_entry
+  alias: Customer Keypad - Validate Entry & Open Door
+  description: 'Customer entry keypad (Olimex ESP32-POE-ISO + Jaycar LA5353) fires
+    esphome.keypad_code with the typed PIN. Compare it against the active-booking
+    codes already held in input_text.bay{N}_code_slot_{a/b/c} (populated T-15m to
+    T+15m by the bay code activate/deactivate automations, so expiry is automatic).
+    Match -> unlock the roller door (lock.front_door_lock) + log a named entry.
+    No match -> log the failed attempt. THIS is the sole code authority; the keypad
+    never validates anything itself. See BUILD_KEYPAD_PATH_A_JAYCAR.md.'
+  triggers:
+  - trigger: event
+    event_type: esphome.keypad_code
+  variables:
+    typed: "{{ (trigger.event.data.pin | default('') | string) | regex_replace('[^0-9]',
+      '') }}"
+    match: >-
+      {% set ns = namespace(found='') %}
+      {% for n in range(1, 6) %}
+        {% for s in ['a', 'b', 'c'] %}
+          {% set val = states('input_text.bay' ~ n ~ '_code_slot_' ~ s) %}
+          {% if val and ':' in val and val.split(':', 1)[0] | trim == typed and typed != '' %}
+            {% set ns.found = n ~ '|' ~ val.split(':', 1)[1] %}
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+      {{ ns.found }}
+  actions:
+  - condition: template
+    value_template: '{{ typed | length >= 4 }}'
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ match != '''' }}'
+      sequence:
+      - action: lock.unlock
+        target:
+          entity_id: lock.front_door_lock
+      - action: logbook.log
+        data:
+          name: Keypad Entry
+          message: 'Valid code — door opened for {{ match.split(''|'')[1] }} (Bay {{
+            match.split(''|'')[0] }})'
+          entity_id: lock.front_door_lock
+    default:
+    - action: logbook.log
+      data:
+        name: Keypad Entry
+        message: 'Invalid code attempt ({{ typed | length }} digits) — door not opened'
+        entity_id: lock.front_door_lock
+  mode: single
