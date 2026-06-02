@@ -1,16 +1,16 @@
 {
     "0x54ef4410014ae72a": {
-        "contact": false,
-        "voltage": 3247,
+        "contact": true,
+        "voltage": 3249,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 9,
-        "state": "ON",
+        "state": "OFF",
         "linkquality": 72
     },
     "0xa4c138074803a9a9": {
         "energy": 0,
-        "voltage": 235,
+        "voltage": 233,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -24,7 +24,7 @@
     "0xa4c138ba345696ae": {
         "state": "ON",
         "energy": 1.02,
-        "voltage": 235,
+        "voltage": 234,
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
@@ -35,7 +35,7 @@
         "linkquality": 204
     },
     "0x54ef4410014ae8c0": {
-        "contact": false,
+        "contact": true,
         "voltage": 3097,
         "battery": 100,
         "device_temperature": 25,

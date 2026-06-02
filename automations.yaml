@@ -1787,3 +1787,44 @@
             }}%.'
   mode: queued
   max: 10
+- id: '1780396248413'
+  alias: Fire Exit Door (WEST) - Opened Alert
+  description: Immediate push to Julian + Noddy when the West fire exit opens. Live
+    CCTV (camera.pier_facing_bags_cctv) attached - on iOS pull down the notification
+    for live video; tapping opens the CONTROL dashboard CCTV section. Time-sensitive
+    so it breaks through silent/Focus. image= snapshot for Android.
+  triggers:
+  - platform: state
+    entity_id: binary_sensor.0x54ef4410014ae8c0_contact
+    from: 'off'
+    to: 'on'
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: Fire Exit Door (WEST) OPENED
+      message: Opened at {{ now().strftime('%-I:%M %p') }}. Tap for live CCTV.
+      data:
+        entity_id: camera.pier_facing_bags_cctv
+        image: /api/camera_proxy/camera.pier_facing_bags_cctv
+        url: /control-revo/control
+        clickAction: /control-revo/control
+        tag: fire-exit-west-open
+        push:
+          interruption-level: time-sensitive
+        priority: high
+        ttl: 0
+  - action: notify.mobile_app_noddy_iphone
+    data:
+      title: Fire Exit Door (WEST) OPENED
+      message: Opened at {{ now().strftime('%-I:%M %p') }}. Tap for live CCTV.
+      data:
+        entity_id: camera.pier_facing_bags_cctv
+        image: /api/camera_proxy/camera.pier_facing_bags_cctv
+        url: /control-revo/control
+        clickAction: /control-revo/control
+        tag: fire-exit-west-open
+        push:
+          interruption-level: time-sensitive
+        priority: high
+        ttl: 0
+  mode: single
