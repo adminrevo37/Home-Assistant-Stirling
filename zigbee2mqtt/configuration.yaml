@@ -51,5 +51,7 @@ devices:
     friendly_name: Plug 1
   '0xa4c138ba345696ae':
     friendly_name: Plug 2
+  '0x54ef4410014ae8c0':
+    friendly_name: Fire Exit Door (WEST)
 availability:
   enabled: true

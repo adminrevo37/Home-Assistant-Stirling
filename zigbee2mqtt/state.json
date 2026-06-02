@@ -24,7 +24,7 @@
     "0xa4c138ba345696ae": {
         "state": "ON",
         "energy": 1.02,
-        "voltage": 236,
+        "voltage": 235,
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
@@ -32,6 +32,14 @@
         "switch_type_button": "release",
         "power": 0,
         "current": 0,
-        "linkquality": 208
+        "linkquality": 204
+    },
+    "0x54ef4410014ae8c0": {
+        "contact": false,
+        "voltage": 3097,
+        "battery": 100,
+        "device_temperature": 25,
+        "power_outage_count": 11,
+        "state": "ON"
     }
 }

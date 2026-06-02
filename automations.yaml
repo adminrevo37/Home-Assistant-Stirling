@@ -1670,11 +1670,13 @@
   description: 'Notify Julian when a Zigbee device goes unavailable (availability
     tracking enabled in Z2M: active/router devices ~10 min, passive battery devices
     ~25 h). Bridge-down is flagged as a network-wide outage. The ''for'' guards against
-    the brief unavailability during a Z2M restart.'
+    the brief unavailability during a Z2M restart. NOTE: device list is maintained
+    manually - add each new Zigbee device''s primary entity here.'
   triggers:
   - platform: state
     entity_id:
     - binary_sensor.roller_door_contact
+    - binary_sensor.0x54ef4410014ae8c0_contact
     - switch.0xa4c138074803a9a9
     - switch.0xa4c138ba345696ae
     to: unavailable
