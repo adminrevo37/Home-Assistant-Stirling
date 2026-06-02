@@ -1335,18 +1335,20 @@
   mode: single
 - id: '1780149356921'
   alias: Common Lights - Off (Empty + No Booking)
-  description: Occupancy at/below threshold AND no active booking -> turn off common
-    lights. Re-checking (debounced threshold-cross + every 5 min) catches an already-empty
-    building. Booking-active guard prevents mid-session darkness.
+  description: Occupancy at/below threshold AND no active booking AND no booking starting
+    within the pre-booking protect window -> turn off common lights. Re-checking (debounced
+    threshold-cross + every 5 min) catches an already-empty building. Booking-active
+    guard + pre-booking window guard keep common lights on for an early-arriving customer
+    who has sat still (occupancy decays).
   triggers:
-  - trigger: numeric_state
-    entity_id: sensor.main_occupancy_probability
+  - entity_id: sensor.main_occupancy_probability
     below: input_number.lighting_occupancy_threshold
     for:
       minutes: '{{ states(''input_number.lighting_common_off_debounce_min'') | int(4)
         }}'
-  - trigger: time_pattern
-    minutes: /5
+    platform: numeric_state
+  - minutes: /5
+    platform: time_pattern
   conditions:
   - condition: numeric_state
     entity_id: sensor.main_occupancy_probability
@@ -1359,6 +1361,14 @@
     - calendar.lane_4_run_up_net
     - calendar.lane_5_run_up_net
     state: 'off'
+  - condition: template
+    alias: No booking starts within the pre-booking protect window
+    value_template: '{% set win = states(''input_number.lighting_pre_booking_protect_window_min'')
+      | int(30) %}{% set cals = [''calendar.lane_1_bowling_machine'',''calendar.lane_2_bowling_machine'',''calendar.lane_3_truman_or_bowling_machine'',''calendar.lane_4_run_up_net'',''calendar.lane_5_run_up_net'']
+      %}{% set ns = namespace(imminent=false) %}{% for c in cals %}{% set st = state_attr(c,
+      ''start_time'') %}{% if st is not none %}{% set secs = as_timestamp(as_datetime(st))
+      - as_timestamp(now()) %}{% if secs > 0 and secs <= (win * 60) %}{% set ns.imminent
+      = true %}{% endif %}{% endif %}{% endfor %}{{ not ns.imminent }}'
   actions:
   - action: light.turn_off
     target:
@@ -1369,11 +1379,12 @@
   mode: single
 - id: '1780149360935'
   alias: Lighting - End-of-Day Hard Off (after last booking)
-  description: 'Force all highbays + common lights off when the building is empty
-    (occupancy at/below the Lighting Occupancy threshold helper, default 40%) AND
-    no active booking. Triggers: configurable delay after a booking ends + a 5-min
-    re-check backstop. Occupancy-gated so an early-arriving coach (occupancy above
-    threshold) keeps their lights; office handled by its own sweep.'
+  description: SUPERSEDED/DISABLED 2026-06-02. Highbays REMOVED from this automation
+    - bay lights now follow calendar only (per-bay START/END) + the 23:00 Absolute
+    All-Off Catch-All; they are never occupancy-controlled. This now targets COMMON
+    lights only and is redundant with 'Common Lights - Off' (kept disabled as a backstop).
+    Pre-booking protect guard added so it is safe if ever re-enabled. Recommend deletion
+    after review.
   triggers:
   - entity_id:
     - calendar.lane_1_bowling_machine
@@ -1400,15 +1411,18 @@
   - condition: numeric_state
     entity_id: sensor.main_occupancy_probability
     below: input_number.lighting_occupancy_threshold
+  - condition: template
+    alias: No booking starts within the pre-booking protect window
+    value_template: '{% set win = states(''input_number.lighting_pre_booking_protect_window_min'')
+      | int(30) %}{% set cals = [''calendar.lane_1_bowling_machine'',''calendar.lane_2_bowling_machine'',''calendar.lane_3_truman_or_bowling_machine'',''calendar.lane_4_run_up_net'',''calendar.lane_5_run_up_net'']
+      %}{% set ns = namespace(imminent=false) %}{% for c in cals %}{% set st = state_attr(c,
+      ''start_time'') %}{% if st is not none %}{% set secs = as_timestamp(as_datetime(st))
+      - as_timestamp(now()) %}{% if secs > 0 and secs <= (win * 60) %}{% set ns.imminent
+      = true %}{% endif %}{% endif %}{% endfor %}{{ not ns.imminent }}'
   actions:
   - action: light.turn_off
     target:
       entity_id:
-      - light.highbay_1
-      - light.highbay_2
-      - light.highbay_3
-      - light.highbay_4
-      - light.highbay_5
       - light.inside_wall_lights
       - light.fluro_x_4
       - light.mezzanine_wall_lights
@@ -1591,30 +1605,24 @@
   mode: single
 - id: keypad_validate_entry
   alias: Customer Keypad - Validate Entry & Open Door
-  description: 'Customer entry keypad (Olimex ESP32-POE-ISO + Jaycar LA5353) fires
+  description: Customer entry keypad (Olimex ESP32-POE-ISO + Jaycar LA5353) fires
     esphome.keypad_code with the typed PIN. Compare it against the active-booking
     codes already held in input_text.bay{N}_code_slot_{a/b/c} (populated T-15m to
     T+15m by the bay code activate/deactivate automations, so expiry is automatic).
-    Match -> unlock the roller door (lock.front_door_lock) + log a named entry.
-    No match -> log the failed attempt. THIS is the sole code authority; the keypad
-    never validates anything itself. See BUILD_KEYPAD_PATH_A_JAYCAR.md.'
+    Match -> unlock the roller door (lock.front_door_lock) + log a named entry. No
+    match -> log the failed attempt. THIS is the sole code authority; the keypad never
+    validates anything itself. See BUILD_KEYPAD_PATH_A_JAYCAR.md.
   triggers:
   - trigger: event
     event_type: esphome.keypad_code
   variables:
-    typed: "{{ (trigger.event.data.pin | default('') | string) | regex_replace('[^0-9]',
-      '') }}"
-    match: >-
-      {% set ns = namespace(found='') %}
-      {% for n in range(1, 6) %}
-        {% for s in ['a', 'b', 'c'] %}
-          {% set val = states('input_text.bay' ~ n ~ '_code_slot_' ~ s) %}
-          {% if val and ':' in val and val.split(':', 1)[0] | trim == typed and typed != '' %}
-            {% set ns.found = n ~ '|' ~ val.split(':', 1)[1] %}
-          {% endif %}
-        {% endfor %}
-      {% endfor %}
-      {{ ns.found }}
+    typed: '{{ (trigger.event.data.pin | default('''') | string) | regex_replace(''[^0-9]'',
+      '''') }}'
+    match: "{% set ns = namespace(found='') %} {% for n in range(1, 6) %}\n  {% for
+      s in ['a', 'b', 'c'] %}\n    {% set val = states('input_text.bay' ~ n ~ '_code_slot_'
+      ~ s) %}\n    {% if val and ':' in val and val.split(':', 1)[0] | trim == typed
+      and typed != '' %}\n      {% set ns.found = n ~ '|' ~ val.split(':', 1)[1] %}\n
+      \   {% endif %}\n  {% endfor %}\n{% endfor %} {{ ns.found }}"
   actions:
   - condition: template
     value_template: '{{ typed | length >= 4 }}'
@@ -1629,13 +1637,13 @@
       - action: logbook.log
         data:
           name: Keypad Entry
-          message: 'Valid code — door opened for {{ match.split(''|'')[1] }} (Bay {{
-            match.split(''|'')[0] }})'
+          message: Valid code — door opened for {{ match.split('|')[1] }} (Bay {{
+            match.split('|')[0] }})
           entity_id: lock.front_door_lock
     default:
     - action: logbook.log
       data:
         name: Keypad Entry
-        message: 'Invalid code attempt ({{ typed | length }} digits) — door not opened'
+        message: Invalid code attempt ({{ typed | length }} digits) — door not opened
         entity_id: lock.front_door_lock
   mode: single
