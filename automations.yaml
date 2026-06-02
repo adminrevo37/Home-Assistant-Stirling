@@ -1667,37 +1667,49 @@
   mode: single
 - id: '1780392309960'
   alias: Zigbee - Device Offline Alert
-  description: 'Notify Julian when a Zigbee device goes unavailable (availability
-    tracking enabled in Z2M: active/router devices ~10 min, passive battery devices
-    ~25 h). Bridge-down is flagged as a network-wide outage. The ''for'' guards against
-    the brief unavailability during a Z2M restart. NOTE: device list is maintained
-    manually - add each new Zigbee device''s primary entity here.'
+  description: 'GENERIC - auto-covers ALL Zigbee/MQTT devices, no maintained list.
+    Detects any device whose entities have gone ''unavailable'' (Z2M availability:
+    active/router ~10 min, passive battery ~25 h) and notifies Julian with the device
+    name(s). Whole-bridge-down flagged separately as a network outage. 5-min ''for''
+    guards the brief unavailability during a Z2M restart. New devices are covered
+    automatically.'
   triggers:
-  - platform: state
-    entity_id:
-    - binary_sensor.roller_door_contact
-    - binary_sensor.0x54ef4410014ae8c0_contact
-    - switch.0xa4c138074803a9a9
-    - switch.0xa4c138ba345696ae
-    to: unavailable
+  - platform: template
+    id: device
     for:
       minutes: 5
-    id: device
+    value_template: '{% set ns = namespace(c=0) %}{% for e in integration_entities(''mqtt'')
+      %}{% if states(e) == ''unavailable'' %}{% set nm = device_attr(e,''name_by_user'')
+      or device_attr(e,''name'') %}{% if nm and nm != ''Zigbee2MQTT Bridge'' %}{%
+      set ns.c = ns.c + 1 %}{% endif %}{% endif %}{% endfor %}{{ ns.c > 0 }}'
+  - platform: time
+    at: 09:05:00
+    id: daily
   - platform: state
     entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
     to: 'off'
     for:
       minutes: 2
     id: bridge
+  conditions:
+  - condition: template
+    value_template: '{% set ns = namespace(c=0) %}{% for e in integration_entities(''mqtt'')
+      %}{% if states(e) == ''unavailable'' %}{% set nm = device_attr(e,''name_by_user'')
+      or device_attr(e,''name'') %}{% if nm and nm != ''Zigbee2MQTT Bridge'' %}{%
+      set ns.c = ns.c + 1 %}{% endif %}{% endif %}{% endfor %}{{ trigger.id == ''bridge''
+      or ns.c > 0 }}'
   actions:
   - action: notify.mobile_app_julian
     data:
       title: '{{ ''Zigbee network DOWN'' if trigger.id == ''bridge'' else ''Zigbee
         device offline'' }}'
       message: '{% if trigger.id == ''bridge'' %}Zigbee2MQTT bridge has lost connection
-        - all Zigbee devices are unreachable.{% else %}{{ trigger.to_state.attributes.friendly_name
-        }} ({{ trigger.entity_id }}) has gone offline - no response from the device.{%
-        endif %}'
+        - all Zigbee devices are unreachable.{% else %}{% set ns = namespace(names=[])
+        %}{% for e in integration_entities(''mqtt'') %}{% if states(e) == ''unavailable''
+        %}{% set nm = device_attr(e,''name_by_user'') or device_attr(e,''name'') %}{%
+        if nm and nm != ''Zigbee2MQTT Bridge'' and nm not in ns.names %}{% set ns.names
+        = ns.names + [nm] %}{% endif %}{% endif %}{% endfor %}These Zigbee devices
+        are offline: {{ ns.names | join('', '') }}{% endif %}'
   mode: queued
   max: 5
 - id: '1780393541120'
