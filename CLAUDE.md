@@ -113,10 +113,18 @@ Zigbee runs on **Zigbee2MQTT** (bridge v2.10.1, USB antenna coordinator `0xd878f
 the MQTT integration. Pair from HA by toggling `switch.zigbee2mqtt_bridge_permit_join` on, putting the
 device in pairing mode, then toggling it off. Rename via MQTT: publish to
 `zigbee2mqtt/bridge/request/device/rename` with `{"from":"<ieee>","to":"<name>"}` (updates the Z2M
-friendly_name + MQTT topic; pre-existing HA entity_ids keep their join-time ieee slug).
+friendly_name + MQTT topic; pre-existing HA entity_ids keep their join-time ieee slug). Friendly names
+with spaces/parentheses are fine (e.g. `Fire Exit Door (WEST)`), but the device must be FULLY interviewed
+in Z2M first or the rename is rejected (device not yet in Z2M's list).
+> **Aqara sleepy-device pairing gotcha:** Aqara contact/door sensors (T1) sleep within seconds, so the
+> interview stalls ("Interview started" with no "Successfully interviewed") and Z2M never fully registers
+> the device — HA shows partial entities but the device is missing from the Z2M device list and can't be
+> renamed. Fix: after starting pairing (hold reset ~5s), **tap the button briefly every ~2s for ~30s** to
+> keep it awake until the log shows "Successfully interviewed". Check progress in Z2M → Logs.
 
 Paired devices (2026-05-31):
 - **roller_door_contact** — Aqara door/window sensor T1 (`0x54ef4410014ae72a`) → `binary_sensor.roller_door_contact` (roller-door spec). **Battery installed 31 May 2026** (fresh CR2032); auto-tracked by the standing battery system below. Note the date it crosses 50% here when the alert fires, for the lifespan figure.
+- **Fire Exit Door (WEST)** — Aqara door/window sensor T1 (`0x54ef4410014ae8c0`, added 2026-06-02) → `binary_sensor.0x54ef4410014ae8c0_contact` + battery/voltage/linkquality (entity_ids ieee-based; device friendly_name renamed). **Battery installed 2026-06-02** (auto-recorded by the standing rule). LQI ~180.
 - **Plug 1** — Tuya smart plug w/ power monitoring (`0xa4c138074803a9a9`) → `switch.0xa4c138074803a9a9` + power/current/voltage/energy sensors. Registered + named only; **not yet assigned a purpose or automation** (parked 2026-05-31). Mains-powered → also a Zigbee router.
 - **Plug 2** — Tuya smart plug w/ power monitoring (`0xa4c138ba345696ae`) → `switch.0xa4c138ba345696ae` + same sensors. Same parked status. Entity_ids still ieee-based (tidy to `plug_2` later if wanted).
 
@@ -124,7 +132,7 @@ Paired devices (2026-05-31):
 - **LQI entities enabled** for all Z2M devices (disabled by default): `sensor.<ieee>_linkquality`. Roller door LQI ~72–80 (moderate, via a plug router); plugs ~200.
 - **Z2M availability tracking is ON** (Settings → Availability; was off). Active/router devices go `unavailable` after ~10 min offline, passive battery devices after ~25 h. This is what powers offline alerts (a dropped device's HA entities flip to `unavailable`).
 - **INSIGHTS dashboard** has a "Zigbee / Device Health" section (bridge connection/restart-required tiles, per-device LQI/battery/power, + the Battery devices card).
-- **Alerts → `notify.mobile_app_julian`:** `automation.zigbee_device_offline_alert` (any device unavailable, or whole-bridge-down). Battery alerts are the standing rule below.
+- **Alerts → `notify.mobile_app_julian`:** `automation.zigbee_device_offline_alert` is **GENERIC** — it scans all `integration_entities('mqtt')` for any device whose entities have gone `unavailable`, maps them to device names, and alerts (excludes the bridge, which has its own whole-network-down trigger). **Auto-covers new devices, no maintained list** (generalised 2026-06-02). 5-min `for` guards the Z2M-restart blip. Battery alerts are the standing rule below.
 
 ### Battery tracking — STANDING RULE (added 2026-06-02)
 Any new **wireless (MQTT/Zigbee) battery sensor** is tracked automatically from day of install — no per-device setup.
