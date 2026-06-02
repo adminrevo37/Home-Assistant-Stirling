@@ -116,7 +116,7 @@ device in pairing mode, then toggling it off. Rename via MQTT: publish to
 friendly_name + MQTT topic; pre-existing HA entity_ids keep their join-time ieee slug).
 
 Paired devices (2026-05-31):
-- **roller_door_contact** — Aqara door/window sensor T1 (`0x54ef4410014ae72a`) → `binary_sensor.roller_door_contact` (roller-door spec).
+- **roller_door_contact** — Aqara door/window sensor T1 (`0x54ef4410014ae72a`) → `binary_sensor.roller_door_contact` (roller-door spec). **Battery installed 31 May 2026** (fresh CR2032) — tracking drain to gauge sensor battery life. Install date held in `input_datetime.roller_door_sensor_installed`; live tracker card (install date + days in service + battery %) on the INSIGHTS dashboard "Zigbee / Device Health" section; low-battery alert at 50% (`automation.zigbee_low_battery_alert`). Log the date it crosses 50% here when it fires.
 - **Plug 1** — Tuya smart plug w/ power monitoring (`0xa4c138074803a9a9`) → `switch.0xa4c138074803a9a9` + power/current/voltage/energy sensors. Registered + named only; **not yet assigned a purpose or automation** (parked 2026-05-31). Mains-powered → also a Zigbee router.
 - **Plug 2** — Tuya smart plug w/ power monitoring (`0xa4c138ba345696ae`) → `switch.0xa4c138ba345696ae` + same sensors. Same parked status. Entity_ids still ieee-based (tidy to `plug_2` later if wanted).
 
