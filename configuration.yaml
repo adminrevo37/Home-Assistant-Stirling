@@ -321,7 +321,7 @@ input_datetime:
     name: "Lighting - Absolute all-off catch-all time"
     has_date: false
     has_time: true
-    initial: "23:00:00"
+    initial: "22:15:00"
     icon: mdi:clock-end
   office_off_1:
     name: "Office Lights - Off sweep 1"
