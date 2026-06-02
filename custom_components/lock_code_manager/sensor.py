@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
@@ -12,12 +10,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import ATTR_CODE
-from .coordinator import LockUsercodeUpdateCoordinator
+from .domain.coordinator import LockUsercodeUpdateCoordinator
+from .domain.models import LockCodeManagerConfigEntry
 from .entity import BaseLockCodeManagerCodeSlotPerLockEntity
-from .models import LockCodeManagerConfigEntry, SlotCode
 from .providers import BaseLock
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -34,13 +30,6 @@ async def async_setup_entry(
         """Add code slot sensor entities for slot."""
         coordinator = lock.coordinator
         if coordinator is None:
-            _LOGGER.warning(
-                "%s (%s): Coordinator missing for lock %s when adding slot %s entities",
-                config_entry.entry_id,
-                config_entry.title,
-                lock.lock.entity_id,
-                slot_num,
-            )
             return
         async_add_entities(
             [
@@ -86,12 +75,16 @@ class LockCodeManagerCodeSlotSensorEntity(
     @property
     def native_value(self) -> str | None:
         """Return native value."""
-        code = self.coordinator.data.get(int(self.slot_num))
-        if code is SlotCode.EMPTY:
+        credential = self.coordinator.data.get(int(self.slot_num))
+        if credential is None:
+            return None
+        if credential.is_empty:
             return ""
-        if code is SlotCode.UNREADABLE_CODE:
-            return self.coordinator.get_expected_pin(int(self.slot_num))
-        return code
+        if credential.is_readable:
+            return credential.readable_pin
+        # Unreadable code: fall back to the configured PIN so the sensor still
+        # exposes the slot's intended value to consumers like the sync layer.
+        return self.coordinator.desired_credential(int(self.slot_num)).readable_pin
 
     @property
     def available(self) -> bool:

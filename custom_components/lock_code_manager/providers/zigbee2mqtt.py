@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 import json
@@ -20,9 +19,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
-from ..exceptions import LockDisconnected
-from ..models import SlotCode
+from ..domain.exceptions import LockDisconnected, LockOperationFailed
+from ..domain.models import SlotCredential
 from ._base import BaseLock
+from ._util import parse_slot_num
 from .const import LOGGER
 
 # Default Zigbee2MQTT base topic
@@ -72,7 +72,6 @@ class Zigbee2MQTTLock(BaseLock):
 
     _base_topic: str = field(init=False, default=DEFAULT_BASE_TOPIC)
     _friendly_name: str | None = field(init=False, default=None)
-    _unsubscribe: Callable[[], None] | None = field(init=False, default=None)
     _pending_codes: dict[int, asyncio.Future[str | None]] = field(
         init=False, default_factory=dict
     )
@@ -105,11 +104,6 @@ class Zigbee2MQTTLock(BaseLock):
     def hard_refresh_interval(self) -> timedelta | None:
         """Return interval for hard refresh."""
         return timedelta(hours=1)
-
-    @property
-    def connection_check_interval(self) -> timedelta | None:
-        """Return interval for connection checks."""
-        return timedelta(seconds=30)
 
     async def async_setup(self, config_entry: ConfigEntry) -> None:
         """Subscribe to the device topic before the coordinator runs its first poll."""
@@ -190,9 +184,8 @@ class Zigbee2MQTTLock(BaseLock):
         if isinstance(action, str) and action in _Z2M_LOCK_ACTIONS:
             action_user = payload.get("action_user")
             if action_user is not None and not isinstance(action_user, bool):
-                try:
-                    code_slot = int(action_user)
-                except ValueError, TypeError:
+                code_slot = parse_slot_num(action_user)
+                if code_slot is None:
                     LOGGER.debug(
                         "Ignoring %s with non-numeric action_user %r for %s",
                         action,
@@ -228,11 +221,10 @@ class Zigbee2MQTTLock(BaseLock):
         # Handle users data in state update
         users_data = payload.get("users")
         if users_data and isinstance(users_data, dict):
-            updates: dict[int, str | SlotCode] = {}
+            updates: dict[int, SlotCredential] = {}
             for user_id_str, user_info in users_data.items():
-                try:
-                    user_id = int(user_id_str)
-                except ValueError, TypeError:
+                user_id = parse_slot_num(user_id_str)
+                if user_id is None:
                     LOGGER.warning(
                         "Skipping non-numeric Zigbee2MQTT user key %r for %s",
                         user_id_str,
@@ -254,18 +246,18 @@ class Zigbee2MQTTLock(BaseLock):
                 pin_raw = user_info.get("pin_code")
 
                 # Zigbee2MQTT often omits pin_code when expose_pin is false (default on
-                # several Yale models). Treating that as EMPTY makes the coordinator think
+                # several Yale models). Treating that as empty makes the coordinator think
                 # the slot is cleared, so disabling the slot skips clear_usercode while the
-                # lock still holds the PIN. Only treat as EMPTY when MQTT exposes the field.
+                # lock still holds the PIN. Only treat as empty when MQTT exposes the field.
                 if status == "enabled":
                     if _mqtt_payload_pin_has_code_value(pin_raw):
-                        updates[user_id] = str(pin_raw)
+                        updates[user_id] = SlotCredential.known(str(pin_raw))
                     elif pin_code_present:
-                        updates[user_id] = SlotCode.EMPTY
+                        updates[user_id] = SlotCredential.empty()
                     else:
                         continue
                 else:
-                    updates[user_id] = SlotCode.EMPTY
+                    updates[user_id] = SlotCredential.empty()
 
             if updates and self.coordinator:
                 LOGGER.debug(
@@ -286,9 +278,8 @@ class Zigbee2MQTTLock(BaseLock):
                 )
                 return
 
-            try:
-                user_id = int(raw_user)
-            except ValueError, TypeError:
+            user_id = parse_slot_num(raw_user)
+            if user_id is None:
                 LOGGER.warning(
                     "Ignoring pin_code payload with non-numeric user for %s",
                     self.lock.entity_id,
@@ -307,7 +298,7 @@ class Zigbee2MQTTLock(BaseLock):
 
     async def _async_ensure_device_subscription(self) -> None:
         """Subscribe to the Z2M device topic; idempotent."""
-        if self._unsubscribe is not None:
+        if self._push_unsubs:
             return
 
         if not mqtt_config_entry_enabled(self.hass):
@@ -335,9 +326,7 @@ class Zigbee2MQTTLock(BaseLock):
             self.hass.add_job(self._process_z2m_device_payload, payload)
 
         try:
-            self._unsubscribe = await async_subscribe(
-                self.hass, topic, message_received
-            )
+            unsub = await async_subscribe(self.hass, topic, message_received)
         except HomeAssistantError as err:
             LOGGER.error(
                 "Failed to subscribe to MQTT for %s: %s",
@@ -347,10 +336,8 @@ class Zigbee2MQTTLock(BaseLock):
             raise LockDisconnected(
                 f"Failed to subscribe to MQTT for {self.lock.entity_id}"
             ) from err
-        else:
-            LOGGER.debug(
-                "Subscribed to MQTT topic %s for %s", topic, self.lock.entity_id
-            )
+        self._register_push_unsub(unsub)
+        LOGGER.debug("Subscribed to MQTT topic %s for %s", topic, self.lock.entity_id)
 
     @callback
     def setup_push_subscription(self) -> None:
@@ -359,7 +346,7 @@ class Zigbee2MQTTLock(BaseLock):
 
         Primary subscribe is ``await`` in ``async_setup``.
         """
-        if self._unsubscribe is not None:
+        if self._push_unsubs:
             return
 
         topic = self._get_topic()
@@ -404,9 +391,9 @@ class Zigbee2MQTTLock(BaseLock):
     @callback
     def teardown_push_subscription(self) -> None:
         """Unsubscribe from MQTT updates."""
-        if self._unsubscribe:
-            self._unsubscribe()
-            self._unsubscribe = None
+        had_subscription = bool(self._push_unsubs)
+        self._clear_push_unsubs()
+        if had_subscription:
             LOGGER.debug("Unsubscribed from MQTT for %s", self.lock.entity_id)
 
         # Cancel any pending futures
@@ -415,7 +402,7 @@ class Zigbee2MQTTLock(BaseLock):
                 future.cancel()
         self._pending_codes.clear()
 
-    async def async_get_usercodes(self) -> dict[int, str | SlotCode]:
+    async def async_get_usercodes(self) -> dict[int, SlotCredential]:
         """Get dictionary of code slots and usercodes."""
         if not mqtt_config_entry_enabled(self.hass):
             raise LockDisconnected("MQTT component not available")
@@ -438,14 +425,15 @@ class Zigbee2MQTTLock(BaseLock):
             return {}
 
         loop = asyncio.get_running_loop()
-        data: dict[int, str | SlotCode] = {}
+        data: dict[int, SlotCredential] = {}
 
         # Query one slot at a time so Zigbee2MQTT / firmware can answer each GET before
         # the next. Parallel gathers plus per-slot timeouts used to raise and fail the
         # entire refresh, leaving coordinator.data empty — sync then skips every slot
         # (see SlotSyncManager._resolve_slot_state).
-        # Transient publish/timeout/read failures use UNREADABLE_CODE so sync does not
-        # treat the slot as confirmed-empty and storm reprogramming after MQTT recovery.
+        # Transient publish/timeout/read failures use the unreadable credential so sync
+        # does not treat the slot as confirmed-empty and storm reprogramming after MQTT
+        # recovery.
         for slot_num in sorted(code_slots):
             future = loop.create_future()
             self._pending_codes[slot_num] = future
@@ -459,7 +447,7 @@ class Zigbee2MQTTLock(BaseLock):
                     slot_num,
                     err,
                 )
-                data[slot_num] = SlotCode.UNREADABLE_CODE
+                data[slot_num] = SlotCredential.unreadable()
                 self._pending_codes.pop(slot_num, None)
                 continue
 
@@ -471,7 +459,7 @@ class Zigbee2MQTTLock(BaseLock):
                     self.lock.entity_id,
                     slot_num,
                 )
-                data[slot_num] = SlotCode.UNREADABLE_CODE
+                data[slot_num] = SlotCredential.unreadable()
             except Exception as err:
                 # Broad catch is intentional: the future is resolved by the MQTT
                 # callback, and any exception from resolution (InvalidStateError,
@@ -483,9 +471,11 @@ class Zigbee2MQTTLock(BaseLock):
                     slot_num,
                     err,
                 )
-                data[slot_num] = SlotCode.UNREADABLE_CODE
+                data[slot_num] = SlotCredential.unreadable()
             else:
-                data[slot_num] = result if result else SlotCode.EMPTY
+                data[slot_num] = (
+                    SlotCredential.known(result) if result else SlotCredential.empty()
+                )
             finally:
                 self._pending_codes.pop(slot_num, None)
 
@@ -524,7 +514,10 @@ class Zigbee2MQTTLock(BaseLock):
 
         try:
             await async_publish(self.hass, set_topic, payload)
-        except (HomeAssistantError, OSError) as err:
+        except OSError as err:
+            # Network-level publish failure (broker unreachable). Route to
+            # disconnect so the reconnect path runs instead of breaking
+            # per-slot.
             LOGGER.error(
                 "Failed to set PIN for %s slot %s: %s",
                 self.lock.entity_id,
@@ -532,6 +525,14 @@ class Zigbee2MQTTLock(BaseLock):
                 err,
             )
             raise LockDisconnected(f"Failed to set PIN: {err}") from err
+        except HomeAssistantError as err:
+            LOGGER.error(
+                "Failed to set PIN for %s slot %s: %s",
+                self.lock.entity_id,
+                code_slot,
+                err,
+            )
+            raise LockOperationFailed(f"Failed to set PIN: {err}") from err
 
         LOGGER.debug(
             "Published set_pin_code for %s slot %s",
@@ -539,8 +540,7 @@ class Zigbee2MQTTLock(BaseLock):
             code_slot,
         )
         # Optimistic coordinator update after publish (MQTT QoS 0); hard_refresh mitigates drift.
-        if self.coordinator:
-            self.coordinator.push_update({code_slot: str(usercode)})
+        self._push_credential_update(code_slot, SlotCredential.known(str(usercode)))
         return True
 
     async def async_clear_usercode(self, code_slot: int) -> bool:
@@ -571,7 +571,8 @@ class Zigbee2MQTTLock(BaseLock):
 
         try:
             await async_publish(self.hass, set_topic, payload)
-        except (HomeAssistantError, OSError) as err:
+        except OSError as err:
+            # See ``async_set_usercode`` for the OSError split rationale.
             LOGGER.error(
                 "Failed to clear PIN for %s slot %s: %s",
                 self.lock.entity_id,
@@ -579,17 +580,24 @@ class Zigbee2MQTTLock(BaseLock):
                 err,
             )
             raise LockDisconnected(f"Failed to clear PIN: {err}") from err
+        except HomeAssistantError as err:
+            LOGGER.error(
+                "Failed to clear PIN for %s slot %s: %s",
+                self.lock.entity_id,
+                code_slot,
+                err,
+            )
+            raise LockOperationFailed(f"Failed to clear PIN: {err}") from err
 
         LOGGER.debug(
             "Published clear_pin_code for %s slot %s",
             self.lock.entity_id,
             code_slot,
         )
-        # Same optimistic push_update as ``async_set_usercode``.
-        if self.coordinator:
-            self.coordinator.push_update({code_slot: SlotCode.EMPTY})
+        # Same optimistic push as ``async_set_usercode``.
+        self._push_credential_update(code_slot, SlotCredential.empty())
         return True
 
-    async def async_hard_refresh_codes(self) -> dict[int, str | SlotCode]:
+    async def async_hard_refresh_codes(self) -> dict[int, SlotCredential]:
         """Perform hard refresh and return all codes."""
         return await self.async_get_usercodes()

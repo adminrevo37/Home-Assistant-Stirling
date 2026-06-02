@@ -7,7 +7,7 @@ from datetime import timedelta
 from homeassistant.const import CONF_ENABLED, CONF_NAME, CONF_PIN, Platform
 
 DOMAIN = "lock_code_manager"
-VERSION = "3.1.5"
+VERSION = "3.2.0"
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR)
 
 FILES_URL_BASE = f"/{DOMAIN}_files"
@@ -126,7 +126,6 @@ SYNC_ATTEMPT_WINDOW = timedelta(minutes=5)
 # Defaults
 DEFAULT_NUM_SLOTS = 3
 DEFAULT_START = 1
-DEFAULT_HIDE_PINS = False
 
 PLATFORM_MAP = {
     CONF_CALENDAR: Platform.CALENDAR,

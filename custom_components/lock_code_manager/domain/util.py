@@ -11,8 +11,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 
-from .const import DOMAIN
-from .data import build_slot_unique_id
+from ..const import DOMAIN
+from .config import build_slot_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -19,15 +19,13 @@ from homeassistant.components.lovelace.resources import (
     ResourceStorageCollection,
     ResourceYAMLCollection,
 )
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import (
     ATTR_AREA_ID,
     ATTR_DEVICE_ID,
     ATTR_ENTITY_ID,
-    CONF_ENABLED,
     CONF_ENTITY_ID,
     CONF_ID,
-    CONF_NAME,
-    CONF_PIN,
     CONF_URL,
     EVENT_HOMEASSISTANT_STARTED,
     EVENT_LOVELACE_UPDATED,
@@ -66,10 +64,8 @@ from .const import (
     ATTR_USERCODE,
     CONDITION_ENTITY_DOMAINS,
     CONF_CALENDAR,
-    CONF_LOCKS,
     CONF_SLOTS,
     DOMAIN,
-    EVENT_PIN_USED,
     PLATFORM_MAP,
     PLATFORMS,
     SERVICE_CLEAR_SLOT_CONDITION,
@@ -82,22 +78,26 @@ from .const import (
     STRATEGY_PATH,
     Platform,
 )
-from .data import EntryConfig, get_entry_config
-from .helpers import (
-    async_clear_slot_condition,
-    async_clear_usercode,
-    async_create_lock_instance,
-    async_set_slot_condition,
-    async_set_usercode,
-    get_locks_from_targets,
+from .domain.config import EntryConfig
+from .domain.locks import async_create_lock_instance, get_locks_from_targets
+from .domain.models import (
+    LockCodeManagerConfigEntry,
+    LockCodeManagerConfigEntryRuntimeData,
 )
-from .models import LockCodeManagerConfigEntry, LockCodeManagerConfigEntryRuntimeData
-from .pin_generator import (
+from .domain.pin_generator import (
     DEFAULT_PIN_LENGTH,
     MAX_PIN_LENGTH,
     MIN_PIN_LENGTH,
     generate_pin,
 )
+from .domain.queries import get_entry_config
+from .domain.services import (
+    async_clear_slot_condition,
+    async_clear_usercode,
+    async_set_slot_condition,
+    async_set_usercode,
+)
+from .domain.slot_coordinator import SlotEntityCoordinator
 from .providers import BaseLock
 from .websocket import async_setup as async_websocket_setup
 
@@ -143,6 +143,56 @@ async def async_migrate_entry(
             config_entry.entry_id,
             config_entry.title,
         )
+
+    if config_entry.version == 2:
+        # Strip the deprecated number_of_uses field from slot configs and
+        # surface a one-time informational repair pointing users to the Slot
+        # Usage Limiter blueprint replacement. Running here (before setup)
+        # ensures the deprecated field never reaches any EntryConfig consumer.
+        async_delete_issue(hass, DOMAIN, "number_of_uses_deprecated")
+        new_data = {**config_entry.data}
+        new_options = {**config_entry.options}
+        entry_impacted: set[str] = set()
+        for data_dict in (new_data, new_options):
+            if CONF_SLOTS not in data_dict:
+                continue
+            new_slots = {}
+            for slot_num, slot_config in data_dict[CONF_SLOTS].items():
+                new_slot = {**slot_config}
+                if "number_of_uses" in new_slot:
+                    new_slot.pop("number_of_uses")
+                    entry_impacted.add(str(slot_num))
+                new_slots[slot_num] = new_slot
+            data_dict[CONF_SLOTS] = new_slots
+        hass.config_entries.async_update_entry(
+            config_entry, data=new_data, options=new_options, version=3
+        )
+        if entry_impacted:
+            impacted_slots = sorted(entry_impacted, key=int)
+            async_create_issue(
+                hass,
+                DOMAIN,
+                f"number_of_uses_removed_{config_entry.entry_id}",
+                is_fixable=True,
+                is_persistent=True,
+                severity=IssueSeverity.WARNING,
+                translation_key="number_of_uses_removed",
+                translation_placeholders={
+                    "impacted": (
+                        f"- **{config_entry.title}**: slots {', '.join(impacted_slots)}"
+                    ),
+                    "blueprint_url": (
+                        "https://github.com/raman325/lock_code_manager/wiki/"
+                        "Blueprints#slot-usage-limiter"
+                    ),
+                },
+            )
+            _LOGGER.warning(
+                "Removed deprecated number_of_uses from %s slot(s): %s. "
+                "Use the Slot Usage Limiter blueprint instead.",
+                config_entry.title,
+                ", ".join(impacted_slots),
+            )
 
     return True
 
@@ -254,7 +304,7 @@ async def _async_cleanup_strategy_resource(
 
 async def async_setup(hass: HomeAssistant, config: Config) -> bool:
     """Set up integration."""
-    hass.data.setdefault(DOMAIN, {CONF_LOCKS: {}, "resources": False})
+    hass.data.setdefault(DOMAIN, {"resources": False})
     hass.data[DOMAIN]["instance_id"] = await instance_id.async_get(hass)
     # Expose strategy javascript
     await hass.http.async_register_static_paths(
@@ -272,7 +322,6 @@ async def async_setup(hass: HomeAssistant, config: Config) -> bool:
     await async_websocket_setup(hass)
     _LOGGER.debug("Finished setting up websocket API")
 
-    # Hard refresh usercodes
     async def _hard_refresh_usercodes(service: ServiceCall) -> None:
         """Hard refresh all usercodes."""
         _LOGGER.debug("Hard refresh usercodes service called: %s", service.data)
@@ -306,7 +355,6 @@ async def async_setup(hass: HomeAssistant, config: Config) -> bool:
         ),
     )
 
-    # Set usercode
     async def _set_usercode(service: ServiceCall) -> None:
         """Set a usercode on a lock slot."""
         await async_set_usercode(
@@ -333,7 +381,6 @@ async def async_setup(hass: HomeAssistant, config: Config) -> bool:
         ),
     )
 
-    # Clear usercode
     async def _clear_usercode(service: ServiceCall) -> None:
         """Clear a usercode from a lock slot."""
         await async_clear_usercode(
@@ -356,7 +403,6 @@ async def async_setup(hass: HomeAssistant, config: Config) -> bool:
         ),
     )
 
-    # Set slot condition
     async def _set_slot_condition(service: ServiceCall) -> None:
         """Set a condition entity for a slot."""
         await async_set_slot_condition(
@@ -383,7 +429,6 @@ async def async_setup(hass: HomeAssistant, config: Config) -> bool:
         ),
     )
 
-    # Clear slot condition
     async def _clear_slot_condition(service: ServiceCall) -> None:
         """Clear the condition entity from a slot."""
         await async_clear_slot_condition(
@@ -406,8 +451,6 @@ async def async_setup(hass: HomeAssistant, config: Config) -> bool:
         ),
     )
 
-    # Generate a random PIN that avoids known unsafe patterns. Returns the
-    # value via response_variable since the service has no side effects.
     async def _generate_pin(call: ServiceCall) -> ServiceResponse:
         """Generate a random PIN that avoids known unsafe patterns."""
         return {"pin": generate_pin(call.data[ATTR_LENGTH])}
@@ -438,11 +481,22 @@ def _setup_entry_after_start(
     """
     Set up config entry.
 
-    Should only be run once Home Assistant has started.
+    Should only be run once Home Assistant has started. Update-listener
+    registration is guarded by ``runtime_data.update_listener_registered`` so
+    a reload racing with EVENT_HOMEASSISTANT_STARTED cannot stack multiple
+    listeners on the same entry.
     """
-    config_entry.async_on_unload(
-        config_entry.add_update_listener(async_update_listener)
-    )
+    runtime_data = config_entry.runtime_data
+    if not runtime_data.update_listener_registered:
+        runtime_data.update_listener_registered = True
+        unsub = config_entry.add_update_listener(async_update_listener)
+
+        @callback
+        def _clear_listener_registered() -> None:
+            runtime_data.update_listener_registered = False
+            unsub()
+
+        config_entry.async_on_unload(_clear_listener_registered)
 
     if config_entry.data:
         # Move data from data to options so update listener can work
@@ -459,69 +513,7 @@ def _setup_entry_after_start(
 async def async_setup_entry(
     hass: HomeAssistant, config_entry: LockCodeManagerConfigEntry
 ) -> bool:
-    """Set up is called when Home Assistant is loading our component."""
-    # Auto-migrate: strip the deprecated number_of_uses field from this entry's
-    # slot configs and surface a one-time informational repair so the user knows
-    # what happened and can find the replacement (Slot Usage Limiter blueprint).
-    # Runs as the FIRST work in setup — before any consumer of EntryConfig
-    # (e.g. the missing-lock reauth check below, platform forwarding, or
-    # runtime_data construction) — so the deprecated field never leaks into
-    # parsed config. Migration runs at most once per entry: once stripped,
-    # subsequent setups find nothing to migrate and the repair is not re-raised.
-
-    # Clear any stale issue from prior versions that used the old key so users
-    # upgrading from a previous release don't see an obsolete unfixable repair.
-    async_delete_issue(hass, DOMAIN, "number_of_uses_deprecated")
-
-    # Legacy slot field name; the constant was deleted alongside the field.
-    legacy_number_of_uses_key = "number_of_uses"
-    new_data = {**config_entry.data}
-    new_options = {**config_entry.options}
-    changed = False
-    entry_impacted: set[str] = set()
-    for data_dict in (new_data, new_options):
-        if CONF_SLOTS not in data_dict:
-            continue
-        new_slots = {}
-        for slot_num, slot_config in data_dict[CONF_SLOTS].items():
-            new_slot = {**slot_config}
-            if legacy_number_of_uses_key in new_slot:
-                new_slot.pop(legacy_number_of_uses_key)
-                changed = True
-                entry_impacted.add(str(slot_num))
-            new_slots[slot_num] = new_slot
-        data_dict[CONF_SLOTS] = new_slots
-    if changed:
-        hass.config_entries.async_update_entry(
-            config_entry, data=new_data, options=new_options
-        )
-        impacted_slots = sorted(entry_impacted, key=int)
-        impacted_md = f"- **{config_entry.title}**: slots {', '.join(impacted_slots)}"
-
-        async_create_issue(
-            hass,
-            DOMAIN,
-            f"number_of_uses_removed_{config_entry.entry_id}",
-            is_fixable=True,
-            is_persistent=True,
-            severity=IssueSeverity.WARNING,
-            translation_key="number_of_uses_removed",
-            translation_placeholders={
-                "impacted": impacted_md,
-                "blueprint_url": (
-                    "https://github.com/raman325/lock_code_manager/wiki/"
-                    "Blueprints#slot-usage-limiter"
-                ),
-            },
-        )
-
-        _LOGGER.warning(
-            "Removed deprecated number_of_uses from %s slot(s): %s. "
-            "Use the Slot Usage Limiter blueprint instead.",
-            config_entry.title,
-            ", ".join(impacted_slots),
-        )
-
+    """Set up a config entry."""
     ent_reg = er.async_get(hass)
     entry_id = config_entry.entry_id
     try:
@@ -538,7 +530,7 @@ async def async_setup_entry(
             f"Unable to start because lock {entity_id} can't be found"
         )
 
-    hass.data.setdefault(DOMAIN, {CONF_LOCKS: {}, "resources": False})
+    hass.data.setdefault(DOMAIN, {"resources": False})
     await _async_register_strategy_resource(hass)
 
     config_entry.runtime_data = LockCodeManagerConfigEntryRuntimeData(
@@ -581,6 +573,48 @@ async def async_setup_entry(
     return True
 
 
+def _lock_managed_by_other_entry(
+    hass: HomeAssistant,
+    config_entry: LockCodeManagerConfigEntry,
+    lock_entity_id: str,
+) -> bool:
+    """Return True if another (non-disabled, non-ignored) LCM entry manages the lock."""
+    return any(
+        entry.entry_id != config_entry.entry_id
+        and get_entry_config(entry).has_lock(lock_entity_id)
+        for entry in hass.config_entries.async_entries(
+            DOMAIN, include_disabled=False, include_ignore=False
+        )
+    )
+
+
+def _find_shared_lock_instance(
+    hass: HomeAssistant,
+    config_entry: LockCodeManagerConfigEntry,
+    lock_entity_id: str,
+) -> BaseLock | None:
+    """
+    Return an existing BaseLock for ``lock_entity_id`` from another loaded entry.
+
+    A single physical lock may be referenced by multiple Lock Code Manager
+    entries. We keep one BaseLock instance and share it: when a new entry
+    references a lock that another loaded entry is already managing,
+    reuse that entry's instance instead of creating a duplicate.
+    """
+    return next(
+        (
+            entry.runtime_data.locks[lock_entity_id]
+            for entry in hass.config_entries.async_entries(
+                DOMAIN, include_disabled=False, include_ignore=False
+            )
+            if entry.entry_id != config_entry.entry_id
+            and entry.state is ConfigEntryState.LOADED
+            and lock_entity_id in entry.runtime_data.locks
+        ),
+        None,
+    )
+
+
 async def async_unload_lock(
     hass: HomeAssistant,
     config_entry: LockCodeManagerConfigEntry,
@@ -588,47 +622,85 @@ async def async_unload_lock(
     remove_permanently: bool = False,
 ):
     """Unload lock."""
-    hass_data = hass.data[DOMAIN]
     runtime_data = config_entry.runtime_data
     lock_entity_ids = (
         [lock_entity_id] if lock_entity_id else list(runtime_data.locks.keys())
     )
     for _lock_entity_id in lock_entity_ids:
-        if not any(
-            entry != config_entry
-            and _lock_entity_id
-            in entry.data.get(CONF_LOCKS, entry.options.get(CONF_LOCKS, ""))
-            for entry in hass.config_entries.async_entries(
-                DOMAIN, include_disabled=False, include_ignore=False
-            )
-        ):
-            lock: BaseLock = hass_data[CONF_LOCKS].pop(_lock_entity_id)
+        lock = runtime_data.locks.pop(_lock_entity_id, None)
+        if lock is None:
+            continue
+        if not _lock_managed_by_other_entry(hass, config_entry, _lock_entity_id):
             await lock.async_unload(remove_permanently)
             if lock.coordinator is not None:
                 await lock.coordinator.async_shutdown()
-
-        runtime_data.locks.pop(_lock_entity_id, None)
 
 
 async def async_unload_entry(
     hass: HomeAssistant, config_entry: LockCodeManagerConfigEntry
 ) -> bool:
-    """Unload an entry, firing slot- and lock-removed callbacks before tearing down platforms."""
+    """Unload an entry, stopping tick managers before tearing down platforms."""
     hass_data = hass.data[DOMAIN]
     runtime_data = config_entry.runtime_data
     callbacks = runtime_data.callbacks
 
+    # Stop tick managers FIRST so no in-flight tick can keep calling
+    # _perform_sync, coordinator.async_refresh, or _write_state once
+    # downstream teardown begins. SlotSyncManager.async_stop is idempotent,
+    # so the binary sensor's later async_will_remove_from_hass call into the
+    # same manager is a cheap no-op.
+    if runtime_data.sync_managers:
+        _LOGGER.debug(
+            "Unload: stopping %s sync manager(s)", len(runtime_data.sync_managers)
+        )
+        mgrs_to_stop = list(runtime_data.sync_managers)
+        stop_results = await asyncio.gather(
+            *(mgr.async_stop() for mgr in mgrs_to_stop),
+            return_exceptions=True,
+        )
+        # Clear the registry explicitly so the lock-removed callbacks fired
+        # below observe an empty set. Entity removal also discards each
+        # manager during async_will_remove_from_hass, but that path only
+        # runs if invoke_entity_removers_for_slot has populated slots --
+        # which it may not when config has been migrated to options.
+        runtime_data.sync_managers.clear()
+        for mgr, result in zip(mgrs_to_stop, stop_results, strict=True):
+            if isinstance(result, Exception) and not isinstance(
+                result, asyncio.CancelledError
+            ):
+                _LOGGER.warning(
+                    "%s: Sync manager stop raised during unload: %s",
+                    mgr.log_prefix,
+                    result,
+                    exc_info=result,
+                )
+
     # Fire slot entity removal callbacks first so per-slot entities (which
-    # reference locks) clean up before the locks are torn down
-    curr_slots = config_entry.data.get(CONF_SLOTS, {})
+    # reference locks) clean up before the locks are torn down. Read
+    # current slots from the cached EntryConfig view because
+    # ``_setup_entry_after_start`` migrates the entry's data to options
+    # at first setup, so ``config_entry.data`` is empty for any
+    # normally-loaded entry.
+    curr_slots = list(get_entry_config(config_entry).slots)
     if curr_slots:
-        _LOGGER.debug("Unload: removing slots %s", list(curr_slots))
+        _LOGGER.debug("Unload: removing slots %s", curr_slots)
         await asyncio.gather(
             *(
-                callbacks.invoke_entity_removers_for_slot(int(slot_num))
+                callbacks.invoke_entity_removers_for_slot(slot_num)
                 for slot_num in curr_slots
             )
         )
+
+    # Stop per-slot coordinators after entity removal so the entities'
+    # async_will_remove_from_hass can still call into them. One raising
+    # stop must not block the rest -- the registry is cleared whether
+    # individual stops succeed or fail.
+    for coordinator in list(runtime_data.slot_coordinators.values()):
+        try:
+            coordinator.async_stop()
+        except Exception:
+            _LOGGER.exception("Unload: slot coordinator stop raised")
+    runtime_data.slot_coordinators.clear()
 
     # Fire lock-removed callbacks so per-lock entities are notified
     lock_ids = list(runtime_data.locks)
@@ -654,25 +726,29 @@ async def async_unload_entry(
         for slot_num in config.slots:
             async_delete_issue(hass, DOMAIN, f"slot_disabled_{entry_id}_{slot_num}")
             async_delete_issue(hass, DOMAIN, f"pin_required_{entry_id}_{slot_num}")
-        # Only delete lock_offline if no other LCM entry manages this lock
-        other_entries = [
-            e
-            for e in hass.config_entries.async_entries(
-                DOMAIN, include_disabled=False, include_ignore=False
-            )
-            if e.entry_id != entry_id
-        ]
         for lock_entity_id in config.locks:
-            still_managed = any(
-                get_entry_config(e).has_lock(lock_entity_id) for e in other_entries
-            )
-            if not still_managed:
+            # Only delete lock_offline if no other LCM entry manages this lock
+            if not _lock_managed_by_other_entry(hass, config_entry, lock_entity_id):
                 async_delete_issue(hass, DOMAIN, f"lock_offline_{lock_entity_id}")
-            async_delete_issue(
-                hass, DOMAIN, f"slot_suspended_{entry_id}_{lock_entity_id}"
-            )
+            for slot_num in config.slots:
+                async_delete_issue(
+                    hass,
+                    DOMAIN,
+                    f"slot_suspended_{entry_id}_{lock_entity_id}_{slot_num}",
+                )
 
-    if not hass_data.get(CONF_LOCKS):
+    # Only clean up the strategy resource if no other Lock Code Manager
+    # entries remain loaded. The current entry is still listed (in
+    # UNLOAD_IN_PROGRESS / NOT_LOADED state at this point) so filter it
+    # out before checking.
+    other_loaded_entries = any(
+        entry.entry_id != config_entry.entry_id
+        and entry.state is ConfigEntryState.LOADED
+        for entry in hass.config_entries.async_entries(
+            DOMAIN, include_disabled=False, include_ignore=False
+        )
+    )
+    if not other_loaded_entries:
         await _async_cleanup_strategy_resource(hass, hass_data)
 
     return unload_ok
@@ -689,7 +765,6 @@ async def _async_setup_new_locks(
     """Set up newly added locks and create per-slot entities for them."""
     entry_id = config_entry.entry_id
     entry_title = config_entry.title
-    hass_data = hass.data[DOMAIN]
     runtime_data = config_entry.runtime_data
 
     _LOGGER.debug(
@@ -698,48 +773,69 @@ async def _async_setup_new_locks(
         entry_title,
         locks_to_add,
     )
-    added_locks: list[BaseLock] = []
-    for lock_entity_id in locks_to_add:
-        if lock_entity_id in hass_data[CONF_LOCKS]:
+
+    async def _setup_one_lock(lock_entity_id: str) -> BaseLock:
+        existing_lock = _find_shared_lock_instance(hass, config_entry, lock_entity_id)
+        if existing_lock is not None:
             _LOGGER.debug(
                 "%s (%s): Reusing lock instance for lock %s",
                 entry_id,
                 entry_title,
-                hass_data[CONF_LOCKS][lock_entity_id],
+                existing_lock,
             )
-            lock = runtime_data.locks[lock_entity_id] = hass_data[CONF_LOCKS][
-                lock_entity_id
-            ]
-            await lock.async_wait_for_setup()
-        else:
-            lock = hass_data[CONF_LOCKS][lock_entity_id] = runtime_data.locks[
-                lock_entity_id
-            ] = async_create_lock_instance(
-                hass,
-                dr.async_get(hass),
-                ent_reg,
-                config_entry,
-                lock_entity_id,
-            )
-            _LOGGER.debug(
-                "%s (%s): Creating lock instance for lock %s",
+            runtime_data.locks[lock_entity_id] = existing_lock
+            await existing_lock.async_wait_for_setup()
+            return existing_lock
+
+        lock = runtime_data.locks[lock_entity_id] = async_create_lock_instance(
+            hass,
+            dr.async_get(hass),
+            ent_reg,
+            config_entry,
+            lock_entity_id,
+        )
+        _LOGGER.debug(
+            "%s (%s): Creating lock instance for lock %s",
+            entry_id,
+            entry_title,
+            lock,
+        )
+        await lock.async_setup_internal(config_entry)
+        return lock
+
+    # Set up locks concurrently. Each lock's initial usercode fetch can take
+    # seconds (Z-Wave node poll, Schlage HTTP, Matter device read); serial
+    # setup meant lock N+1 only began once lock N finished. return_exceptions
+    # isolates per-lock failures so one bad lock does not block the others.
+    setup_results = await asyncio.gather(
+        *(_setup_one_lock(lock_entity_id) for lock_entity_id in locks_to_add),
+        return_exceptions=True,
+    )
+
+    added_locks: list[BaseLock] = []
+    for lock_entity_id, result in zip(locks_to_add, setup_results, strict=True):
+        if isinstance(result, BaseException):
+            _LOGGER.error(
+                "%s (%s): Failed to set up lock %s: %s",
                 entry_id,
                 entry_title,
-                lock,
+                lock_entity_id,
+                result,
+                exc_info=result,
             )
-            await lock.async_setup_internal(config_entry)
+            runtime_data.locks.pop(lock_entity_id, None)
+            continue
 
-        added_locks.append(lock)
+        added_locks.append(result)
 
-        # Check if lock is connected (but don't wait - entity creation doesn't require it)
-        if not await lock.async_internal_is_integration_connected():
+        if not await result.async_internal_is_integration_connected():
             _LOGGER.debug(
                 "%s (%s): Lock %s is not connected yet. Entities will be created "
                 "but will be unavailable until the lock comes online. This is normal "
                 "during startup if Z-Wave JS is still initializing.",
                 entry_id,
                 entry_title,
-                lock.lock.entity_id,
+                result.lock.entity_id,
             )
 
         for slot_num in new_config.slots:
@@ -750,9 +846,8 @@ async def _async_setup_new_locks(
                 lock_entity_id,
                 slot_num,
             )
-            callbacks.invoke_lock_slot_adders(lock, slot_num, ent_reg)
+            callbacks.invoke_lock_slot_adders(result, slot_num, ent_reg)
 
-    # Notify existing entities about the new locks
     if added_locks:
         callbacks.invoke_lock_added_handlers(added_locks)
 
@@ -768,6 +863,14 @@ async def async_update_listener(
     # runtime_data.config still need to see the current data.
     runtime_data = config_entry.runtime_data
     runtime_data.config = EntryConfig.from_entry(config_entry)
+
+    # Notify per-slot coordinators so derived "active" state and condition-
+    # entity subscriptions stay in sync with the refreshed config view.
+    # Runs on both the entity-driven path (early return below) and the
+    # options-flow path so a calendar/condition swap is picked up the
+    # same way.
+    for coordinator in runtime_data.slot_coordinators.values():
+        coordinator.notify_config_changed()
 
     # No need to do entity creation/removal work if there are no options
     # because that only happens at the end of this function (data + empty
@@ -830,6 +933,19 @@ async def async_update_listener(
                 for slot_num in slots_to_remove
             )
         )
+        for slot_num in slots_to_remove:
+            coordinator = runtime_data.slot_coordinators.pop(slot_num, None)
+            if coordinator is None:
+                continue
+            try:
+                coordinator.async_stop()
+            except Exception:
+                _LOGGER.exception(
+                    "%s (%s): slot %s coordinator stop raised",
+                    entry_id,
+                    entry_title,
+                    slot_num,
+                )
 
     # Remove old lock entities
     if locks_to_remove:
@@ -838,7 +954,7 @@ async def async_update_listener(
         )
     for lock_entity_id in locks_to_remove:
         callbacks.invoke_lock_removed_handlers(lock_entity_id)
-        lock: BaseLock = hass.data[DOMAIN][CONF_LOCKS][lock_entity_id]
+        lock: BaseLock = runtime_data.locks[lock_entity_id]
         if lock.device_entry:
             dev_reg = dr.async_get(hass)
             dev_reg.async_update_device(
@@ -848,43 +964,24 @@ async def async_update_listener(
             hass, config_entry, lock_entity_id=lock_entity_id, remove_permanently=True
         )
 
-    # Notify any existing entities that additional locks have been added then create
-    # slot PIN sensors for the new locks
     if locks_to_add:
         await _async_setup_new_locks(
             hass, config_entry, locks_to_add, new_config, callbacks, ent_reg
         )
 
-    # For each new slot, add standard entities and configuration entities. We also
-    # add slot sensors for existing locks only since new locks were already set up
-    # above.
+    # For each new slot: add standard entities, then per-lock entities for
+    # existing locks (new locks already got their per-lock entities above).
     for slot_num in slots_to_add:
-        # First we store the set of entities we are adding so we can track when they
-        # are done
-        entities_to_add: set[str] = {
-            CONF_ENABLED,
-            CONF_NAME,
-            CONF_PIN,
-            EVENT_PIN_USED,
-        }
-
         _LOGGER.debug(
-            "%s (%s): Adding PIN enabled binary sensor for slot %s",
+            "%s (%s): Adding standard entities for slot %s",
             entry_id,
             entry_title,
             slot_num,
         )
+        coordinator = SlotEntityCoordinator(hass, config_entry, slot_num)
+        runtime_data.slot_coordinators[slot_num] = coordinator
+        coordinator.async_start()
         callbacks.invoke_standard_adders(slot_num, ent_reg)
-        for key in entities_to_add:
-            _LOGGER.debug(
-                "%s (%s): Adding %s entity for slot %s",
-                entry_id,
-                entry_title,
-                key,
-                slot_num,
-            )
-            if key in callbacks.add_keyed_entity:
-                callbacks.invoke_keyed_adders(key, slot_num, ent_reg)
 
         for lock_entity_id, lock in runtime_data.locks.items():
             if lock_entity_id in locks_to_add:
@@ -898,7 +995,6 @@ async def async_update_listener(
             )
             callbacks.invoke_lock_slot_adders(lock, slot_num, ent_reg)
 
-    # Existing entities will listen to updates and act on it.
     # Use to_dict() so the stored data has plain dicts (not the read-only
     # MappingProxyType wrappers EntryConfig uses internally) — HA's
     # storage layer can't serialize MappingProxyType.

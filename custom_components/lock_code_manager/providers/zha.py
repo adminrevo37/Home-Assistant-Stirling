@@ -10,7 +10,6 @@ polling.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 import logging
@@ -25,8 +24,8 @@ from homeassistant.components.zha.helpers import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 
-from ..exceptions import CodeRejectedError, LockDisconnected
-from ..models import SlotCode
+from ..domain.exceptions import CodeRejectedError, LockDisconnected
+from ..domain.models import SlotCredential
 from ._base import BaseLock
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,7 +76,6 @@ class ZHALock(BaseLock):
 
     _door_lock_cluster: DoorLock | None = field(init=False, default=None)
     _endpoint_id: int | None = field(init=False, default=None)
-    _cluster_listener_unsub: Callable[[], None] | None = field(init=False, default=None)
     _supports_programming_events: bool | None = field(init=False, default=None)
 
     # -- Properties ----------------------------------------------------------
@@ -110,11 +108,6 @@ class ZHALock(BaseLock):
             return timedelta(hours=1)
         return None
 
-    @property
-    def connection_check_interval(self) -> timedelta | None:
-        """Return interval for connection checks."""
-        return timedelta(seconds=30)
-
     # -- Setup ---------------------------------------------------------------
 
     async def async_setup(self, config_entry: ConfigEntry) -> None:
@@ -127,7 +120,7 @@ class ZHALock(BaseLock):
         ``hard_refresh_interval`` during init, so detection must complete
         before coordinator creation.
         """
-        self.teardown_push_subscription()
+        self.unsubscribe_push_updates()
         self._door_lock_cluster = None
         self._endpoint_id = None
         await super().async_setup(config_entry)
@@ -226,14 +219,14 @@ class ZHALock(BaseLock):
 
     # -- Usercode operations -------------------------------------------------
 
-    async def async_get_usercodes(self) -> dict[int, str | SlotCode]:
+    async def async_get_usercodes(self) -> dict[int, SlotCredential]:
         """Read PIN codes from all managed slots."""
         cluster = await self._get_connected_cluster()
         managed = self.managed_slots
         if not managed:
             return {}
 
-        data: dict[int, str | SlotCode] = {}
+        data: dict[int, SlotCredential] = {}
         for slot_num in managed:
             try:
                 result = await cluster.get_pin_code(slot_num)
@@ -245,9 +238,9 @@ class ZHALock(BaseLock):
                 )
                 user_status, pin_code = self._parse_pin_response(result)
                 if user_status == DoorLock.UserStatus.Enabled and pin_code:
-                    data[slot_num] = pin_code
+                    data[slot_num] = SlotCredential.known(pin_code)
                 else:
-                    data[slot_num] = SlotCode.EMPTY
+                    data[slot_num] = SlotCredential.empty()
             except LockDisconnected:
                 raise
             except Exception:
@@ -257,7 +250,7 @@ class ZHALock(BaseLock):
                     slot_num,
                     exc_info=True,
                 )
-                data[slot_num] = SlotCode.UNREADABLE_CODE
+                data[slot_num] = SlotCredential.unreadable()
         return data
 
     async def async_set_usercode(
@@ -267,7 +260,17 @@ class ZHALock(BaseLock):
         name: str | None = None,
         source: Literal["sync", "direct"] = "direct",
     ) -> bool:
-        """Set a PIN code on a slot."""
+        """
+        Set a PIN code on a slot.
+
+        Bypasses ``async_call_service`` because ZHA exposes its cluster
+        operations as zigpy method calls rather than Home Assistant
+        services. ``cluster.set_pin_code`` raises zigpy-level errors
+        (``DeliveryError``, ``asyncio.TimeoutError``) on communication
+        failure — these are routed to ``LockDisconnected`` so retries
+        and reconnect handling apply, mirroring the OSError branch of
+        the service-call wrapper.
+        """
         cluster = await self._get_connected_cluster()
         try:
             result = await cluster.set_pin_code(
@@ -276,52 +279,51 @@ class ZHALock(BaseLock):
                 DoorLock.UserType.Unrestricted,
                 str(usercode),
             )
-            _LOGGER.debug(
-                "Lock %s slot %s set_pin_code: %s",
-                self.lock.entity_id,
-                code_slot,
-                result,
-            )
-            if hasattr(result, "status") and result.status != 0:
-                raise CodeRejectedError(
-                    code_slot=code_slot,
-                    lock_entity_id=self.lock.entity_id,
-                    reason=f"set_pin_code rejected: status {result.status}",
-                )
-            if self.coordinator:
-                self.coordinator.push_update({code_slot: usercode})
-            return True
-        except CodeRejectedError, LockDisconnected:
-            raise
         except Exception as err:
             raise LockDisconnected(f"Failed to set PIN: {err}") from err
+        _LOGGER.debug(
+            "Lock %s slot %s set_pin_code: %s",
+            self.lock.entity_id,
+            code_slot,
+            result,
+        )
+        if hasattr(result, "status") and result.status != 0:
+            raise CodeRejectedError(
+                code_slot=code_slot,
+                lock_entity_id=self.lock.entity_id,
+                reason=f"set_pin_code rejected: status {result.status}",
+            )
+        self._push_credential_update(code_slot, SlotCredential.known(usercode))
+        return True
 
     async def async_clear_usercode(self, code_slot: int) -> bool:
-        """Clear a PIN code from a slot."""
+        """
+        Clear a PIN code from a slot.
+
+        See ``async_set_usercode`` for why bare zigpy failures route to
+        ``LockDisconnected`` instead of ``LockOperationFailed``.
+        """
         cluster = await self._get_connected_cluster()
         try:
             result = await cluster.clear_pin_code(code_slot)
-            _LOGGER.debug(
-                "Lock %s slot %s clear_pin_code: %s",
-                self.lock.entity_id,
-                code_slot,
-                result,
-            )
-            if hasattr(result, "status") and result.status != 0:
-                raise CodeRejectedError(
-                    code_slot=code_slot,
-                    lock_entity_id=self.lock.entity_id,
-                    reason=f"clear_pin_code rejected: status {result.status}",
-                )
-            if self.coordinator:
-                self.coordinator.push_update({code_slot: SlotCode.EMPTY})
-            return True
-        except CodeRejectedError, LockDisconnected:
-            raise
         except Exception as err:
             raise LockDisconnected(f"Failed to clear PIN: {err}") from err
+        _LOGGER.debug(
+            "Lock %s slot %s clear_pin_code: %s",
+            self.lock.entity_id,
+            code_slot,
+            result,
+        )
+        if hasattr(result, "status") and result.status != 0:
+            raise CodeRejectedError(
+                code_slot=code_slot,
+                lock_entity_id=self.lock.entity_id,
+                reason=f"clear_pin_code rejected: status {result.status}",
+            )
+        self._push_credential_update(code_slot, SlotCredential.empty())
+        return True
 
-    async def async_hard_refresh_codes(self) -> dict[int, str | SlotCode]:
+    async def async_hard_refresh_codes(self) -> dict[int, SlotCredential]:
         """Re-read all codes from the lock (no cache to invalidate)."""
         return await self.async_get_usercodes()
 
@@ -347,7 +349,7 @@ class ZHALock(BaseLock):
     @callback
     def setup_push_subscription(self) -> None:
         """Subscribe to DoorLock cluster events."""
-        if self._cluster_listener_unsub is not None:
+        if self._push_unsubs:
             return
 
         cluster = self._get_door_lock_cluster()
@@ -357,7 +359,7 @@ class ZHALock(BaseLock):
             )
 
         cluster.add_listener(self)
-        self._cluster_listener_unsub = lambda: cluster.remove_listener(self)
+        self._register_push_unsub(lambda: cluster.remove_listener(self))
         _LOGGER.debug(
             "Lock %s: subscribed to DoorLock cluster events",
             self.lock.entity_id,
@@ -366,13 +368,13 @@ class ZHALock(BaseLock):
     @callback
     def teardown_push_subscription(self) -> None:
         """Unsubscribe from DoorLock cluster events."""
-        if self._cluster_listener_unsub is not None:
-            self._cluster_listener_unsub()
-            self._cluster_listener_unsub = None
-            _LOGGER.debug(
-                "Lock %s: unsubscribed from DoorLock cluster events",
-                self.lock.entity_id,
-            )
+        if not self._push_unsubs:
+            return
+        self._clear_push_unsubs()
+        _LOGGER.debug(
+            "Lock %s: unsubscribed from DoorLock cluster events",
+            self.lock.entity_id,
+        )
 
     # -- Cluster listener callbacks ------------------------------------------
 

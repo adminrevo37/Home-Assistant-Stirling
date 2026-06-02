@@ -2,15 +2,15 @@
 Matter lock provider.
 
 Handles PIN credential management via Matter lock helpers.
-PINs are write-only: occupied slots report SlotCode.UNREADABLE_CODE, cleared slots report
-SlotCode.EMPTY. Subscribes to DoorLock cluster events via the push framework for
-code slot tracking (LockOperation) and occupancy updates (LockUserChange).
+PINs are write-only: occupied slots report ``SlotCredential.unreadable()``,
+cleared slots report ``SlotCredential.empty()``. Subscribes to DoorLock
+cluster events via the push framework for code slot tracking (LockOperation)
+and occupancy updates (LockUserChange).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -33,14 +33,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
-from ..exceptions import (
+from ..domain.exceptions import (
     CodeRejectedError,
     DuplicateCodeError,
     LockCodeManagerProviderError,
     LockDisconnected,
 )
-from ..models import SlotCode
+from ..domain.models import SlotCredential
 from ._base import BaseLock
+from ._util import parse_slot_num
 from .const import LOGGER
 
 # DoorLock cluster ID (0x0101 = 257)
@@ -63,10 +64,6 @@ _DATA_OP_MODIFY = 2
 class MatterLock(BaseLock):
     """Class to represent a Matter lock."""
 
-    _event_unsub: Callable[[], None] | None = field(
-        default=None, init=False, repr=False
-    )
-
     @property
     def domain(self) -> str:
         """Return integration domain."""
@@ -79,7 +76,7 @@ class MatterLock(BaseLock):
 
         Matter locks push occupancy changes via LockUserChange events.
         PINs are still write-only (values are never pushed), but slot
-        occupancy (UNREADABLE_CODE/EMPTY) is pushed in real time.
+        occupancy (unreadable/empty credentials) is pushed in real time.
         """
         return True
 
@@ -118,12 +115,6 @@ class MatterLock(BaseLock):
                 err,
             )
             return None
-
-    @property
-    def _matter_node_id(self) -> int | None:
-        """Resolve the Matter node ID."""
-        node = self._get_matter_node()
-        return node.node_id if node else None
 
     def _get_matter_client(self) -> Any | None:
         """Get the MatterClient via the Matter integration helper."""
@@ -203,20 +194,23 @@ class MatterLock(BaseLock):
         Called by BaseLock.subscribe_push_updates(). On failure, the
         reconnect handlers will retry when the integration reloads.
         """
-        if self._event_unsub is not None:
+        if self._push_unsubs:
             return
 
         client = self._get_matter_client()
-        node_id = self._matter_node_id
+        node = self._get_matter_node()
+        node_id = node.node_id if node else None
         if not client or node_id is None:
             raise LockDisconnected(
                 f"Matter client or node ID unavailable for {self.lock.entity_id}"
             )
 
-        self._event_unsub = client.subscribe_events(
-            callback=self._on_node_event,
-            event_filter=EventType.NODE_EVENT,
-            node_filter=node_id,
+        self._register_push_unsub(
+            client.subscribe_events(
+                callback=self._on_node_event,
+                event_filter=EventType.NODE_EVENT,
+                node_filter=node_id,
+            )
         )
         LOGGER.debug(
             "Lock %s: subscribed to Matter events (node %s)",
@@ -227,9 +221,7 @@ class MatterLock(BaseLock):
     @callback
     def teardown_push_subscription(self) -> None:
         """Unsubscribe from Matter DoorLock cluster events."""
-        if self._event_unsub:
-            self._event_unsub()
-            self._event_unsub = None
+        self._clear_push_unsubs()
 
     @callback
     def _on_node_event(self, _event: Any, node_event: Any) -> None:
@@ -273,12 +265,10 @@ class MatterLock(BaseLock):
                 code_slot = cred.get("credentialIndex")
                 break
 
-        # Only fire for PIN credentials
         if code_slot is None:
             return
 
-        # Determine lock/unlock from operation type
-        # 0 = Lock, 1 = Unlock, 2 = NonAccessUserEvent, 3 = ForcedUserEvent, 4 = Unlatch
+        # lockOperationType: 0=Lock, 1=Unlock, 2=NonAccessUserEvent, 3=ForcedUserEvent, 4=Unlatch
         if lock_operation_type == 0:
             to_locked = True
         elif lock_operation_type == 1:
@@ -318,16 +308,14 @@ class MatterLock(BaseLock):
         """
         data: dict[str, Any] = getattr(node_event, "data", None) or {}
 
-        # Only handle PIN credential changes (LockDataType 6 = PIN)
         if data.get("lockDataType") != _LOCK_DATA_TYPE_PIN:
             return
 
         raw_index = data.get("dataIndex")
         if raw_index is None:
             return
-        try:
-            code_slot = int(raw_index)
-        except TypeError, ValueError:
+        code_slot = parse_slot_num(raw_index)
+        if code_slot is None:
             LOGGER.warning(
                 "Lock %s: LockUserChange has non-integer dataIndex %r, ignoring",
                 self.lock.entity_id,
@@ -338,9 +326,9 @@ class MatterLock(BaseLock):
         operation = data.get("dataOperationType")
 
         if operation == _DATA_OP_CLEAR:
-            resolved: str | SlotCode = SlotCode.EMPTY
+            resolved = SlotCredential.empty()
         elif operation in (_DATA_OP_ADD, _DATA_OP_MODIFY):
-            resolved = SlotCode.UNREADABLE_CODE
+            resolved = SlotCredential.unreadable()
         else:
             LOGGER.debug(
                 "Lock %s: LockUserChange event with unknown operation %s for slot %s",
@@ -358,8 +346,7 @@ class MatterLock(BaseLock):
             resolved,
         )
 
-        if self.coordinator:
-            self.coordinator.push_update({code_slot: resolved})
+        self._push_credential_update(code_slot, resolved)
 
     # -- Credential helpers --------------------------------------------------
 
@@ -420,14 +407,15 @@ class MatterLock(BaseLock):
 
     # -- Usercode CRUD -------------------------------------------------------
 
-    async def async_get_usercodes(self) -> dict[int, str | SlotCode]:
+    async def async_get_usercodes(self) -> dict[int, SlotCredential]:
         """
         Get dictionary of code slots and usercodes.
 
-        Returns all occupied PIN credential slots as SlotCode.UNREADABLE_CODE (PINs are
-        write-only) and managed empty slots as SlotCode.EMPTY. Unmanaged
-        occupied slots are included so callers like the lock reset config flow
-        step can detect codes not managed by Lock Code Manager.
+        Returns all occupied PIN credential slots as
+        ``SlotCredential.unreadable()`` (PINs are write-only) and managed
+        empty slots as ``SlotCredential.empty()``. Unmanaged occupied slots
+        are included so callers like the lock reset config flow step can
+        detect codes not managed by Lock Code Manager.
         """
         managed_slots = self.managed_slots
         client, node = self._require_client_and_node()
@@ -459,15 +447,15 @@ class MatterLock(BaseLock):
                 cred_index = credential.get("index")
                 if cred_index is None:
                     continue
-                try:
-                    occupied_slots.add(int(cred_index))
-                except TypeError, ValueError:
+                slot_num = parse_slot_num(cred_index)
+                if slot_num is None:
                     LOGGER.warning(
                         "Lock %s: skipping credential with invalid index %r",
                         self.lock.entity_id,
                         cred_index,
                     )
                     continue
+                occupied_slots.add(slot_num)
 
         all_slots = managed_slots | occupied_slots
         LOGGER.debug(
@@ -478,7 +466,11 @@ class MatterLock(BaseLock):
             len(all_slots),
         )
         return {
-            slot: SlotCode.UNREADABLE_CODE if slot in occupied_slots else SlotCode.EMPTY
+            slot: (
+                SlotCredential.unreadable()
+                if slot in occupied_slots
+                else SlotCredential.empty()
+            )
             for slot in all_slots
         }
 
@@ -565,8 +557,9 @@ class MatterLock(BaseLock):
         Set a usercode on a code slot.
 
         Returns True unconditionally because Matter does not reveal whether
-        the credential value actually changed. Pushes SlotCode.UNREADABLE_CODE
-        to the coordinator immediately — the LockUserChange event will confirm.
+        the credential value actually changed. Pushes an unreadable
+        credential to the coordinator immediately — the LockUserChange event
+        will confirm.
         """
         user_index = await self._set_credential_with_duplicate_handling(
             code_slot, usercode, source
@@ -575,10 +568,9 @@ class MatterLock(BaseLock):
         if name is not None and user_index is not None:
             await self._set_user_name(user_index, name, code_slot)
 
-        # Optimistic update: call succeeded, push occupancy state
-        # immediately. The LockUserChange event will confirm later.
-        if self.coordinator:
-            self.coordinator.push_update({code_slot: SlotCode.UNREADABLE_CODE})
+        # Optimistic update: push occupancy state immediately;
+        # the LockUserChange event will confirm.
+        self._push_credential_update(code_slot, SlotCredential.unreadable())
         return True
 
     async def async_clear_usercode(self, code_slot: int) -> bool:
@@ -586,7 +578,8 @@ class MatterLock(BaseLock):
         Clear a usercode on a code slot.
 
         Returns True if a credential was cleared, False if the slot was already
-        empty. Pushes SlotCode.EMPTY to the coordinator immediately on success.
+        empty. Pushes an empty credential to the coordinator immediately on
+        success.
         """
         client, node = self._require_client_and_node()
         try:
@@ -611,13 +604,12 @@ class MatterLock(BaseLock):
             return False
 
         await self._clear_lock_credential(code_slot)
-        # Optimistic update: clear succeeded, push empty state immediately.
-        # The LockUserChange event will confirm later.
-        if self.coordinator:
-            self.coordinator.push_update({code_slot: SlotCode.EMPTY})
+        # Optimistic update: push empty state immediately;
+        # the LockUserChange event will confirm.
+        self._push_credential_update(code_slot, SlotCredential.empty())
         return True
 
-    async def async_hard_refresh_codes(self) -> dict[int, str | SlotCode]:
+    async def async_hard_refresh_codes(self) -> dict[int, SlotCredential]:
         """
         Perform hard refresh and return all codes.
 

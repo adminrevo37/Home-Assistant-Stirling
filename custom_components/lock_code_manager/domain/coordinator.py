@@ -21,24 +21,25 @@ from homeassistant.helpers.issue_registry import (
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import (
+from ..const import (
     BACKOFF_FAILURE_THRESHOLD,
     BACKOFF_INITIAL_SECONDS,
     BACKOFF_MAX_SECONDS,
     DOMAIN,
     POLL_FAILURE_ALERT_THRESHOLD,
 )
-from .data import get_entry_config
 from .exceptions import LockCodeManagerError
-from .models import SlotCode
+from .models import SlotCredential
+from .queries import get_entry_config
+from .resilience import CircuitBreaker
 
 if TYPE_CHECKING:
-    from .providers import BaseLock
+    from ..providers import BaseLock
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, str | SlotCode]]):
+class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, SlotCredential]]):
     """Class to manage usercode updates."""
 
     def __init__(self, hass: HomeAssistant, lock: BaseLock, config_entry: Any) -> None:
@@ -57,10 +58,13 @@ class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, str | SlotCo
             update_interval=update_interval,
             config_entry=config_entry,
         )
-        self.data: dict[int, str | SlotCode] = {}
-        self._slot_sync_mgrs_suspended: bool = False
+        self.data: dict[int, SlotCredential] = {}
         self._config_entry = config_entry
-        self._consecutive_failures: int = 0
+        self._lock_breaker = CircuitBreaker(
+            BACKOFF_FAILURE_THRESHOLD,
+            backoff_initial=timedelta(seconds=BACKOFF_INITIAL_SECONDS),
+            backoff_max=timedelta(seconds=BACKOFF_MAX_SECONDS),
+        )
         self._original_update_interval: timedelta | None = update_interval
 
         # Set up drift detection timer for locks with hard_refresh_interval
@@ -73,7 +77,6 @@ class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, str | SlotCo
             )
 
         if lock.connection_check_interval:
-            # Periodic connection checks drive reconnect handling for non-push providers.
             self._connection_unsub = async_track_time_interval(
                 hass,
                 self._async_connection_check,
@@ -86,33 +89,36 @@ class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, str | SlotCo
         """Return the lock."""
         return self._lock
 
-    def get_expected_pin(self, slot_num: int) -> str | None:
-        """Return configured PIN for a slot, or None if disabled/unconfigured."""
+    def desired_credential(self, slot_num: int) -> SlotCredential:
+        """
+        Return the credential LCM wants on a slot.
+
+        Disabled slots and enabled-but-blank slots map to
+        ``SlotCredential.empty()``; an enabled slot with a configured PIN
+        maps to ``SlotCredential.known(pin)``.
+        """
         slot_data = get_entry_config(self._config_entry).slot(slot_num)
         if not slot_data.get(CONF_ENABLED):
-            return None
-        return slot_data.get(CONF_PIN) or None
-
-    def slot_expects_pin(self, slot_num: int) -> bool:
-        """Return whether LCM expects a PIN on this slot (enabled with PIN)."""
-        return self.get_expected_pin(slot_num) is not None
+            return SlotCredential.empty()
+        pin = slot_data.get(CONF_PIN)
+        if not pin:
+            return SlotCredential.empty()
+        return SlotCredential.known(pin)
 
     @staticmethod
     def _normalize_keys(
-        data: dict[Any, str | SlotCode],
-    ) -> dict[int, str | SlotCode]:
+        data: dict[Any, SlotCredential],
+    ) -> dict[int, SlotCredential]:
         """Coerce slot keys to ``int``. Raises ValueError/TypeError if a key cannot be cast."""
         return {int(k): v for k, v in data.items()}
 
     @callback
-    def push_update(self, updates: dict[int, str | SlotCode]) -> None:
+    def push_update(self, updates: dict[int, SlotCredential]) -> None:
         """Push one or more slot updates and notify listening entities."""
         if not updates:
             return
 
         new_data = {**self.data, **self._normalize_keys(updates)}
-        # Skip update if data hasn't actually changed to avoid redundant logging
-        # and unnecessary listener notifications
         if new_data == self.data:
             return
 
@@ -122,35 +128,42 @@ class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, str | SlotCo
 
         self.async_set_updated_data(new_data)
 
+    def note_connectivity_failure(self) -> None:
+        """
+        Record a connectivity failure observed outside the poll path.
+
+        Lets the sync layer feed set/clear transport failures into the same
+        lock breaker that polling uses, so "lock is unreachable" converges
+        from both code paths. When this is what trips the breaker, kick a
+        refresh so a provider that does not normally poll (push) starts
+        probing for recovery.
+        """
+        was_tripped = self._lock_breaker.tripped
+        self._apply_backoff()
+        if self._lock_breaker.tripped and not was_tripped:
+            self.hass.async_create_task(self.async_request_refresh())
+
     def _apply_backoff(self) -> None:
-        """Increment failure counter and apply exponential backoff if threshold met."""
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= BACKOFF_FAILURE_THRESHOLD:
-            backoff_secs = min(
-                BACKOFF_INITIAL_SECONDS
-                * 2 ** (self._consecutive_failures - BACKOFF_FAILURE_THRESHOLD),
-                BACKOFF_MAX_SECONDS,
-            )
-            if self._original_update_interval is not None:
-                new_interval = timedelta(seconds=backoff_secs)
-                if new_interval != self.update_interval:  # type: ignore[has-type]
-                    self.update_interval = new_interval
-                    _LOGGER.warning(
-                        "Update failed %d consecutive times for %s, "
-                        "backing off polling interval to %ds",
-                        self._consecutive_failures,
-                        self._lock.lock.entity_id,
-                        backoff_secs,
-                    )
-            else:
+        """Record a connectivity failure and poll on a backoff until recovery."""
+        self._lock_breaker.record_failure()
+        if self._lock_breaker.tripped:
+            # Poll on the backoff interval until a successful update clears the
+            # breaker. Push providers normally do not poll, but while the lock
+            # is unreachable we poll to probe for recovery -- otherwise a push
+            # provider whose writes fail (with no push arriving) could stay
+            # suspended indefinitely.
+            new_interval = self._lock_breaker.backoff_delay
+            if new_interval != self.update_interval:  # type: ignore[has-type]
+                self.update_interval = new_interval
                 _LOGGER.warning(
                     "Update failed %d consecutive times for %s, "
-                    "suppressing drift checks until recovery",
-                    self._consecutive_failures,
+                    "polling every %ds until it recovers",
+                    self._lock_breaker.failure_count,
                     self._lock.lock.entity_id,
+                    new_interval.total_seconds(),
                 )
 
-        if self._consecutive_failures == POLL_FAILURE_ALERT_THRESHOLD:
+        if self._lock_breaker.failure_count == POLL_FAILURE_ALERT_THRESHOLD:
             async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -165,48 +178,33 @@ class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, str | SlotCo
             )
 
     @property
-    def slot_sync_mgrs_suspended(self) -> bool:
-        """Return whether slot sync operations are suspended for this lock."""
-        return self._slot_sync_mgrs_suspended
-
-    def suspend_slot_sync_mgrs(self) -> None:
-        """
-        Suspend slot sync managers for this lock.
-
-        Called by any SlotSyncManager that hits a circuit breaker or
-        unexpected error. All sync managers for this lock will see the
-        flag and stop retrying. Cleared automatically on recovery via
-        _reset_backoff (successful poll or push update).
-        """
-        self._slot_sync_mgrs_suspended = True
-        _LOGGER.info("Slot sync suspended for %s", self._lock.lock.entity_id)
-        # Notify listeners so other SlotSyncManagers for this lock
-        # transition to SUSPENDED on their next _request_sync_check.
-        self.async_update_listeners()
+    def unreachable(self) -> bool:
+        """Return whether the lock is currently considered unreachable."""
+        return self._lock_breaker.tripped
 
     def _reset_backoff(self) -> None:
-        """Reset failure counter and restore original update interval."""
-        self._slot_sync_mgrs_suspended = False
-        if self._consecutive_failures > 0:
+        """Reset the lock breaker and restore the original update interval."""
+        if self._lock_breaker.failure_count > 0:
             _LOGGER.info(
                 "Lock %s recovered after %d consecutive failures",
                 self._lock.lock.entity_id,
-                self._consecutive_failures,
+                self._lock_breaker.failure_count,
             )
-            self._consecutive_failures = 0
-            if self._original_update_interval is not None:
-                self.update_interval = self._original_update_interval
+            self._lock_breaker.reset()
+            # Restore the normal cadence. For push providers this is None,
+            # which stops the recovery probe polling.
+            self.update_interval = self._original_update_interval  # type: ignore[assignment]
         # Unconditionally clear lock_offline issue on any successful poll.
         # Runs outside the if-block so it also clears persisted issues that
-        # survive HA restarts (where _consecutive_failures resets to 0).
+        # survive HA restarts (where the breaker resets to 0).
         async_delete_issue(
             self.hass,
             DOMAIN,
             f"lock_offline_{self._lock.lock.entity_id}",
         )
 
-    async def async_get_usercodes(self) -> dict[int, str | SlotCode]:
-        """Fetch usercodes from the provider, normalize slot keys to int, and apply backoff handling."""
+    async def async_get_usercodes(self) -> dict[int, SlotCredential]:
+        """Fetch usercodes from the provider, normalize slot keys, and apply backoff handling."""
         try:
             data = await self._lock.async_internal_get_usercodes()
         except LockCodeManagerError as err:
@@ -223,22 +221,15 @@ class LockUsercodeUpdateCoordinator(DataUpdateCoordinator[dict[int, str | SlotCo
         return self._normalize_keys(data)
 
     async def _async_drift_check(self, now: datetime) -> None:
-        """
-        Perform periodic drift detection.
-
-        Hard refresh re-fetches codes from the lock to detect out-of-band changes
-        (e.g., codes changed at the lock's keypad). If changes are detected,
-        updates coordinator data and notifies listeners.
-        """
-        # Skip if we haven't successfully loaded initial data yet
+        """Perform a hard refresh to detect out-of-band code changes."""
         if not self.last_update_success:
             return
 
-        if self._consecutive_failures >= BACKOFF_FAILURE_THRESHOLD:
+        if self._lock_breaker.tripped:
             _LOGGER.debug(
                 "Skipping drift check for %s (in backoff after %d failures)",
                 self._lock.lock.entity_id,
-                self._consecutive_failures,
+                self._lock_breaker.failure_count,
             )
             return
 

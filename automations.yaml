@@ -1649,13 +1649,13 @@
   mode: single
 - id: '1780392305276'
   alias: Zigbee - Low Battery Alert
-  description: Notify Julian when a battery-powered Zigbee device drops below 20%
+  description: Notify Julian when a battery-powered Zigbee device drops below 50%
     (sustained 30 min to avoid a transient dip). Currently only the roller door contact
     has a battery; add new battery sensors here as devices are paired.
   triggers:
   - platform: numeric_state
     entity_id: sensor.0x54ef4410014ae72a_battery
-    below: 20
+    below: 50
     for:
       minutes: 30
   actions:
