@@ -116,9 +116,23 @@ device in pairing mode, then toggling it off. Rename via MQTT: publish to
 friendly_name + MQTT topic; pre-existing HA entity_ids keep their join-time ieee slug).
 
 Paired devices (2026-05-31):
-- **roller_door_contact** — Aqara door/window sensor T1 (`0x54ef4410014ae72a`) → `binary_sensor.roller_door_contact` (roller-door spec). **Battery installed 31 May 2026** (fresh CR2032) — tracking drain to gauge sensor battery life. Install date held in `input_datetime.roller_door_sensor_installed`; live tracker card (install date + days in service + battery %) on the INSIGHTS dashboard "Zigbee / Device Health" section; low-battery alert at 50% (`automation.zigbee_low_battery_alert`). Log the date it crosses 50% here when it fires.
+- **roller_door_contact** — Aqara door/window sensor T1 (`0x54ef4410014ae72a`) → `binary_sensor.roller_door_contact` (roller-door spec). **Battery installed 31 May 2026** (fresh CR2032); auto-tracked by the standing battery system below. Note the date it crosses 50% here when the alert fires, for the lifespan figure.
 - **Plug 1** — Tuya smart plug w/ power monitoring (`0xa4c138074803a9a9`) → `switch.0xa4c138074803a9a9` + power/current/voltage/energy sensors. Registered + named only; **not yet assigned a purpose or automation** (parked 2026-05-31). Mains-powered → also a Zigbee router.
 - **Plug 2** — Tuya smart plug w/ power monitoring (`0xa4c138ba345696ae`) → `switch.0xa4c138ba345696ae` + same sensors. Same parked status. Entity_ids still ieee-based (tidy to `plug_2` later if wanted).
+
+### Device health monitoring (added 2026-06-02)
+- **LQI entities enabled** for all Z2M devices (disabled by default): `sensor.<ieee>_linkquality`. Roller door LQI ~72–80 (moderate, via a plug router); plugs ~200.
+- **Z2M availability tracking is ON** (Settings → Availability; was off). Active/router devices go `unavailable` after ~10 min offline, passive battery devices after ~25 h. This is what powers offline alerts (a dropped device's HA entities flip to `unavailable`).
+- **INSIGHTS dashboard** has a "Zigbee / Device Health" section (bridge connection/restart-required tiles, per-device LQI/battery/power, + the Battery devices card).
+- **Alerts → `notify.mobile_app_julian`:** `automation.zigbee_device_offline_alert` (any device unavailable, or whole-bridge-down). Battery alerts are the standing rule below.
+
+### Battery tracking — STANDING RULE (added 2026-06-02)
+Any new **wireless (MQTT/Zigbee) battery sensor** is tracked automatically from day of install — no per-device setup.
+- **Scope:** battery sensors in `integration_entities('mqtt')` (Zigbee/MQTT). Phones/watches (`mobile_app`) are deliberately EXCLUDED.
+- **Low-battery alert:** `automation.battery_low_alert_wireless_sensors` — notifies Julian when any in-scope battery sensor is ≤ the threshold (fires on crossing + a daily 09:00 backstop while still low). Threshold = `input_number.battery_low_alert_threshold` (default **50%**, change in Settings → Helpers, no redeploy). The old per-device `automation.zigbee_low_battery_alert` is disabled (superseded).
+- **Auto-recorded install date:** `automation.battery_auto_onboard_new_wireless_device` fires when a new in-scope battery sensor appears, stamps today's date into `input_text.battery_install_date_log_json` (a JSON map `entity_id → YYYY-MM-DD`, once per device) and notifies. **Cap ~5–7 devices (input_text 255-char limit)** — migrate to a file-based log if it grows.
+- **Dashboard:** the "Battery devices" card (INSIGHTS → Zigbee / Device Health) auto-lists every in-scope battery sensor with %, install date, and days in service.
+- Seeded: roller_door_contact = 2026-05-31. (`input_datetime.roller_door_sensor_installed` from the first cut is now vestigial — the JSON map is the source of truth.)
 
 ---
 
