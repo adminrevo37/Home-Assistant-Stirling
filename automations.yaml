@@ -1698,3 +1698,78 @@
         endif %}'
   mode: queued
   max: 5
+- id: '1780393541120'
+  alias: Battery - Low Alert (wireless sensors)
+  description: Generic low-battery alert for ALL wireless (MQTT/Zigbee) battery sensors.
+    Auto-covers any new device - no per-device setup. Threshold from input_number.battery_low_alert_threshold
+    (50%). Phones/watches (mobile_app) are excluded by the integration_entities('mqtt')
+    scope. Fires on crossing below + a daily 09:00 backstop while still low.
+  triggers:
+  - platform: template
+    value_template: '{% set t = states(''input_number.battery_low_alert_threshold'')|float(50)
+      %}{{ (states.sensor | selectattr(''attributes.device_class'',''eq'',''battery'')
+      | selectattr(''entity_id'',''in'', integration_entities(''mqtt'')) | map(attribute=''state'')
+      | map(''float'',101) | select(''le'', t) | list | count) > 0 }}'
+  - platform: time
+    at: 09:00:00
+  conditions:
+  - condition: template
+    value_template: '{% set t = states(''input_number.battery_low_alert_threshold'')|float(50)
+      %}{{ (states.sensor | selectattr(''attributes.device_class'',''eq'',''battery'')
+      | selectattr(''entity_id'',''in'', integration_entities(''mqtt'')) | map(attribute=''state'')
+      | map(''float'',101) | select(''le'', t) | list | count) > 0 }}'
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: Low battery - wireless sensor
+      message: '{% set t = states(''input_number.battery_low_alert_threshold'')|float(50)
+        %}These wireless sensors are at/below {{ t|int }}%:{% for s in states.sensor
+        | selectattr(''attributes.device_class'',''eq'',''battery'') | selectattr(''entity_id'',''in'',
+        integration_entities(''mqtt'')) %}{% if s.state|float(101) <= t %}
+
+        - {{ s.attributes.friendly_name }}: {{ s.state }}%{% endif %}{% endfor %}'
+  mode: single
+- id: '1780393546659'
+  alias: Battery - Auto-onboard new wireless device
+  description: When a NEW wireless (MQTT/Zigbee) battery sensor is added to HA, automatically
+    record its install date (today) into input_text.battery_install_date_log_json
+    and notify. Runs once per device (skips if already recorded). This is what makes
+    battery tracking automatic from day of install. 1-min delay lets the entity initialise
+    so device_class is readable.
+  triggers:
+  - platform: event
+    event_type: entity_registry_updated
+    event_data:
+      action: create
+  conditions:
+  - condition: template
+    value_template: '{{ trigger.event.data.entity_id is string and trigger.event.data.entity_id.startswith(''sensor.'')
+      }}'
+  actions:
+  - delay:
+      minutes: 1
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{% set e = trigger.event.data.entity_id %}{% set raw = states(''input_text.battery_install_date_log_json'')
+          %}{% set cur = (raw if raw not in [''unknown'',''unavailable'',''''] else
+          ''{}'')|from_json %}{{ state_attr(e,''device_class'') == ''battery'' and
+          e in integration_entities(''mqtt'') and e not in cur }}'
+      sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.battery_install_date_log_json
+        data:
+          value: '{% set e = trigger.event.data.entity_id %}{% set raw = states(''input_text.battery_install_date_log_json'')
+            %}{% set cur = (raw if raw not in [''unknown'',''unavailable'',''''] else
+            ''{}'')|from_json %}{{ (cur | combine({e: now().strftime(''%Y-%m-%d'')}))
+            | to_json }}'
+      - action: notify.mobile_app_julian
+        data:
+          title: New wireless sensor onboarded
+          message: '{% set e = trigger.event.data.entity_id %}{{ state_attr(e,''friendly_name'')
+            or e }} detected and added to battery tracking (install date {{ now().strftime(''%d
+            %b %Y'') }}). Low-battery alert at {{ states(''input_number.battery_low_alert_threshold'')|int(50)
+            }}%.'
+  mode: queued
+  max: 10
