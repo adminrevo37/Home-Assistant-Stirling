@@ -1647,3 +1647,54 @@
         message: Invalid code attempt ({{ typed | length }} digits) — door not opened
         entity_id: lock.front_door_lock
   mode: single
+- id: '1780392305276'
+  alias: Zigbee - Low Battery Alert
+  description: Notify Julian when a battery-powered Zigbee device drops below 20%
+    (sustained 30 min to avoid a transient dip). Currently only the roller door contact
+    has a battery; add new battery sensors here as devices are paired.
+  triggers:
+  - platform: numeric_state
+    entity_id: sensor.0x54ef4410014ae72a_battery
+    below: 20
+    for:
+      minutes: 30
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: Low battery - Roller door sensor
+      message: Roller door contact sensor battery is at {{ states('sensor.0x54ef4410014ae72a_battery')
+        }}%. Replace soon (CR2032).
+  mode: single
+- id: '1780392309960'
+  alias: Zigbee - Device Offline Alert
+  description: 'Notify Julian when a Zigbee device goes unavailable (availability
+    tracking enabled in Z2M: active/router devices ~10 min, passive battery devices
+    ~25 h). Bridge-down is flagged as a network-wide outage. The ''for'' guards against
+    the brief unavailability during a Z2M restart.'
+  triggers:
+  - platform: state
+    entity_id:
+    - binary_sensor.roller_door_contact
+    - switch.0xa4c138074803a9a9
+    - switch.0xa4c138ba345696ae
+    to: unavailable
+    for:
+      minutes: 5
+    id: device
+  - platform: state
+    entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+    to: 'off'
+    for:
+      minutes: 2
+    id: bridge
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: '{{ ''Zigbee network DOWN'' if trigger.id == ''bridge'' else ''Zigbee
+        device offline'' }}'
+      message: '{% if trigger.id == ''bridge'' %}Zigbee2MQTT bridge has lost connection
+        - all Zigbee devices are unreachable.{% else %}{{ trigger.to_state.attributes.friendly_name
+        }} ({{ trigger.entity_id }}) has gone offline - no response from the device.{%
+        endif %}'
+  mode: queued
+  max: 5

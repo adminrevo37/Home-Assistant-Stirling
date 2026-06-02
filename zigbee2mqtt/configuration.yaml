@@ -47,3 +47,9 @@ homeassistant:
 devices:
   '0x54ef4410014ae72a':
     friendly_name: roller_door_contact
+  '0xa4c138074803a9a9':
+    friendly_name: Plug 1
+  '0xa4c138ba345696ae':
+    friendly_name: Plug 2
+availability:
+  enabled: true
