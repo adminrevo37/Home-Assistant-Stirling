@@ -78,6 +78,42 @@ activate aborts silently (no alert). Worth adding an admin alert on slot exhaust
 
 ---
 
+## Customer entry keypad — Path A (bench-testing, NOT yet live)
+
+> **Status 2026-06-03: BENCH-TESTING, not working on the box yet.** This is the
+> answer to the Control4 dead-end above (DS3 won't accept API-written codes).
+
+**Concept:** the keypad is a *dumb Wiegand reader*. It reads the typed PIN and fires
+`esphome.keypad_code` to HA; **HA is the sole code authority** — `keypad_validate_entry`
+in `automations.yaml` matches the PIN against the active-booking
+`input_text.bay{N}_code_slot_{a/b/c}` (already populated T-15m→T+15m by the bay
+activate/deactivate automations) and unlocks `lock.front_door_lock`. The device never
+validates or opens anything itself.
+
+- **Device config:** `esphome/cricket-keypad.yaml` — Olimex ESP32-POE-ISO + Jaycar
+  LA5353 (Sebury W1-C). Ethernet/PoE only (no Wi-Fi/BT). Handles BOTH Wiegand modes
+  (4-bit-per-key `on_key` + whole-PIN 26-bit `on_tag`) automatically; `on_raw` logs
+  every frame for bench calibration. Pins: Green=D0→**GPIO4**, White=D1→**GPIO5**.
+- **Full wiring + bench notes:** `docs/keypad_path_a_wiring.md` (+ `.svg` diagram).
+- **Master build doc:** `../cricket/home-assistant/BUILD_KEYPAD_PATH_A_JAYCAR.md` (Claude folder, not in this repo).
+
+**Power/ground (the crux):** keypad on **12 V** (Red=+12, Black+Pink=GND); Olimex on
+**PoE only** (draws nothing from 12 V). **All grounds → ONE star point** on 12 V (−),
+incl. the Olimex GND as a shared *signal reference*. A **12 V→5 V buck** feeds the
+BSS138 shifter's HV (5 V) reference; both D0/D1 shift 5 V→3.3 V (**ESP32 is NOT 5 V
+tolerant**). GPIO5 is a strapping pin — fine (Wiegand idles high), don't hold a key at boot.
+
+**Bench gotchas (hard-won):** Wiegand D0/D1 are **open-collector** — a bare line reads
+~0 V and is meaningless; it only idles at 5 V with a pull-up (the BSS138 has built-in
+10 kΩ to HV, so HV=5 V makes lines idle high). A **multimeter can't see Wiegand pulses**
+(~50 µs each, ~25 ms/code) — it only confirms idle-high; the `on_raw` log is the only
+real decode test. **2026-06-03 progress:** keypad powered (12 V OK), bare data line
+twitches to ~0.15 V on `#` → keypad IS transmitting (right wire, alive). **NEXT:** wire
+shifter HV=5 V, confirm ~5 V idle, connect GPIO4/5, read `on_raw` to prove decode + pick
+which path (`on_key` vs `on_tag`) is live.
+
+---
+
 ## Lighting automations (rebuilt 2026-05-30, commit `9ce0b24`)
 
 Full rebuild per `../cricket/home-assistant/SPEC_HA_LIGHTING_AUTOMATIONS.md` (that doc is the

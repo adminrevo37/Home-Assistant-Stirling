@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="600" viewBox="0 0 1140 600" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1140" height="600" fill="#ffffff"/>
+  <text x="20" y="28" font-size="20" font-weight="bold">Customer Keypad — Path A wiring (Olimex ESP32-POE-ISO + Jaycar LA5353)</text>
+  <text x="20" y="48" font-size="13" fill="#444">Keypad runs on 12 V. Olimex runs on PoE only. Wiegand 5 V data is level-shifted to 3.3 V. ALL grounds meet at one star point.</text>
+
+  <!-- ===== Legend ===== -->
+  <g font-size="12">
+    <rect x="930" y="60" width="195" height="118" fill="#fafafa" stroke="#ccc"/>
+    <text x="940" y="78" font-weight="bold">Legend</text>
+    <line x1="940" y1="92" x2="970" y2="92" stroke="#d00000" stroke-width="3"/><text x="976" y="96">+12 V</text>
+    <line x1="940" y1="110" x2="970" y2="110" stroke="#000000" stroke-width="3"/><text x="976" y="114">GND (0 V)</text>
+    <line x1="940" y1="128" x2="970" y2="128" stroke="#e08a00" stroke-width="3"/><text x="976" y="132">+5 V (HV ref)</text>
+    <line x1="940" y1="146" x2="970" y2="146" stroke="#8a2be2" stroke-width="3"/><text x="976" y="150">+3.3 V (LV ref)</text>
+    <line x1="940" y1="164" x2="970" y2="164" stroke="#1e9e3a" stroke-width="3"/><text x="976" y="168">D0 / D1 data</text>
+  </g>
+
+  <!-- ===== Boxes ===== -->
+  <!-- PSU -->
+  <rect x="40" y="70" width="140" height="80" rx="4" fill="#fff5f5" stroke="#d00000"/>
+  <text x="110" y="100" font-size="13" font-weight="bold" text-anchor="middle">12 V DC PSU</text>
+  <text x="135" y="119" font-size="11">+12V</text>
+  <text x="143" y="142" font-size="11">GND (-)</text>
+
+  <!-- Buck -->
+  <rect x="250" y="68" width="150" height="72" rx="4" fill="#fffaf0" stroke="#e08a00"/>
+  <text x="325" y="92" font-size="12" font-weight="bold" text-anchor="middle">12V→5V Buck</text>
+  <text x="325" y="108" font-size="11" text-anchor="middle">set output 5.0 V</text>
+  <text x="256" y="86" font-size="10">IN+</text><text x="256" y="139" font-size="10">IN-</text>
+  <text x="372" y="86" font-size="10">+5V</text><text x="376" y="139" font-size="10">0V</text>
+
+  <!-- PoE switch -->
+  <rect x="40" y="290" width="150" height="70" rx="4" fill="#f3f3f3" stroke="#888"/>
+  <text x="115" y="318" font-size="12" font-weight="bold" text-anchor="middle">PoE Switch /</text>
+  <text x="115" y="334" font-size="12" font-weight="bold" text-anchor="middle">Injector</text>
+
+  <!-- Olimex -->
+  <rect x="250" y="270" width="240" height="185" rx="4" fill="#eef6ff" stroke="#2a6cc0"/>
+  <text x="370" y="292" font-size="13" font-weight="bold" text-anchor="middle">Olimex ESP32-POE-ISO</text>
+  <text x="370" y="308" font-size="11" text-anchor="middle">(powered by PoE)</text>
+  <text x="256" y="316" font-size="10">RJ45</text>
+  <text x="455" y="304" font-size="11" text-anchor="end">3V3</text>
+  <text x="465" y="349" font-size="11" text-anchor="end">GPIO4</text>
+  <text x="465" y="394" font-size="11" text-anchor="end">GPIO5</text>
+  <text x="465" y="434" font-size="11" text-anchor="end">GND</text>
+
+  <!-- Level shifter -->
+  <rect x="560" y="170" width="200" height="230" rx="4" fill="#f6fff6" stroke="#1e9e3a"/>
+  <text x="660" y="192" font-size="13" font-weight="bold" text-anchor="middle">Logic Level Shifter</text>
+  <text x="660" y="208" font-size="11" text-anchor="middle">BSS138 (use 2 of 4 ch)</text>
+  <text x="568" y="247" font-size="11">LV</text><text x="568" y="264" font-size="11">LV1</text><text x="568" y="309" font-size="11">LV2</text><text x="568" y="364" font-size="11">GND</text>
+  <text x="752" y="247" font-size="11" text-anchor="end">HV</text><text x="752" y="264" font-size="11" text-anchor="end">HV1</text><text x="752" y="309" font-size="11" text-anchor="end">HV2</text><text x="752" y="364" font-size="11" text-anchor="end">GND</text>
+
+  <!-- Keypad -->
+  <rect x="860" y="200" width="210" height="200" rx="4" fill="#fbf6ff" stroke="#8a2be2"/>
+  <text x="965" y="224" font-size="13" font-weight="bold" text-anchor="middle">Keypad LA5353</text>
+  <text x="965" y="240" font-size="11" text-anchor="middle">(Sebury W1-C, Wiegand)</text>
+  <text x="868" y="266" font-size="11">Red  +12V</text>
+  <text x="868" y="290" font-size="11">Black  GND</text>
+  <text x="868" y="314" font-size="11">Pink  GND</text>
+  <text x="868" y="345" font-size="11">Green  D0</text>
+  <text x="868" y="372" font-size="11">White  D1</text>
+
+  <!-- ===== Pin dots ===== -->
+  <g fill="#333">
+    <circle cx="180" cy="95" r="3"/><circle cx="180" cy="135" r="3"/>
+    <circle cx="250" cy="82" r="3"/><circle cx="250" cy="135" r="3"/><circle cx="400" cy="82" r="3"/><circle cx="400" cy="135" r="3"/>
+    <circle cx="490" cy="300" r="3"/><circle cx="490" cy="345" r="3"/><circle cx="490" cy="390" r="3"/><circle cx="490" cy="430" r="3"/>
+    <circle cx="560" cy="243" r="3"/><circle cx="560" cy="260" r="3"/><circle cx="560" cy="305" r="3"/><circle cx="560" cy="360" r="3"/>
+    <circle cx="760" cy="243" r="3"/><circle cx="760" cy="260" r="3"/><circle cx="760" cy="305" r="3"/><circle cx="760" cy="360" r="3"/>
+    <circle cx="860" cy="262" r="3"/><circle cx="860" cy="286" r="3"/><circle cx="860" cy="310" r="3"/><circle cx="860" cy="341" r="3"/><circle cx="860" cy="368" r="3"/>
+  </g>
+
+  <!-- ===== Wires ===== -->
+  <!-- 12V+ : PSU -> Buck IN+ , and top rail -> Keypad Red -->
+  <polyline points="180,95 250,82" fill="none" stroke="#d00000" stroke-width="2.5"/>
+  <polyline points="250,82 250,58 832,58 832,262 860,262" fill="none" stroke="#d00000" stroke-width="2.5"/>
+
+  <!-- 5V : Buck OUT+ -> Shifter HV -->
+  <polyline points="400,82 790,82 790,243 760,243" fill="none" stroke="#e08a00" stroke-width="2.5"/>
+
+  <!-- 3.3V : Olimex 3V3 -> Shifter LV -->
+  <polyline points="490,300 528,300 528,243 560,243" fill="none" stroke="#8a2be2" stroke-width="2.5"/>
+
+  <!-- D0 green: Keypad Green -> HV1 ; LV1 -> GPIO4 -->
+  <polyline points="860,341 805,341 805,260 760,260" fill="none" stroke="#1e9e3a" stroke-width="2.5"/>
+  <polyline points="560,260 524,260 524,345 490,345" fill="none" stroke="#1e9e3a" stroke-width="2.5"/>
+
+  <!-- D1 green(dashed): Keypad White -> HV2 ; LV2 -> GPIO5 -->
+  <polyline points="860,368 800,368 800,305 760,305" fill="none" stroke="#1e9e3a" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <polyline points="560,305 518,305 518,390 490,390" fill="none" stroke="#1e9e3a" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <text x="540" y="430" font-size="10" fill="#1e9e3a">solid = D0 (Green→GPIO4)   dashed = D1 (White→GPIO5)</text>
+
+  <!-- PoE -->
+  <polyline points="190,325 250,312" fill="none" stroke="#888888" stroke-width="4"/>
+  <text x="150" y="378" font-size="11" fill="#555">Ethernet (PoE) — sole power for the Olimex</text>
+
+  <!-- ===== Ground bus ===== -->
+  <line x1="150" y1="515" x2="900" y2="515" stroke="#000000" stroke-width="3"/>
+  <text x="455" y="535" font-size="13" font-weight="bold" text-anchor="middle">COMMON GROUND — single star point, tied to 12 V (-)</text>
+  <g stroke="#000000" stroke-width="2.5" fill="none">
+    <polyline points="180,135 180,515"/>
+    <polyline points="250,135 250,515"/>
+    <polyline points="400,135 400,515"/>
+    <polyline points="490,430 490,515"/>
+    <polyline points="560,360 560,515"/>
+    <polyline points="760,360 760,515"/>
+    <polyline points="860,286 838,286 838,515"/>
+    <polyline points="860,310 822,310 822,515"/>
+  </g>
+
+  <!-- ===== Footnotes ===== -->
+  <g font-size="12" fill="#a00">
+    <text x="20" y="565" font-weight="bold">⚠ ESP32 GPIOs are NOT 5 V tolerant — BOTH D0 and D1 must pass through the shifter.</text>
+    <text x="20" y="583" font-weight="bold">⚠ Set the buck to exactly 5.0 V BEFORE wiring it to HV. Confirm keypad D0/D1 idle ≈5 V first.</text>
+  </g>
+</svg>
