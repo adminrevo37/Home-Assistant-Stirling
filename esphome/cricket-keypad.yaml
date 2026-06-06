@@ -6,17 +6,16 @@
 #       holds and opens the roller door. THIS DEVICE NEVER OPENS THE DOOR ITSELF.
 #
 # Build doc:  ../cricket/home-assistant/BUILD_KEYPAD_PATH_A_JAYCAR.md
-# Wiring:     keypad Green=D0 -> GPIO4, White=D1 -> GPIO5 (via level shifter),
+# Wiring:     keypad Green=D0 -> GPIO5, White=D1 -> GPIO4 (via XC4486 level shifter),
 #             keypad Pink/Black GND tied to ESP32 GND (Wiegand needs a common GND).
 # Network:    Ethernet/PoE only. Wi-Fi and Bluetooth are intentionally absent
 #             (no wireless attack surface on an unstaffed access device).
 #
-# BENCH-CALIBRATION NOTE (do this tomorrow before trusting it):
-#   The on_raw log line below prints every Wiegand frame (bit count + value).
-#   Type a KNOWN code e.g. 482193# and watch the ESPHome logs:
-#     * If you see ONE 26-bit frame on '#'  -> the on_tag path carries the PIN.
-#     * If you see a 4-bit frame PER KEY    -> the on_key path collects the PIN.
-#   This config handles BOTH automatically; the log just confirms which fired.
+# BENCH-CALIBRATION — RESOLVED 2026-06-06 (MicroPython bench test, wiegand26.py):
+#   This keypad sends ONE 26-bit frame on '#' carrying the whole PIN as a number,
+#   so the on_tag path is the live one. Verified PINs 1234/1458/7896/4523/9874,
+#   all 26-bit, parity valid. The on_key path stays as a harmless fallback.
+#   Re-confirm on the first real ESPHome flash via the on_raw log line below.
 # =============================================================================
 
 esphome:
@@ -84,8 +83,11 @@ script:
 
 wiegand:
   - id: keypad
-    d0: GPIO4
-    d1: GPIO5
+    # Pins match the CONFIRMED bench wiring (2026-06-06): keypad Green=D0 lands on
+    # GPIO5, White=D1 on GPIO4 (mirror of the build-doc GPIO4/5 -- do NOT swap back
+    # unless you also rewire the board).
+    d0: GPIO5
+    d1: GPIO4
 
     # Per-keypress path: most keypads in Wiegand mode send each key as a 4-bit
     # frame. Digits 0-9 buffer; 11='#' submits; 10='*' clears.
