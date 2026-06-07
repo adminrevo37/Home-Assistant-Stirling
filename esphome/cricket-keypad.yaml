@@ -114,13 +114,12 @@ wiegand:
     # The INFO log prints raw vs recovered so any future keypad mismatch is obvious.
     on_tag:
       - lambda: |-
-          // x is the decoded Wiegand value AS A STRING (ESPHome hands on_tag a
-          // std::string). It arrives as the full 26-bit frame value, so parse it
-          // and strip the trailing parity bit: data = (frame >> 1) & 0xFFFFFF.
-          uint32_t raw = (uint32_t) atoll(x.c_str());
-          uint32_t pin = (raw >> 1) & 0xFFFFFF;
-          ESP_LOGI("keypad", "on_tag: raw x=%s -> submitting PIN=%u", x.c_str(), pin);
-          id(submit_pin)->execute(to_string(pin));
+          // x is the decoded Wiegand value AS A STRING, already parity-stripped by
+          // ESPHome (field test 2026-06-07: typing 1234 -> x="1234", while on_raw
+          // shows the full frame 0x9a4). Submit it directly. INFO log kept so the
+          // exact submitted PIN is visible during commissioning.
+          ESP_LOGI("keypad", "on_tag: submitting PIN=%s", x.c_str());
+          id(submit_pin)->execute(x);
 
     # Calibration aid only: prints raw frames so the bench test can confirm
     # which path above is in use. Safe to lower to DEBUG or remove later.
