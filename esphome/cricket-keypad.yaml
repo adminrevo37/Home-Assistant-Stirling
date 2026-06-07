@@ -114,8 +114,12 @@ wiegand:
     # The INFO log prints raw vs recovered so any future keypad mismatch is obvious.
     on_tag:
       - lambda: |-
-          uint32_t pin = (uint32_t) ((x >> 1) & 0xFFFFFF);
-          ESP_LOGI("keypad", "on_tag: raw x=%llu -> submitting PIN=%u", (unsigned long long) x, pin);
+          // x is the decoded Wiegand value AS A STRING (ESPHome hands on_tag a
+          // std::string). It arrives as the full 26-bit frame value, so parse it
+          // and strip the trailing parity bit: data = (frame >> 1) & 0xFFFFFF.
+          uint32_t raw = (uint32_t) atoll(x.c_str());
+          uint32_t pin = (raw >> 1) & 0xFFFFFF;
+          ESP_LOGI("keypad", "on_tag: raw x=%s -> submitting PIN=%u", x.c_str(), pin);
           id(submit_pin)->execute(to_string(pin));
 
     # Calibration aid only: prints raw frames so the bench test can confirm
