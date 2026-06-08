@@ -1954,3 +1954,69 @@
             | trim %}{{ it.ts | timestamp_custom(''%a %-I:%M %p'') }} :: {{ it.lane
             }} :: {{ code }} :: {{ cust }}{% endif %}'
   mode: single
+- id: keypad_connection_monitor
+  alias: Keypad - Connection Monitor (Critical)
+  description: Door entry keypad (ESP32) connection to HA. OFFLINE >60s -> CRITICAL
+    push to Julian (door cannot validate codes). Back ONLINE -> normal push. Keys
+    off sensor.cricket_keypad_uptime going unavailable (added to cricket-keypad.yaml).
+    Built 2026-06-08 - VERIFY exact entity_id + test by unplugging after flashing.
+  triggers:
+  - platform: state
+    entity_id: sensor.cricket_keypad_uptime
+    to: unavailable
+    for: 00:01:00
+    id: offline
+  - platform: state
+    entity_id: sensor.cricket_keypad_uptime
+    from: unavailable
+    id: online
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: offline
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: "\U0001F6A8 DOOR KEYPAD OFFLINE"
+          message: The entry keypad has lost connection to Home Assistant — customers
+            may be unable to open the door. Check power/network at the door.
+          data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
+    - conditions:
+      - condition: trigger
+        id: online
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: ✅ Door keypad back online
+          message: The entry keypad has reconnected to Home Assistant.
+  mode: single
+- id: keypad_overheat_alert
+  alias: Keypad - Chip Overheat Alert (Critical)
+  description: ESP32 door-keypad chip temperature safety net. >80C for 2min -> CRITICAL
+    push to Julian. Threshold is a provisional hard limit; refine to baseline+margin
+    after the 1-week baseline. Keys off sensor.cricket_keypad_chip_temperature (added
+    to cricket-keypad.yaml). Built 2026-06-08.
+  triggers:
+  - platform: numeric_state
+    entity_id: sensor.cricket_keypad_chip_temperature
+    above: 80
+    for: 00:02:00
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F6A8 Door keypad overheating"
+      message: The entry keypad chip is running hot ({{ states('sensor.cricket_keypad_chip_temperature')
+        }}°C). The door may fail. Check heat/ventilation at the enclosure.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1
+  mode: single
