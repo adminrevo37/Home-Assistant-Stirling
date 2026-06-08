@@ -134,7 +134,6 @@ sensor:
       minutes: 5
 
 shell_command:
-  entry_webhook: 'python3 /config/entry_webhook.py "{{ code }}" "{{ result }}" "{{ bay }}"'
   git_push: bash /config/git_push.sh
   git_pull: bash /config/git_pull.sh
   c4_diagnostic: python3 /config/c4_diagnostic.py > /config/c4_output.txt 2>&1

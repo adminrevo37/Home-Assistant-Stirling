@@ -1689,6 +1689,13 @@
         name: Keypad Entry
         message: Invalid code attempt — door not opened
         entity_id: lock.front_door_lock
+  - action: shell_command.entry_webhook
+    data:
+      code: '{{ (trigger.event.data.pin | default('''') | string) | regex_replace(''[^0-9]'','''')
+        }}'
+      result: '{{ ''valid'' if match != '''' else ''invalid'' }}'
+      bay: '{{ match.split(''|'')[0] if match != '''' else '''' }}'
+    continue_on_error: true
   mode: single
   variables:
     match: '{% set t = (trigger.event.data.pin | default('''') | string) | regex_replace(''[^0-9]'',
