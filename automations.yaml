@@ -2023,28 +2023,72 @@
   mode: restart
 - id: keypad_overheat_alert
   alias: Keypad - Chip Overheat Alert (Critical)
-  description: ESP32 door-keypad chip temperature safety net. >80C for 2min -> CRITICAL
-    push to Julian. Threshold is a provisional hard limit; refine to baseline+margin
-    after the 1-week baseline. Keys off sensor.cricket_keypad_chip_temperature (added
-    to cricket-keypad.yaml). Built 2026-06-08.
+  description: ESP32 keypad chip overheat. >80C for 2min -> CRITICAL push to Julian
+    that RE-RINGS every 30s until acknowledged (Acknowledge button) OR the chip cools
+    below 75C. Cooled -> clears + normal push. mode restart. Threshold provisional
+    pending baseline. Updated 2026-06-08.
   triggers:
   - platform: numeric_state
     entity_id: sensor.cricket_keypad_chip_temperature
     above: 80
     for: 00:02:00
+    id: hot
+  - platform: numeric_state
+    entity_id: sensor.cricket_keypad_chip_temperature
+    below: 75
+    id: cooled
   actions:
-  - action: notify.mobile_app_julian
-    data:
-      title: "\U0001F6A8 Door keypad overheating"
-      message: The entry keypad chip is running hot ({{ states('sensor.cricket_keypad_chip_temperature')
-        }}°C). The door may fail. Check heat/ventilation at the enclosure.
-      data:
-        push:
-          sound:
-            name: default
-            critical: 1
-            volume: 1
-  mode: single
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: hot
+      sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.keypad_overheat_alert_acknowledged
+      - repeat:
+          while:
+          - condition: numeric_state
+            entity_id: sensor.cricket_keypad_chip_temperature
+            above: 75
+          - condition: state
+            entity_id: input_boolean.keypad_overheat_alert_acknowledged
+            state: 'off'
+          sequence:
+          - action: notify.mobile_app_julian
+            data:
+              title: "\U0001F6A8 Door keypad overheating"
+              message: The entry keypad chip is running hot ({{ states('sensor.cricket_keypad_chip_temperature')
+                }}°C). The door may fail. Check heat/ventilation at the enclosure.
+              data:
+                push:
+                  sound:
+                    name: default
+                    critical: 1
+                    volume: 1
+                tag: keypad_overheat
+                actions:
+                - action: ACK_KEYPAD_HEAT
+                  title: Acknowledge
+          - delay: 00:00:30
+    - conditions:
+      - condition: trigger
+        id: cooled
+      sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.keypad_overheat_alert_acknowledged
+      - action: notify.mobile_app_julian
+        data:
+          message: clear_notification
+          data:
+            tag: keypad_overheat
+      - action: notify.mobile_app_julian
+        data:
+          title: ✅ Keypad cooled down
+          message: The keypad chip temperature is back to normal ({{ states('sensor.cricket_keypad_chip_temperature')
+            }}°C).
+  mode: restart
 - id: keypad_offline_ack_handler
   alias: Keypad - Offline Alert Acknowledged
   description: Julian taps Acknowledge on the offline critical alert -> silence the
@@ -2069,4 +2113,29 @@
       title: Keypad alert acknowledged
       message: Re-alert silenced. Keypad still offline — it will auto-clear when it
         reconnects.
+  mode: single
+- id: keypad_overheat_ack_handler
+  alias: Keypad - Overheat Alert Acknowledged
+  description: Julian taps Acknowledge on the overheat critical alert -> silence the
+    re-ring loop (sets the overheat ack flag), clears the notification, confirms.
+    Built 2026-06-08.
+  triggers:
+  - platform: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: ACK_KEYPAD_HEAT
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.keypad_overheat_alert_acknowledged
+  - action: notify.mobile_app_julian
+    data:
+      message: clear_notification
+      data:
+        tag: keypad_overheat
+  - action: notify.mobile_app_julian
+    data:
+      title: Overheat alert acknowledged
+      message: Re-alert silenced. Chip still hot — it will auto-clear when it cools
+        down.
   mode: single
