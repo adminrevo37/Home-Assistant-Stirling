@@ -91,15 +91,31 @@ deployment record). Shape:
   door unlock OR occupancy>threshold; OFF when occupancy ≤threshold AND no active booking
   (re-checking: debounced threshold-cross + `/5` time-pattern, so the already-empty case is
   caught). Booking-active guard prevents mid-session darkness.
+- **Busy-evening all-lanes flood (added 2026-06-08).** On busy evenings the per-bay toggling is
+  overridden: `lighting_all_lanes_on_busy_evening` fires at each booking's 11-min lead-in (and a
+  `/10` re-check) from the evening start (`input_datetime.lighting_all_lanes_evening_start`, default
+  16:00) until the catch-all time. It fetches the day's lane events, computes **peak concurrent
+  bookings** in the evening window, and if it's ≥ `input_number.lighting_all_lanes_min_concurrent`
+  (default 3) it turns ALL 5 highbays on and latches `input_boolean.lighting_all_lanes_active`.
+  While latched, `lighting_all_lanes_keep_on` re-asserts any highbay that gets switched off (so the
+  per-bay END turn-offs can't darken the hall) — they stay on until the **last booking ends**. Then
+  the night residual takes over (latch is cleared FIRST by the shutdown/catch-all/daylight-end so the
+  re-assert never fights them). `lighting_all_lanes_end_daylight` handles the rare last-booking-ends-
+  before-sunset case (clears latch + all hb off). The 3 lighting-mutating backstops
+  (`night_staggered_shutdown`, Absolute Catch-All `1780149364218`, daylight-end) each clear the latch
+  as their first action.
 - **Night residual:** "Night - All Off + Highbay 3 Residual" (reworked `night_staggered_shutdown`)
   drops hb1/2/4/5 + turns hb3 ON when all helpers off after dark; "Night - Highbay 3 Residual
-  Off" turns hb3 off once occupancy <threshold (re-checking).
+  Off" turns hb3 off once occupancy <threshold (re-checking). On a busy evening this IS the
+  staggered shutdown that begins when the last booking ends.
 - **End-of-day:** dynamic hard-off (configurable delay after last booking) + absolute 23:00
   catch-all. **Office:** off-sweep at 18/20/22. **Exterior:** on −12m before booking (dark only)
   + `/15` manage (stay-on/off).
 - **Tunable values** live in helpers (Settings → Helpers, no redeploy):
-  `input_number.lighting_occupancy_threshold` / `_common_off_debounce_min` / `_endofday_delay_min`,
-  `input_datetime.lighting_hard_off_catchall` / `office_off_1..3`. Calendar-trigger offsets stay
+  `input_number.lighting_occupancy_threshold` / `_common_off_debounce_min` / `_endofday_delay_min` /
+  `_all_lanes_min_concurrent` (busy-evening flood threshold, default 3),
+  `input_datetime.lighting_hard_off_catchall` / `office_off_1..3` / `lighting_all_lanes_evening_start`
+  (earliest flood-on, default 16:00). Calendar-trigger offsets stay
   static (HA can't reference helpers in trigger offsets).
 - **On-site calibration still pending** (see the spec): 40% occupancy threshold, the door-open→
   common-lights assumption (`lock.front_door_lock`→unlocked on a code entry), exterior timing,

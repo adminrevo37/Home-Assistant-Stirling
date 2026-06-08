@@ -487,6 +487,9 @@
     - input_boolean.bay5_helper
     state: 'off'
   actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.lighting_all_lanes_active
   - action: light.turn_off
     target:
       entity_id:
@@ -1440,6 +1443,9 @@
   - trigger: time
     at: input_datetime.lighting_hard_off_catchall
   actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.lighting_all_lanes_active
   - action: light.turn_off
     target:
       entity_id:
@@ -2247,4 +2253,168 @@
     data:
       title: Domain renewal confirmed
       message: cricketrevolution.com.au marked as re-registered — daily reminders stopped.
+  mode: single
+- id: lighting_all_lanes_on_busy_evening
+  alias: Lighting - All Lanes On (Busy Evening)
+  description: >-
+    From the evening start (input_datetime.lighting_all_lanes_evening_start,
+    default 4:00 PM) until the absolute catch-all time, when a booking begins
+    (using the same 11-min lead-in as the per-bay starts) or on a 10-min
+    re-check, if the evening's PEAK CONCURRENT bookings reaches the threshold
+    (input_number.lighting_all_lanes_min_concurrent, default 3) it floods ALL 5
+    lane highbays on and latches busy mode. They stay on (re-asserted by 'All
+    Lanes Keep-On') until the last booking ends, when the night staggered
+    shutdown (or the daylight-end automation) takes over and clears the latch.
+    Built 2026-06-08.
+  triggers:
+  - platform: calendar
+    event: start
+    entity_id: calendar.lane_1_bowling_machine
+    offset: -0:11:00
+    id: booking
+  - platform: calendar
+    event: start
+    entity_id: calendar.lane_2_bowling_machine
+    offset: -0:11:00
+    id: booking
+  - platform: calendar
+    event: start
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    offset: -0:11:00
+    id: booking
+  - platform: calendar
+    event: start
+    entity_id: calendar.lane_4_run_up_net
+    offset: -0:11:00
+    id: booking
+  - platform: calendar
+    event: start
+    entity_id: calendar.lane_5_run_up_net
+    offset: -0:11:00
+    id: booking
+  - platform: time_pattern
+    minutes: /10
+    id: recheck
+  conditions:
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'off'
+  - condition: template
+    value_template: >-
+      {% set cutoff = strptime(states('input_datetime.lighting_all_lanes_evening_start'),'%H:%M:%S').time() %}
+      {% set hardoff = strptime(states('input_datetime.lighting_hard_off_catchall'),'%H:%M:%S').time() %}
+      {% if trigger.id == 'booking' %}
+      {{ as_local(as_datetime(trigger.calendar_event.start)).time() >= cutoff and now().time() < hardoff }}
+      {% else %}
+      {% set on = expand('calendar.lane_1_bowling_machine','calendar.lane_2_bowling_machine','calendar.lane_3_truman_or_bowling_machine','calendar.lane_4_run_up_net','calendar.lane_5_run_up_net') | selectattr('state','eq','on') | list | count %}
+      {{ now().time() >= cutoff and now().time() < hardoff and on > 0 }}
+      {% endif %}
+  actions:
+  - action: calendar.get_events
+    target:
+      entity_id:
+      - calendar.lane_1_bowling_machine
+      - calendar.lane_2_bowling_machine
+      - calendar.lane_3_truman_or_bowling_machine
+      - calendar.lane_4_run_up_net
+      - calendar.lane_5_run_up_net
+    data:
+      start_date_time: '{{ today_at(states(''input_datetime.lighting_all_lanes_evening_start'')) }}'
+      end_date_time: '{{ today_at(''23:59:59'') }}'
+    response_variable: lane_events
+  - if:
+    - condition: template
+      value_template: >-
+        {% set cutoff = as_timestamp(today_at(states('input_datetime.lighting_all_lanes_evening_start'))) %}
+        {% set ns = namespace(iv=[]) %}
+        {% for cal, d in lane_events.items() %}{% for ev in d.events %}{% set ns.iv = ns.iv + [(as_timestamp(as_datetime(ev.start)), as_timestamp(as_datetime(ev.end)))] %}{% endfor %}{% endfor %}
+        {% set p = namespace(instants=[cutoff], peak=0) %}
+        {% for s, e in ns.iv %}{% if s >= cutoff %}{% set p.instants = p.instants + [s] %}{% endif %}{% endfor %}
+        {% for t in p.instants %}{% set c = namespace(n=0) %}{% for s, e in ns.iv %}{% if s <= t and t < e %}{% set c.n = c.n + 1 %}{% endif %}{% endfor %}{% if c.n > p.peak %}{% set p.peak = c.n %}{% endif %}{% endfor %}
+        {{ p.peak >= (states('input_number.lighting_all_lanes_min_concurrent') | int(3)) }}
+    then:
+    - action: light.turn_on
+      target:
+        entity_id:
+        - light.highbay_1
+        - light.highbay_2
+        - light.highbay_3
+        - light.highbay_4
+        - light.highbay_5
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.lighting_all_lanes_active
+  mode: single
+- id: lighting_all_lanes_keep_on
+  alias: Lighting - All Lanes Keep-On (re-assert)
+  description: >-
+    While busy mode is latched, if any lane highbay gets switched off (e.g. by a
+    per-bay END automation as bookings finish), switch it straight back on so all
+    lane lights stay on until the last booking ends. The night staggered shutdown,
+    the daylight-end automation and the absolute catch-all all clear the latch
+    FIRST, so they are not fought. Built 2026-06-08.
+  triggers:
+  - platform: state
+    entity_id:
+    - light.highbay_1
+    - light.highbay_2
+    - light.highbay_3
+    - light.highbay_4
+    - light.highbay_5
+    to: 'off'
+  conditions:
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'on'
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id: '{{ trigger.entity_id }}'
+  mode: parallel
+  max: 5
+- id: lighting_all_lanes_end_daylight
+  alias: Lighting - All Lanes Mode End (Daylight)
+  description: >-
+    Busy-mode safety for the rare case the last booking ends while it's still
+    daylight (before sunset-30m): clear the busy-mode latch FIRST (so Keep-On
+    stops), then turn all lane highbays off. The after-dark case is handled by
+    'Night - All Off + Highbay 3 Residual'. Built 2026-06-08.
+  triggers:
+  - platform: state
+    entity_id:
+    - input_boolean.bay1_helper
+    - input_boolean.bay2_helper
+    - input_boolean.bay3_helper
+    - input_boolean.bay4_helper
+    - input_boolean.bay5_helper
+    to: 'off'
+  conditions:
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'on'
+  - condition: state
+    entity_id:
+    - input_boolean.bay1_helper
+    - input_boolean.bay2_helper
+    - input_boolean.bay3_helper
+    - input_boolean.bay4_helper
+    - input_boolean.bay5_helper
+    state: 'off'
+  - condition: not
+    conditions:
+    - condition: sun
+      after: sunset
+      after_offset: -00:30:00
+  actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.lighting_all_lanes_active
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.highbay_1
+      - light.highbay_2
+      - light.highbay_3
+      - light.highbay_4
+      - light.highbay_5
   mode: single
