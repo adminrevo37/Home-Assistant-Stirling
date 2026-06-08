@@ -1957,9 +1957,9 @@
 - id: keypad_connection_monitor
   alias: Keypad - Connection Monitor (Critical)
   description: Door entry keypad (ESP32) connection to HA. OFFLINE >60s -> CRITICAL
-    push to Julian (door cannot validate codes). Back ONLINE -> normal push. Keys
-    off sensor.cricket_keypad_uptime going unavailable (added to cricket-keypad.yaml).
-    Built 2026-06-08 - VERIFY exact entity_id + test by unplugging after flashing.
+    push to Julian that RE-RINGS every 30s until acknowledged (Acknowledge action
+    button) OR the keypad reconnects. Back ONLINE -> clears the alert + normal push.
+    mode restart so reconnect interrupts the ring loop. Updated 2026-06-08.
   triggers:
   - platform: state
     entity_id: sensor.cricket_keypad_uptime
@@ -1976,26 +1976,51 @@
       - condition: trigger
         id: offline
       sequence:
-      - action: notify.mobile_app_julian
-        data:
-          title: "\U0001F6A8 DOOR KEYPAD OFFLINE"
-          message: The entry keypad has lost connection to Home Assistant — customers
-            may be unable to open the door. Check power/network at the door.
-          data:
-            push:
-              sound:
-                name: default
-                critical: 1
-                volume: 1
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.keypad_offline_alert_acknowledged
+      - repeat:
+          while:
+          - condition: template
+            value_template: '{{ not is_state(''binary_sensor.cricket_keypad_online'',''on'')
+              }}'
+          - condition: state
+            entity_id: input_boolean.keypad_offline_alert_acknowledged
+            state: 'off'
+          sequence:
+          - action: notify.mobile_app_julian
+            data:
+              title: "\U0001F6A8 DOOR KEYPAD OFFLINE"
+              message: The entry keypad has lost connection to Home Assistant — customers
+                may be unable to open the door. Check power/network at the door.
+              data:
+                push:
+                  sound:
+                    name: default
+                    critical: 1
+                    volume: 1
+                tag: keypad_offline
+                actions:
+                - action: ACK_KEYPAD
+                  title: Acknowledge
+          - delay: 00:00:30
     - conditions:
       - condition: trigger
         id: online
       sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.keypad_offline_alert_acknowledged
+      - action: notify.mobile_app_julian
+        data:
+          message: clear_notification
+          data:
+            tag: keypad_offline
       - action: notify.mobile_app_julian
         data:
           title: ✅ Door keypad back online
           message: The entry keypad has reconnected to Home Assistant.
-  mode: single
+  mode: restart
 - id: keypad_overheat_alert
   alias: Keypad - Chip Overheat Alert (Critical)
   description: ESP32 door-keypad chip temperature safety net. >80C for 2min -> CRITICAL
@@ -2019,4 +2044,29 @@
             name: default
             critical: 1
             volume: 1
+  mode: single
+- id: keypad_offline_ack_handler
+  alias: Keypad - Offline Alert Acknowledged
+  description: Julian taps Acknowledge on the offline critical alert -> silence the
+    re-ring loop (sets the ack flag), clears the notification, and confirms. Built
+    2026-06-08.
+  triggers:
+  - platform: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: ACK_KEYPAD
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.keypad_offline_alert_acknowledged
+  - action: notify.mobile_app_julian
+    data:
+      message: clear_notification
+      data:
+        tag: keypad_offline
+  - action: notify.mobile_app_julian
+    data:
+      title: Keypad alert acknowledged
+      message: Re-alert silenced. Keypad still offline — it will auto-clear when it
+        reconnects.
   mode: single
