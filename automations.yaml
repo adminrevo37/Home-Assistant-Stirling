@@ -589,10 +589,10 @@
 - id: bay1_code_deactivate
   alias: Bay 1 - Door Code Deactivate
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_1_bowling_machine
     offset: 0:15:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -601,9 +601,9 @@
     value_template: '{{ door_code != '''' }}'
   - variables:
       slot_to_clear: '{% if states(''input_text.bay1_code_slot_a'').split('':'')[0]
-        == door_code %}11 {% elif states(''input_text.bay1_code_slot_b'').split('':'')[0]
-        == door_code %}12 {% elif states(''input_text.bay1_code_slot_c'').split('':'')[0]
-        == door_code %}13 {% else %}0{% endif %}'
+        == (door_code | string) %}11 {% elif states(''input_text.bay1_code_slot_b'').split('':'')[0]
+        == (door_code | string) %}12 {% elif states(''input_text.bay1_code_slot_c'').split('':'')[0]
+        == (door_code | string) %}13 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_clear | int > 0 }}'
   - action: shell_command.c4_clear_code
@@ -694,10 +694,10 @@
 - id: bay2_code_deactivate
   alias: Bay 2 - Door Code Deactivate
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_2_bowling_machine
     offset: 0:15:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -706,9 +706,9 @@
     value_template: '{{ door_code != '''' }}'
   - variables:
       slot_to_clear: '{% if states(''input_text.bay2_code_slot_a'').split('':'')[0]
-        == door_code %}14 {% elif states(''input_text.bay2_code_slot_b'').split('':'')[0]
-        == door_code %}15 {% elif states(''input_text.bay2_code_slot_c'').split('':'')[0]
-        == door_code %}16 {% else %}0{% endif %}'
+        == (door_code | string) %}14 {% elif states(''input_text.bay2_code_slot_b'').split('':'')[0]
+        == (door_code | string) %}15 {% elif states(''input_text.bay2_code_slot_c'').split('':'')[0]
+        == (door_code | string) %}16 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_clear | int > 0 }}'
   - action: shell_command.c4_clear_code
@@ -799,10 +799,10 @@
 - id: bay3_code_deactivate
   alias: Bay 3 - Door Code Deactivate
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_3_truman_or_bowling_machine
     offset: 0:15:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -811,9 +811,9 @@
     value_template: '{{ door_code != '''' }}'
   - variables:
       slot_to_clear: '{% if states(''input_text.bay3_code_slot_a'').split('':'')[0]
-        == door_code %}17 {% elif states(''input_text.bay3_code_slot_b'').split('':'')[0]
-        == door_code %}18 {% elif states(''input_text.bay3_code_slot_c'').split('':'')[0]
-        == door_code %}19 {% else %}0{% endif %}'
+        == (door_code | string) %}17 {% elif states(''input_text.bay3_code_slot_b'').split('':'')[0]
+        == (door_code | string) %}18 {% elif states(''input_text.bay3_code_slot_c'').split('':'')[0]
+        == (door_code | string) %}19 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_clear | int > 0 }}'
   - action: shell_command.c4_clear_code
@@ -904,10 +904,10 @@
 - id: bay4_code_deactivate
   alias: Bay 4 - Door Code Deactivate
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_4_run_up_net
     offset: 0:15:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -916,9 +916,9 @@
     value_template: '{{ door_code != '''' }}'
   - variables:
       slot_to_clear: '{% if states(''input_text.bay4_code_slot_a'').split('':'')[0]
-        == door_code %}20 {% elif states(''input_text.bay4_code_slot_b'').split('':'')[0]
-        == door_code %}21 {% elif states(''input_text.bay4_code_slot_c'').split('':'')[0]
-        == door_code %}22 {% else %}0{% endif %}'
+        == (door_code | string) %}20 {% elif states(''input_text.bay4_code_slot_b'').split('':'')[0]
+        == (door_code | string) %}21 {% elif states(''input_text.bay4_code_slot_c'').split('':'')[0]
+        == (door_code | string) %}22 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_clear | int > 0 }}'
   - action: shell_command.c4_clear_code
@@ -1009,10 +1009,10 @@
 - id: bay5_code_deactivate
   alias: Bay 5 - Door Code Deactivate
   triggers:
-  - trigger: calendar
-    event: end
+  - event: end
     entity_id: calendar.lane_5_run_up_net
     offset: 0:15:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -1021,9 +1021,9 @@
     value_template: '{{ door_code != '''' }}'
   - variables:
       slot_to_clear: '{% if states(''input_text.bay5_code_slot_a'').split('':'')[0]
-        == door_code %}23 {% elif states(''input_text.bay5_code_slot_b'').split('':'')[0]
-        == door_code %}24 {% elif states(''input_text.bay5_code_slot_c'').split('':'')[0]
-        == door_code %}25 {% else %}0{% endif %}'
+        == (door_code | string) %}23 {% elif states(''input_text.bay5_code_slot_b'').split('':'')[0]
+        == (door_code | string) %}24 {% elif states(''input_text.bay5_code_slot_c'').split('':'')[0]
+        == (door_code | string) %}25 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_clear | int > 0 }}'
   - action: shell_command.c4_clear_code
