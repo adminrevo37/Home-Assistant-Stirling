@@ -91,15 +91,31 @@ deployment record). Shape:
   door unlock OR occupancy>threshold; OFF when occupancy ≤threshold AND no active booking
   (re-checking: debounced threshold-cross + `/5` time-pattern, so the already-empty case is
   caught). Booking-active guard prevents mid-session darkness.
+- **Busy-evening all-lanes flood (added 2026-06-08).** On busy evenings the per-bay toggling is
+  overridden: `lighting_all_lanes_on_busy_evening` fires at each booking's 11-min lead-in (and a
+  `/10` re-check) from the evening start (`input_datetime.lighting_all_lanes_evening_start`, default
+  16:00) until the catch-all time. It fetches the day's lane events, computes **peak concurrent
+  bookings** in the evening window, and if it's ≥ `input_number.lighting_all_lanes_min_concurrent`
+  (default 3) it turns ALL 5 highbays on and latches `input_boolean.lighting_all_lanes_active`.
+  While latched, `lighting_all_lanes_keep_on` re-asserts any highbay that gets switched off (so the
+  per-bay END turn-offs can't darken the hall) — they stay on until the **last booking ends**. Then
+  the night residual takes over (latch is cleared FIRST by the shutdown/catch-all/daylight-end so the
+  re-assert never fights them). `lighting_all_lanes_end_daylight` handles the rare last-booking-ends-
+  before-sunset case (clears latch + all hb off). The 3 lighting-mutating backstops
+  (`night_staggered_shutdown`, Absolute Catch-All `1780149364218`, daylight-end) each clear the latch
+  as their first action.
 - **Night residual:** "Night - All Off + Highbay 3 Residual" (reworked `night_staggered_shutdown`)
   drops hb1/2/4/5 + turns hb3 ON when all helpers off after dark; "Night - Highbay 3 Residual
-  Off" turns hb3 off once occupancy <threshold (re-checking).
+  Off" turns hb3 off once occupancy <threshold (re-checking). On a busy evening this IS the
+  staggered shutdown that begins when the last booking ends.
 - **End-of-day:** dynamic hard-off (configurable delay after last booking) + absolute 23:00
   catch-all. **Office:** off-sweep at 18/20/22. **Exterior:** on −12m before booking (dark only)
   + `/15` manage (stay-on/off).
 - **Tunable values** live in helpers (Settings → Helpers, no redeploy):
-  `input_number.lighting_occupancy_threshold` / `_common_off_debounce_min` / `_endofday_delay_min`,
-  `input_datetime.lighting_hard_off_catchall` / `office_off_1..3`. Calendar-trigger offsets stay
+  `input_number.lighting_occupancy_threshold` / `_common_off_debounce_min` / `_endofday_delay_min` /
+  `_all_lanes_min_concurrent` (busy-evening flood threshold, default 3),
+  `input_datetime.lighting_hard_off_catchall` / `office_off_1..3` / `lighting_all_lanes_evening_start`
+  (earliest flood-on, default 16:00). Calendar-trigger offsets stay
   static (HA can't reference helpers in trigger offsets).
 - **On-site calibration still pending** (see the spec): 40% occupancy threshold, the door-open→
   common-lights assumption (`lock.front_door_lock`→unlocked on a code entry), exterior timing,
@@ -141,6 +157,24 @@ Any new **wireless (MQTT/Zigbee) battery sensor** is tracked automatically from 
 - **Auto-recorded install date:** `automation.battery_auto_onboard_new_wireless_device` fires when a new in-scope battery sensor appears, stamps today's date into `input_text.battery_install_date_log_json` (a JSON map `entity_id → YYYY-MM-DD`, once per device) and notifies. **Cap ~5–7 devices (input_text 255-char limit)** — migrate to a file-based log if it grows.
 - **Dashboard:** the "Battery devices" card (INSIGHTS → Zigbee / Device Health) auto-lists every in-scope battery sensor with %, install date, and days in service.
 - Seeded: roller_door_contact = 2026-05-31. (`input_datetime.roller_door_sensor_installed` from the first cut is now vestigial — the JSON map is the source of truth.)
+
+---
+
+## Reminders
+
+- **Cricket Revolution domain renewal (added 2026-06-08).** The
+  `cricketrevolution.com.au` registration **expires 13 Oct 2028**. From **1 Sep 2028**
+  onward, `automation.reminder_cricketrevolution_domain_renewal_2028` fires DAILY at
+  09:00 (+ on HA start) and keeps nagging until confirmed: it re-asserts persistent
+  notification `cricketrevolution_domain_renewal_2028` (shows in the HA web UI
+  notifications drawer on every login — HA's pre-auth login screen itself can't be
+  customised) and pushes a time-sensitive alert (tag `cricketrevolution-domain-renewal`,
+  "Mark as registered" action button) to `mobile_app_julian` + `mobile_app_noddy_iphone`.
+  **Stop it** by tapping "Mark as registered" (→ `CONFIRM_DOMAIN_RENEWED` →
+  `cricketrevolution_domain_renewed_action` flips the helper) or toggling
+  `input_boolean.cricketrevolution_domain_renewed` on; `cricketrevolution_domain_renewed_cleanup`
+  then dismisses the notification + clears the phone alerts. Reset the helper to OFF to
+  re-arm. Message shows live days-left (and "EXPIRED N days ago" past the date).
 
 ---
 

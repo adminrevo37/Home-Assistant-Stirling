@@ -169,6 +169,28 @@ input_boolean:
     name: "Roller Door - Service Mode (Hold Open)"
     icon: mdi:door-open
 
+  ###############################################################################
+  ##### REMINDERS — Cricket Revolution domain renewal
+  # ON = the cricketrevolution.com.au registration has been renewed/confirmed,
+  # which STOPS the daily renewal reminders. Set via the "Mark as registered"
+  # button on the phone alert, or toggle here. Reset to OFF to let the reminder
+  # run again.
+  ###############################################################################
+  cricketrevolution_domain_renewed:
+    name: "Cricket Revolution domain renewed"
+    icon: mdi:web-check
+
+  ###############################################################################
+  ##### LIGHTING — Busy-evening all-lanes mode
+  # ON = a busy evening was detected (>= the concurrent-booking threshold from the
+  # evening start time) and ALL lane highbays are being held on until the last
+  # booking ends. Set/cleared automatically by the lighting automations — don't
+  # normally toggle by hand.
+  ###############################################################################
+  lighting_all_lanes_active:
+    name: "Lighting - All Lanes Busy Mode Active"
+    icon: mdi:lightbulb-group
+
 ###############################################################################
 # INPUT TEXT HELPERS — DS3 Code Slot Trackers
 # Stores which code is currently programmed in each C4 DS3 slot.
@@ -313,6 +335,15 @@ input_number:
     unit_of_measurement: "min"
     mode: box
     icon: mdi:timer-off
+  lighting_all_lanes_min_concurrent:
+    name: "Lighting - All-lanes busy threshold (concurrent bookings)"
+    min: 1
+    max: 5
+    step: 1
+    initial: 3
+    unit_of_measurement: "bookings"
+    mode: box
+    icon: mdi:lightbulb-group
 
 ###############################################################################
 ##### LIGHTING / OFFICE — scheduled off-sweep times (single source of truth)
@@ -342,6 +373,12 @@ input_datetime:
     has_time: true
     initial: "22:00:00"
     icon: mdi:lightbulb-off
+  lighting_all_lanes_evening_start:
+    name: "Lighting - All-lanes evening start (earliest flood-on)"
+    has_date: false
+    has_time: true
+    initial: "16:00:00"
+    icon: mdi:weather-sunset
 
 utility_meter:
   energy_meter_daily_light_bay1:
