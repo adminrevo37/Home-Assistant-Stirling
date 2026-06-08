@@ -1167,21 +1167,25 @@
   mode: single
 - id: roller_door_opened_notify
   alias: Roller Door - Notify Staff on Open
-  description: Notifies staff when the front roller door opens. Rewired 2026-05-31
-    from the vision boolean to the Zigbee contact sensor (binary_sensor.roller_door_contact)
-    — clean signal, ends the vision false-positives.
+  description: 'Notifies staff ONLY if the front roller door is left open for 3 minutes
+    continuously (no longer pushes on every open). Changed 2026-06-08 per Inspector:
+    per-open push disabled, threshold 3s -> 3min; added service-mode suppression to
+    match the failed-to-close alert. Uses binary_sensor.roller_door_contact.'
   triggers:
-  - trigger: state
-    entity_id: binary_sensor.roller_door_contact
+  - entity_id: binary_sensor.roller_door_contact
     from: 'off'
     to: 'on'
-    for: 00:00:03
-  conditions: []
+    for: 00:03:00
+    platform: state
+  conditions:
+  - condition: state
+    entity_id: input_boolean.door_service_mode
+    state: 'off'
   actions:
   - action: notify.notify
     data:
-      title: "\U0001F6AA Roller Door Opened"
-      message: The front roller door has been opened.
+      title: "\U0001F6AA Roller Door Left Open"
+      message: The front roller door has been open for 3 minutes.
   mode: single
 - id: roller_door_auto_close
   alias: Roller Door - Auto Close + Alert if Left Open
@@ -1572,18 +1576,28 @@
       entity_id: automation.temp_clear_keypad_test_code_slot_12
   mode: single
 - id: roller_door_failed_to_close
-  alias: Roller Door - Failed to Close Alert
-  description: 'Fault alert: if the contact sensor stays OPEN longer than a full normal
-    auto-close cycle (~67s = 18s open + 30s ACLS dwell + 18s close), the operator''s
-    auto-close likely failed (obstruction / beam fault / power). Threshold 110s. Snapshot
-    + notify. Suppressed in service/hold-open mode. Built 2026-05-31 to replace the
-    retired vision-based auto-close (operator now closes itself via ACLS; HA only
-    monitors).'
+  alias: Roller Door - Left Open Escalation (3/5/10 min)
+  description: 'Escalating fault alert: snapshot + push when binary_sensor.roller_door_contact
+    stays OPEN for 3, 5, then 10 minutes. 3min = operator auto-close likely failed
+    (obstruction/beam/power); 5/10min = still open, attend. Suppressed in service/hold-open
+    mode. Reworked 2026-06-08 per Inspector: was a single 1:50 ''failed to close'';
+    moved to 3min and added 5/10min escalation.'
   triggers:
-  - trigger: state
+  - platform: state
     entity_id: binary_sensor.roller_door_contact
     to: 'on'
-    for: 00:01:50
+    for: 00:03:00
+    id: 3min
+  - platform: state
+    entity_id: binary_sensor.roller_door_contact
+    to: 'on'
+    for: 00:05:00
+    id: 5min
+  - platform: state
+    entity_id: binary_sensor.roller_door_contact
+    to: 'on'
+    for: 00:10:00
+    id: 10min
   conditions:
   - condition: state
     entity_id: input_boolean.door_service_mode
@@ -1597,12 +1611,19 @@
   - delay: 00:00:02
   - action: notify.notify
     data:
-      title: "\U0001F6A8 Roller Door Failed to Close"
-      message: The front roller door has been open ~2 min — the operator auto-close
-        may have failed (obstruction, safety-beam fault, or power). Please check entry.
+      title: "{% if trigger.id == '10min' %}\U0001F6A8 Roller Door Still Open — 10
+        min{% elif trigger.id == '5min' %}\U0001F6A8 Roller Door Still Open — 5 min{%
+        else %}\U0001F6A8 Roller Door Failed to Close{% endif %}"
+      message: '{% if trigger.id == ''10min'' %}The front roller door is STILL open
+        after 10 minutes — please attend the entry now.{% elif trigger.id == ''5min''
+        %}The front roller door is STILL open after 5 minutes. Please check the entry.{%
+        else %}The front roller door has been open for 3 minutes — the operator auto-close
+        may have failed (obstruction, safety-beam fault, or power). Please check the
+        entry.{% endif %}'
       data:
         image: /local/door_alert_snapshot.jpg
-  mode: single
+  mode: queued
+  max: 3
 - id: keypad_validate_entry
   alias: Customer Keypad - Validate Entry & Open Door
   description: Customer entry keypad fires esphome.keypad_code with the typed PIN.

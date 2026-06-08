@@ -61,6 +61,7 @@ from .const import (
     ATTR_LENGTH,
     ATTR_LOCK_ENTITY_ID,
     ATTR_SLOT,
+    ATTR_TEXT,
     ATTR_USERCODE,
     CONDITION_ENTITY_DOMAINS,
     CONF_CALENDAR,
@@ -70,6 +71,7 @@ from .const import (
     PLATFORMS,
     SERVICE_CLEAR_SLOT_CONDITION,
     SERVICE_CLEAR_USERCODE,
+    SERVICE_DEOBFUSCATE_LOG,
     SERVICE_GENERATE_PIN,
     SERVICE_HARD_REFRESH_USERCODES,
     SERVICE_SET_SLOT_CONDITION,
@@ -98,6 +100,7 @@ from .domain.services import (
     async_set_usercode,
 )
 from .domain.slot_coordinator import SlotEntityCoordinator
+from .domain.util import build_pin_deobfuscation_map, deobfuscate_pins
 from .providers import BaseLock
 from .websocket import async_setup as async_websocket_setup
 
@@ -466,6 +469,33 @@ async def async_setup(hass: HomeAssistant, config: Config) -> bool:
                 ),
             }
         ),
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    async def _deobfuscate_log(call: ServiceCall) -> ServiceResponse:
+        """Reverse mask_pin() tokens in pasted log text against the current config."""
+        instance_id = hass.data.get(DOMAIN, {}).get("instance_id", "")
+        if not instance_id:
+            raise HomeAssistantError(
+                "Lock Code Manager is not fully set up yet; try again in a moment"
+            )
+        entries = hass.config_entries.async_loaded_entries(DOMAIN)
+        table = build_pin_deobfuscation_map(entries, instance_id)
+        deobfuscated, summary = deobfuscate_pins(call.data[ATTR_TEXT], table)
+        # Sentinel banner so users see at a glance that the response contains
+        # plaintext PINs and must not be pasted into a public issue.
+        wrapped = (
+            "=== BEGIN DEOBFUSCATED — DO NOT SHARE ===\n"
+            f"{deobfuscated}\n"
+            "=== END DEOBFUSCATED ==="
+        )
+        return {"deobfuscated_text": wrapped, "summary": summary}
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DEOBFUSCATE_LOG,
+        _deobfuscate_log,
+        schema=vol.Schema({vol.Required(ATTR_TEXT): cv.string}),
         supports_response=SupportsResponse.ONLY,
     )
 
@@ -964,6 +994,17 @@ async def async_update_listener(
             hass, config_entry, lock_entity_id=lock_entity_id, remove_permanently=True
         )
 
+    # Create per-slot coordinators for new slots BEFORE setting up new
+    # locks. _async_setup_new_locks awaits per-lock connection checks,
+    # giving the event loop opportunities to drain entity-add tasks it
+    # scheduled for prior locks; those per-lock entities (`code`,
+    # `in_sync`) look up the slot coordinator in async_added_to_hass and
+    # would warn if it did not yet exist.
+    for slot_num in slots_to_add:
+        coordinator = SlotEntityCoordinator(hass, config_entry, slot_num)
+        runtime_data.slot_coordinators[slot_num] = coordinator
+        coordinator.async_start()
+
     if locks_to_add:
         await _async_setup_new_locks(
             hass, config_entry, locks_to_add, new_config, callbacks, ent_reg
@@ -978,9 +1019,6 @@ async def async_update_listener(
             entry_title,
             slot_num,
         )
-        coordinator = SlotEntityCoordinator(hass, config_entry, slot_num)
-        runtime_data.slot_coordinators[slot_num] = coordinator
-        coordinator.async_start()
         callbacks.invoke_standard_adders(slot_num, ent_reg)
 
         for lock_entity_id, lock in runtime_data.locks.items():

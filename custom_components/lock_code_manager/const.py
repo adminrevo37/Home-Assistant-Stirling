@@ -7,7 +7,7 @@ from datetime import timedelta
 from homeassistant.const import CONF_ENABLED, CONF_NAME, CONF_PIN, Platform
 
 DOMAIN = "lock_code_manager"
-VERSION = "3.2.0"
+VERSION = "3.3.0"
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR)
 
 FILES_URL_BASE = f"/{DOMAIN}_files"
@@ -20,6 +20,9 @@ SERVICE_CLEAR_USERCODE = "clear_usercode"
 SERVICE_SET_SLOT_CONDITION = "set_slot_condition"
 SERVICE_CLEAR_SLOT_CONDITION = "clear_slot_condition"
 SERVICE_GENERATE_PIN = "generate_pin"
+SERVICE_DEOBFUSCATE_LOG = "deobfuscate_log"
+
+ATTR_TEXT = "text"
 
 ATTR_ENTITIES_ADDED_TRACKER = "entities_added_tracker"
 ATTR_ENTITIES_REMOVED_TRACKER = "entities_removed_tracker"
