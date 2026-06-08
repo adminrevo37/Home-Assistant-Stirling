@@ -1878,3 +1878,79 @@
         priority: high
         ttl: 0
   mode: single
+- id: refresh_upcoming_door_codes
+  alias: Refresh Upcoming Door Codes
+  description: Every 2 min (+ on HA start) fetches upcoming bookings from the 5 lane
+    calendars and writes the chronological next-6 upcoming door codes into input_text.upcoming_door_code_1..6
+    for the Door Codes dashboard. Built 2026-06-08.
+  triggers:
+  - platform: time_pattern
+    minutes: /2
+  - platform: homeassistant
+    event: start
+  actions:
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.lane_1_bowling_machine
+    data:
+      duration:
+        hours: 30
+    response_variable: ev1
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.lane_2_bowling_machine
+    data:
+      duration:
+        hours: 30
+    response_variable: ev2
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.lane_3_truman_or_bowling_machine
+    data:
+      duration:
+        hours: 30
+    response_variable: ev3
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.lane_4_run_up_net
+    data:
+      duration:
+        hours: 30
+    response_variable: ev4
+  - action: calendar.get_events
+    target:
+      entity_id: calendar.lane_5_run_up_net
+    data:
+      duration:
+        hours: 30
+    response_variable: ev5
+  - repeat:
+      count: 6
+      sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.upcoming_door_code_{{ repeat.index }}
+        data:
+          value: '{% set ns = namespace(items=[]) %}{% for e in ev1[''calendar.lane_1_bowling_machine''][''events'']
+            %}{% if as_timestamp(e.start) > as_timestamp(now()) %}{% set ns.items
+            = ns.items + [{''ts'': as_timestamp(e.start),''lane'':''Lane 1'',''desc'':e.description}]
+            %}{% endif %}{% endfor %}{% for e in ev2[''calendar.lane_2_bowling_machine''][''events'']
+            %}{% if as_timestamp(e.start) > as_timestamp(now()) %}{% set ns.items
+            = ns.items + [{''ts'': as_timestamp(e.start),''lane'':''Lane 2'',''desc'':e.description}]
+            %}{% endif %}{% endfor %}{% for e in ev3[''calendar.lane_3_truman_or_bowling_machine''][''events'']
+            %}{% if as_timestamp(e.start) > as_timestamp(now()) %}{% set ns.items
+            = ns.items + [{''ts'': as_timestamp(e.start),''lane'':''Lane 3'',''desc'':e.description}]
+            %}{% endif %}{% endfor %}{% for e in ev4[''calendar.lane_4_run_up_net''][''events'']
+            %}{% if as_timestamp(e.start) > as_timestamp(now()) %}{% set ns.items
+            = ns.items + [{''ts'': as_timestamp(e.start),''lane'':''Lane 4'',''desc'':e.description}]
+            %}{% endif %}{% endfor %}{% for e in ev5[''calendar.lane_5_run_up_net''][''events'']
+            %}{% if as_timestamp(e.start) > as_timestamp(now()) %}{% set ns.items
+            = ns.items + [{''ts'': as_timestamp(e.start),''lane'':''Lane 5'',''desc'':e.description}]
+            %}{% endif %}{% endfor %}{% set s = ns.items | sort(attribute=''ts'')
+            %}{% set i = (repeat.index | int) - 1 %}{% if i < (s | length) %}{% set
+            it = s[i] %}{% set code = (it.desc | regex_findall(''DOOR CODE: ([0-9
+            ]+)'') | first | default('''')) | replace('' '','''') %}{% set cust =
+            (it.desc | regex_findall(''Customer: (.+)'') | first | default(''Guest''))
+            | trim %}{{ it.ts | timestamp_custom(''%a %-I:%M %p'') }} :: {{ it.lane
+            }} :: {{ code }} :: {{ cust }}{% endif %}'
+  mode: single
