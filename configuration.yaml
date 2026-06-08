@@ -169,6 +169,17 @@ input_boolean:
     name: "Roller Door - Service Mode (Hold Open)"
     icon: mdi:door-open
 
+  ###############################################################################
+  ##### REMINDERS — Cricket Revolution domain renewal
+  # ON = the cricketrevolution.com.au registration has been renewed/confirmed,
+  # which STOPS the daily renewal reminders. Set via the "Mark as registered"
+  # button on the phone alert, or toggle here. Reset to OFF to let the reminder
+  # run again.
+  ###############################################################################
+  cricketrevolution_domain_renewed:
+    name: "Cricket Revolution domain renewed"
+    icon: mdi:web-check
+
 ###############################################################################
 # INPUT TEXT HELPERS — DS3 Code Slot Trackers
 # Stores which code is currently programmed in each C4 DS3 slot.

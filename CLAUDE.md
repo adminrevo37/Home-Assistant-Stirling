@@ -144,6 +144,24 @@ Any new **wireless (MQTT/Zigbee) battery sensor** is tracked automatically from 
 
 ---
 
+## Reminders
+
+- **Cricket Revolution domain renewal (added 2026-06-08).** The
+  `cricketrevolution.com.au` registration **expires 13 Oct 2028**. From **1 Sep 2028**
+  onward, `automation.reminder_cricketrevolution_domain_renewal_2028` fires DAILY at
+  09:00 (+ on HA start) and keeps nagging until confirmed: it re-asserts persistent
+  notification `cricketrevolution_domain_renewal_2028` (shows in the HA web UI
+  notifications drawer on every login — HA's pre-auth login screen itself can't be
+  customised) and pushes a time-sensitive alert (tag `cricketrevolution-domain-renewal`,
+  "Mark as registered" action button) to `mobile_app_julian` + `mobile_app_noddy_iphone`.
+  **Stop it** by tapping "Mark as registered" (→ `CONFIRM_DOMAIN_RENEWED` →
+  `cricketrevolution_domain_renewed_action` flips the helper) or toggling
+  `input_boolean.cricketrevolution_domain_renewed` on; `cricketrevolution_domain_renewed_cleanup`
+  then dismisses the notification + clears the phone alerts. Reset the helper to OFF to
+  re-arm. Message shows live days-left (and "EXPIRED N days ago" past the date).
+
+---
+
 ## Key files
 
 | File | Purpose |

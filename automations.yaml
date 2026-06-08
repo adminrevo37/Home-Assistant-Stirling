@@ -2150,62 +2150,101 @@
   alias: Reminder - Cricket Revolution domain renewal (1 Sep 2028)
   description: >-
     Calendar reminder set for 1 Sep 2028: the cricketrevolution.com.au
-    website/domain registration EXPIRES 13 Oct 2028. From 1 Sep through 13 Oct
-    2028 it (re)asserts a persistent notification — shows in the HA web UI
-    notifications drawer for anyone who logs in — and pushes escalating
-    time-sensitive alerts to Julian + Noddy's phones at milestones
-    (42/30/21/14/7/3/1/0 days before expiry). The persistent notification is
-    re-asserted daily at 09:00 and on HA start, so it survives restarts and
-    dismissals throughout the renewal window. Built 2026-06-08.
+    website/domain registration EXPIRES 13 Oct 2028. From 1 Sep 2028 onward it
+    fires DAILY at 09:00 (+ on HA start) and keeps nagging until the domain is
+    confirmed re-registered (input_boolean.cricketrevolution_domain_renewed ->
+    on, via the "Mark as registered" button on the phone alert or the helper
+    toggle). Each run re-asserts a persistent notification in the HA web UI and
+    pushes a time-sensitive alert to Julian + Noddy's phones. Built 2026-06-08.
   triggers:
   - platform: time
     at: 09:00:00
   - platform: homeassistant
     event: start
   conditions:
+  - condition: state
+    entity_id: input_boolean.cricketrevolution_domain_renewed
+    state: 'off'
   - condition: template
-    value_template: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set
-      d = (e - now().date()).days %}{{ d >= 0 and d <= 42 }}'
+    value_template: '{{ now().date() >= strptime(''2028-09-01'',''%Y-%m-%d'').date() }}'
   actions:
   - action: persistent_notification.create
     data:
       notification_id: cricketrevolution_domain_renewal_2028
       title: 'Domain renewal due: cricketrevolution.com.au'
-      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d
-        = (e - now().date()).days %}The cricketrevolution.com.au website/domain registration
-        EXPIRES on 13 Oct 2028 ({{ d }} day(s) left). Renew it before then so the
-        site stays online. https://www.cricketrevolution.com.au (Reminder set 1 Sep
-        2028.)'
-  - choose:
-    - conditions:
-      - condition: template
-        value_template: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{%
-          set d = (e - now().date()).days %}{{ d in [42, 30, 21, 14, 7, 3, 1, 0] }}'
-      sequence:
-      - action: notify.mobile_app_julian
-        data:
-          title: 'Domain renewal due: cricketrevolution.com.au'
-          message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set
-            d = (e - now().date()).days %}cricketrevolution.com.au registration EXPIRES
-            13 Oct 2028 — {{ d }} day(s) left. Renew it so the website stays online.'
-          data:
-            tag: cricketrevolution-domain-renewal
-            url: https://www.cricketrevolution.com.au
-            clickAction: https://www.cricketrevolution.com.au
-            push:
-              interruption-level: time-sensitive
-            priority: high
-      - action: notify.mobile_app_noddy_iphone
-        data:
-          title: 'Domain renewal due: cricketrevolution.com.au'
-          message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set
-            d = (e - now().date()).days %}cricketrevolution.com.au registration EXPIRES
-            13 Oct 2028 — {{ d }} day(s) left. Renew it so the website stays online.'
-          data:
-            tag: cricketrevolution-domain-renewal
-            url: https://www.cricketrevolution.com.au
-            clickAction: https://www.cricketrevolution.com.au
-            push:
-              interruption-level: time-sensitive
-            priority: high
+      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d = (e - now().date()).days %}The cricketrevolution.com.au website/domain registration EXPIRES on 13 Oct 2028 ({% if d >= 0 %}{{ d }} day(s) left{% else %}EXPIRED {{ -d }} day(s) ago{% endif %}). Renew it so the site stays online, then tap "Mark as registered" on the phone alert (or toggle the "Cricket Revolution domain renewed" helper) to stop these daily reminders. https://www.cricketrevolution.com.au'
+  - action: notify.mobile_app_julian
+    data:
+      title: 'Domain renewal due: cricketrevolution.com.au'
+      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d = (e - now().date()).days %}cricketrevolution.com.au registration {% if d >= 0 %}EXPIRES 13 Oct 2028 — {{ d }} day(s) left{% else %}EXPIRED on 13 Oct 2028 — {{ -d }} day(s) ago{% endif %}. Renew it, then tap "Mark as registered" to stop these daily reminders.'
+      data:
+        tag: cricketrevolution-domain-renewal
+        url: https://www.cricketrevolution.com.au
+        clickAction: https://www.cricketrevolution.com.au
+        actions:
+        - action: CONFIRM_DOMAIN_RENEWED
+          title: Mark as registered
+        push:
+          interruption-level: time-sensitive
+        priority: high
+  - action: notify.mobile_app_noddy_iphone
+    data:
+      title: 'Domain renewal due: cricketrevolution.com.au'
+      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d = (e - now().date()).days %}cricketrevolution.com.au registration {% if d >= 0 %}EXPIRES 13 Oct 2028 — {{ d }} day(s) left{% else %}EXPIRED on 13 Oct 2028 — {{ -d }} day(s) ago{% endif %}. Renew it, then tap "Mark as registered" to stop these daily reminders.'
+      data:
+        tag: cricketrevolution-domain-renewal
+        url: https://www.cricketrevolution.com.au
+        clickAction: https://www.cricketrevolution.com.au
+        actions:
+        - action: CONFIRM_DOMAIN_RENEWED
+          title: Mark as registered
+        push:
+          interruption-level: time-sensitive
+        priority: high
+  mode: single
+- id: cricketrevolution_domain_renewed_action
+  alias: Reminder - Cricket Revolution domain confirmed (phone button)
+  description: >-
+    Julian/Noddy taps "Mark as registered" on the domain-renewal alert -> flips
+    input_boolean.cricketrevolution_domain_renewed on; the cleanup automation
+    then stops the daily reminders. Built 2026-06-08.
+  triggers:
+  - platform: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: CONFIRM_DOMAIN_RENEWED
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.cricketrevolution_domain_renewed
+  mode: single
+- id: cricketrevolution_domain_renewed_cleanup
+  alias: Reminder - Cricket Revolution domain renewed (stop reminders)
+  description: >-
+    When input_boolean.cricketrevolution_domain_renewed turns on (phone button
+    or helper toggle), dismiss the persistent notification, clear the phone
+    alerts on both devices, and confirm. Stops the daily domain-renewal
+    reminders. Built 2026-06-08.
+  triggers:
+  - platform: state
+    entity_id: input_boolean.cricketrevolution_domain_renewed
+    to: 'on'
+  actions:
+  - action: persistent_notification.dismiss
+    data:
+      notification_id: cricketrevolution_domain_renewal_2028
+  - action: notify.mobile_app_julian
+    data:
+      message: clear_notification
+      data:
+        tag: cricketrevolution-domain-renewal
+  - action: notify.mobile_app_noddy_iphone
+    data:
+      message: clear_notification
+      data:
+        tag: cricketrevolution-domain-renewal
+  - action: notify.mobile_app_julian
+    data:
+      title: Domain renewal confirmed
+      message: cricketrevolution.com.au marked as re-registered — daily reminders stopped.
   mode: single
