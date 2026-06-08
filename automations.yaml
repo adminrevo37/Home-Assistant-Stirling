@@ -1577,11 +1577,11 @@
   mode: single
 - id: roller_door_failed_to_close
   alias: Roller Door - Left Open Escalation (3/5/10 min)
-  description: 'Escalating fault alert: snapshot + push when binary_sensor.roller_door_contact
-    stays OPEN for 3, 5, then 10 minutes. 3min = operator auto-close likely failed
-    (obstruction/beam/power); 5/10min = still open, attend. Suppressed in service/hold-open
-    mode. Reworked 2026-06-08 per Inspector: was a single 1:50 ''failed to close'';
-    moved to 3min and added 5/10min escalation.'
+  description: 'Escalating fault alert on binary_sensor.roller_door_contact staying
+    OPEN. 3min = broad push to all (notify.notify) + snapshot, ''auto-close likely
+    failed''. 5min & 10min = CRITICAL alert to Julian''s iPhone at max volume (bypasses
+    silent/DND) + snapshot. Suppressed in service/hold-open mode. Reworked 2026-06-08
+    per Inspector: 3/5/10 ladder, 5+10 critical-to-Julian.'
   triggers:
   - platform: state
     entity_id: binary_sensor.roller_door_contact
@@ -1609,19 +1609,51 @@
     data:
       filename: /config/www/door_alert_snapshot.jpg
   - delay: 00:00:02
-  - action: notify.notify
-    data:
-      title: "{% if trigger.id == '10min' %}\U0001F6A8 Roller Door Still Open — 10
-        min{% elif trigger.id == '5min' %}\U0001F6A8 Roller Door Still Open — 5 min{%
-        else %}\U0001F6A8 Roller Door Failed to Close{% endif %}"
-      message: '{% if trigger.id == ''10min'' %}The front roller door is STILL open
-        after 10 minutes — please attend the entry now.{% elif trigger.id == ''5min''
-        %}The front roller door is STILL open after 5 minutes. Please check the entry.{%
-        else %}The front roller door has been open for 3 minutes — the operator auto-close
-        may have failed (obstruction, safety-beam fault, or power). Please check the
-        entry.{% endif %}'
-      data:
-        image: /local/door_alert_snapshot.jpg
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: 3min
+      sequence:
+      - action: notify.notify
+        data:
+          title: "\U0001F6A8 Roller Door Failed to Close"
+          message: The front roller door has been open for 3 minutes — the operator
+            auto-close may have failed (obstruction, safety-beam fault, or power).
+            Please check the entry.
+          data:
+            image: /local/door_alert_snapshot.jpg
+    - conditions:
+      - condition: trigger
+        id: 5min
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: "\U0001F6A8 Roller Door Still Open — 5 min"
+          message: The front roller door is STILL open after 5 minutes. Please check
+            the entry.
+          data:
+            image: /local/door_alert_snapshot.jpg
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
+    - conditions:
+      - condition: trigger
+        id: 10min
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: "\U0001F6A8 Roller Door Still Open — 10 min"
+          message: The front roller door is STILL open after 10 minutes — please attend
+            the entry now.
+          data:
+            image: /local/door_alert_snapshot.jpg
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
   mode: queued
   max: 3
 - id: keypad_validate_entry
