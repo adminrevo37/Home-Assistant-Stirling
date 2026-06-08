@@ -535,10 +535,10 @@
 - id: bay1_code_activate
   alias: Bay 1 - Door Code Activate
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_1_bowling_machine
-    offset: -0:15:00
+    offset: -0:30:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -640,10 +640,10 @@
 - id: bay2_code_activate
   alias: Bay 2 - Door Code Activate
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_2_bowling_machine
-    offset: -0:15:00
+    offset: -0:30:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -745,10 +745,10 @@
 - id: bay3_code_activate
   alias: Bay 3 - Door Code Activate
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_3_truman_or_bowling_machine
-    offset: -0:15:00
+    offset: -0:30:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -850,10 +850,10 @@
 - id: bay4_code_activate
   alias: Bay 4 - Door Code Activate
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_4_run_up_net
-    offset: -0:15:00
+    offset: -0:30:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -955,10 +955,10 @@
 - id: bay5_code_activate
   alias: Bay 5 - Door Code Activate
   triggers:
-  - trigger: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_5_run_up_net
-    offset: -0:15:00
+    offset: -0:30:00
+    platform: calendar
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
