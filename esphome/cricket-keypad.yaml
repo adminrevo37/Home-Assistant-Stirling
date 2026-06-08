@@ -126,3 +126,16 @@ wiegand:
     on_raw:
       - lambda: |-
           ESP_LOGI("wiegand", "RAW frame: %d bits, value 0x%llx", bits, value);
+
+# --- Monitoring sensors (added 2026-06-08) ---
+sensor:
+  - platform: internal_temperature
+    name: "Chip Temperature"
+    update_interval: 60s
+
+  - platform: uptime
+    name: "Uptime"
+
+binary_sensor:
+  - platform: status
+    name: "Online"
