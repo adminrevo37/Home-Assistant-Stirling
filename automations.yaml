@@ -1902,6 +1902,10 @@
   - platform: homeassistant
     event: start
   actions:
+  - condition: template
+    value_template: '{{ [''calendar.lane_1_bowling_machine'',''calendar.lane_2_bowling_machine'',''calendar.lane_3_truman_or_bowling_machine'',''calendar.lane_4_run_up_net'',''calendar.lane_5_run_up_net'']
+      | map(''states'') | reject(''in'', [''unavailable'',''unknown'','''']) | list
+      | length == 5 }}'
   - action: calendar.get_events
     target:
       entity_id: calendar.lane_1_bowling_machine
