@@ -75,6 +75,11 @@ Bay3 17–19 · Bay4 20–22 · Bay5 23–25 (a/b/c per bay). Booking codes trac
 slot, calls `c4_set_code` → `bay{N}_code_deactivate` (end+15min) finds the slot by
 code and calls `c4_clear_code`. **Cap: 3 concurrent codes per bay** — a 4th
 activate aborts silently (no alert). Worth adding an admin alert on slot exhaustion.
+> ⚠️ **`bay{N}_code_deactivate` has NO live-state gate** (unlike the lights' `booking_end`,
+> which checks `condition: state calendar.lane_{N} == 'off'`). It clears on the calendar end
+> trigger alone, so an in-venue **booking extension** can clear the code mid-session at
+> old-end+15 and lock the customer out. Fix designed (revalidation gate) but not yet built —
+> see the **2026-06-09 session note** before Key files.
 
 ---
 
@@ -175,6 +180,45 @@ Any new **wireless (MQTT/Zigbee) battery sensor** is tracked automatically from 
   `input_boolean.cricketrevolution_domain_renewed` on; `cricketrevolution_domain_renewed_cleanup`
   then dismisses the notification + clears the phone alerts. Reset the helper to OFF to
   re-arm. Message shows live days-left (and "EXPIRED N days ago" past the date).
+
+---
+
+## Session 2026-06-09 — shipped + open thread
+
+**Shipped (merged to `main` via PR #1).** ⚠️ **NOT yet pulled to the box** — run a deploy
+(`ha_call_service(shell_command, git_pull)` then `homeassistant.reload_all`). The reload is
+**required**: the new input helpers must register before their automations can reference them.
+- **Busy-evening all-lanes lighting flood** — see the Lighting section. (New helpers:
+  `input_boolean.lighting_all_lanes_active`, `input_number.lighting_all_lanes_min_concurrent`,
+  `input_datetime.lighting_all_lanes_evening_start`.) On-site calibration on a real ≥3-concurrent
+  night still pending.
+- **cricketrevolution.com.au domain-renewal reminder** — see the Reminders section. (New helper:
+  `input_boolean.cricketrevolution_domain_renewed`.)
+
+**Open thread — faster calendar updates + safe in-venue booking extensions (DESIGNED, NOTHING BUILT):**
+
+- **Goal:** changed bookings (esp. customer **extensions** done at the venue) flow through faster,
+  and an extension up to ~10 min before end must not cut the lights or clear the door code mid-session.
+- **Key finding — entity refresh ≠ trigger refresh.** `homeassistant.update_entity` on a Google
+  Calendar entity refreshes the entity **state / `get_events`** (helps state-based automations) but
+  does **NOT** speed up the **calendar trigger** platform, which reschedules on its own ~15-min cycle.
+  So `bay{N}_booking_start/end` and `bay{N}_code_activate/deactivate` keep ~15-min trigger latency
+  regardless of poll rate. (Krickora→Google is already instant via webhooks; the slow hop is Google→HA.)
+- **Hazard:** lights (`booking_end`, end+10) are protected by their `condition: state calendar 'off'`
+  gate ✅; the **door code** (`code_deactivate`, end+15) has **no gate** → premature clear on extension ❌.
+  The 22:30 `fallback_1030pm_clear_codes` only backstops the *opposite* failure (lingering code).
+- **Agreed plan (NOT built):**
+  - *Phase 1 (no external deps, ~2-min latency):* (1) backstop automation calling `update_entity` on
+    the 5 lane calendars every 2 min; (2) revalidation gate on all 5 `bay{N}_code_deactivate` — clear
+    **only if no currently-active event still carries that same code** (extend→keep, back-to-back-diff→
+    clear, normal→clear; on API uncertainty bias to NOT clear, the 22:30 sweep covers it).
+  - *Phase 2 (instant, the webhook idea):* HA `trigger: webhook` exposed via **Nabu Casa** cloud
+    webhook (`hooks.nabu.casa/<id>`, no LAN exposure) that Krickora POSTs on booking change → on-demand
+    refresh (Phase-1 poll stays as backstop, gate stays as safety belt). If Krickora can send a rich
+    body (bay/start/end/code/customer) we can later drive codes/lights directly and skip Google for the
+    realtime path.
+- **Blocked on:** what Krickora's webhook can do — can it POST to a URL *we* specify (not just Google),
+  and does it fire on update/extend + cancel (not just create)? **Nabu Casa is confirmed available.**
 
 ---
 
