@@ -1973,10 +1973,14 @@
   mode: single
 - id: keypad_connection_monitor
   alias: Keypad - Connection Monitor (Critical)
-  description: Door entry keypad (ESP32) connection to HA. OFFLINE >60s -> CRITICAL
-    push to Julian that RE-RINGS every 30s until acknowledged (Acknowledge action
-    button) OR the keypad reconnects. Back ONLINE -> clears the alert + normal push.
-    mode restart so reconnect interrupts the ring loop. Updated 2026-06-08.
+  description: 'Door entry keypad (ESP32) connection to HA. OFFLINE >60s -> CRITICAL
+    push to Julian that RE-RINGS every 30s until acknowledged (Acknowledge button)
+    OR the keypad reconnects. Back ONLINE -> clears + normal push. mode restart so
+    reconnect interrupts the ring loop. Updated 2026-06-10: Acknowledge now persists
+    for the whole outage (removed the ack-reset that mode:restart wiped on every flap)
+    and the re-ring stops within ~1s of tapping Acknowledge (wait_for_trigger instead
+    of fixed 30s delay). Re-arms on reconnect, so a genuinely new offline episode
+    still alerts.'
   triggers:
   - platform: state
     entity_id: sensor.cricket_keypad_uptime
@@ -1993,9 +1997,6 @@
       - condition: trigger
         id: offline
       sequence:
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.keypad_offline_alert_acknowledged
       - repeat:
           while:
           - condition: template
@@ -2020,7 +2021,12 @@
                 actions:
                 - action: ACK_KEYPAD
                   title: Acknowledge
-          - delay: 00:00:30
+          - wait_for_trigger:
+            - platform: state
+              entity_id: input_boolean.keypad_offline_alert_acknowledged
+              to: 'on'
+            timeout: 00:00:30
+            continue_on_timeout: true
     - conditions:
       - condition: trigger
         id: online
@@ -2040,10 +2046,14 @@
   mode: restart
 - id: keypad_overheat_alert
   alias: Keypad - Chip Overheat Alert (Critical)
-  description: ESP32 keypad chip overheat. >80C for 2min -> CRITICAL push to Julian
+  description: 'ESP32 keypad chip overheat. >80C for 2min -> CRITICAL push to Julian
     that RE-RINGS every 30s until acknowledged (Acknowledge button) OR the chip cools
     below 75C. Cooled -> clears + normal push. mode restart. Threshold provisional
-    pending baseline. Updated 2026-06-08.
+    pending baseline. Updated 2026-06-10: Acknowledge now persists for the whole hot
+    spell (removed the ack-reset that mode:restart wiped on every re-trigger) and
+    the re-ring stops within ~1s of tapping Acknowledge (wait_for_trigger instead
+    of fixed 30s delay). Re-arms when cooled <75C, so a genuinely new overheat still
+    alerts.'
   triggers:
   - platform: numeric_state
     entity_id: sensor.cricket_keypad_chip_temperature
@@ -2060,9 +2070,6 @@
       - condition: trigger
         id: hot
       sequence:
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.keypad_overheat_alert_acknowledged
       - repeat:
           while:
           - condition: numeric_state
@@ -2087,7 +2094,12 @@
                 actions:
                 - action: ACK_KEYPAD_HEAT
                   title: Acknowledge
-          - delay: 00:00:30
+          - wait_for_trigger:
+            - platform: state
+              entity_id: input_boolean.keypad_overheat_alert_acknowledged
+              to: 'on'
+            timeout: 00:00:30
+            continue_on_timeout: true
     - conditions:
       - condition: trigger
         id: cooled
@@ -2158,14 +2170,13 @@
   mode: single
 - id: reminder_cricketrevolution_domain_renewal_2028
   alias: Reminder - Cricket Revolution domain renewal (1 Sep 2028)
-  description: >-
-    Calendar reminder set for 1 Sep 2028: the cricketrevolution.com.au
-    website/domain registration EXPIRES 13 Oct 2028. From 1 Sep 2028 onward it
-    fires DAILY at 09:00 (+ on HA start) and keeps nagging until the domain is
-    confirmed re-registered (input_boolean.cricketrevolution_domain_renewed ->
-    on, via the "Mark as registered" button on the phone alert or the helper
-    toggle). Each run re-asserts a persistent notification in the HA web UI and
-    pushes a time-sensitive alert to Julian + Noddy's phones. Built 2026-06-08.
+  description: 'Calendar reminder set for 1 Sep 2028: the cricketrevolution.com.au
+    website/domain registration EXPIRES 13 Oct 2028. From 1 Sep 2028 onward it fires
+    DAILY at 09:00 (+ on HA start) and keeps nagging until the domain is confirmed
+    re-registered (input_boolean.cricketrevolution_domain_renewed -> on, via the "Mark
+    as registered" button on the phone alert or the helper toggle). Each run re-asserts
+    a persistent notification in the HA web UI and pushes a time-sensitive alert to
+    Julian + Noddy''s phones. Built 2026-06-08.'
   triggers:
   - platform: time
     at: 09:00:00
@@ -2176,17 +2187,27 @@
     entity_id: input_boolean.cricketrevolution_domain_renewed
     state: 'off'
   - condition: template
-    value_template: '{{ now().date() >= strptime(''2028-09-01'',''%Y-%m-%d'').date() }}'
+    value_template: '{{ now().date() >= strptime(''2028-09-01'',''%Y-%m-%d'').date()
+      }}'
   actions:
   - action: persistent_notification.create
     data:
       notification_id: cricketrevolution_domain_renewal_2028
       title: 'Domain renewal due: cricketrevolution.com.au'
-      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d = (e - now().date()).days %}The cricketrevolution.com.au website/domain registration EXPIRES on 13 Oct 2028 ({% if d >= 0 %}{{ d }} day(s) left{% else %}EXPIRED {{ -d }} day(s) ago{% endif %}). Renew it so the site stays online, then tap "Mark as registered" on the phone alert (or toggle the "Cricket Revolution domain renewed" helper) to stop these daily reminders. https://www.cricketrevolution.com.au'
+      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d
+        = (e - now().date()).days %}The cricketrevolution.com.au website/domain registration
+        EXPIRES on 13 Oct 2028 ({% if d >= 0 %}{{ d }} day(s) left{% else %}EXPIRED
+        {{ -d }} day(s) ago{% endif %}). Renew it so the site stays online, then tap
+        "Mark as registered" on the phone alert (or toggle the "Cricket Revolution
+        domain renewed" helper) to stop these daily reminders. https://www.cricketrevolution.com.au'
   - action: notify.mobile_app_julian
     data:
       title: 'Domain renewal due: cricketrevolution.com.au'
-      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d = (e - now().date()).days %}cricketrevolution.com.au registration {% if d >= 0 %}EXPIRES 13 Oct 2028 — {{ d }} day(s) left{% else %}EXPIRED on 13 Oct 2028 — {{ -d }} day(s) ago{% endif %}. Renew it, then tap "Mark as registered" to stop these daily reminders.'
+      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d
+        = (e - now().date()).days %}cricketrevolution.com.au registration {% if d
+        >= 0 %}EXPIRES 13 Oct 2028 — {{ d }} day(s) left{% else %}EXPIRED on 13 Oct
+        2028 — {{ -d }} day(s) ago{% endif %}. Renew it, then tap "Mark as registered"
+        to stop these daily reminders.'
       data:
         tag: cricketrevolution-domain-renewal
         url: https://www.cricketrevolution.com.au
@@ -2200,7 +2221,11 @@
   - action: notify.mobile_app_noddy_iphone
     data:
       title: 'Domain renewal due: cricketrevolution.com.au'
-      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d = (e - now().date()).days %}cricketrevolution.com.au registration {% if d >= 0 %}EXPIRES 13 Oct 2028 — {{ d }} day(s) left{% else %}EXPIRED on 13 Oct 2028 — {{ -d }} day(s) ago{% endif %}. Renew it, then tap "Mark as registered" to stop these daily reminders.'
+      message: '{% set e = strptime(''2028-10-13'',''%Y-%m-%d'').date() %}{% set d
+        = (e - now().date()).days %}cricketrevolution.com.au registration {% if d
+        >= 0 %}EXPIRES 13 Oct 2028 — {{ d }} day(s) left{% else %}EXPIRED on 13 Oct
+        2028 — {{ -d }} day(s) ago{% endif %}. Renew it, then tap "Mark as registered"
+        to stop these daily reminders.'
       data:
         tag: cricketrevolution-domain-renewal
         url: https://www.cricketrevolution.com.au
@@ -2214,9 +2239,8 @@
   mode: single
 - id: cricketrevolution_domain_renewed_action
   alias: Reminder - Cricket Revolution domain confirmed (phone button)
-  description: >-
-    Julian/Noddy taps "Mark as registered" on the domain-renewal alert -> flips
-    input_boolean.cricketrevolution_domain_renewed on; the cleanup automation
+  description: Julian/Noddy taps "Mark as registered" on the domain-renewal alert
+    -> flips input_boolean.cricketrevolution_domain_renewed on; the cleanup automation
     then stops the daily reminders. Built 2026-06-08.
   triggers:
   - platform: event
@@ -2230,11 +2254,10 @@
   mode: single
 - id: cricketrevolution_domain_renewed_cleanup
   alias: Reminder - Cricket Revolution domain renewed (stop reminders)
-  description: >-
-    When input_boolean.cricketrevolution_domain_renewed turns on (phone button
-    or helper toggle), dismiss the persistent notification, clear the phone
-    alerts on both devices, and confirm. Stops the daily domain-renewal
-    reminders. Built 2026-06-08.
+  description: When input_boolean.cricketrevolution_domain_renewed turns on (phone
+    button or helper toggle), dismiss the persistent notification, clear the phone
+    alerts on both devices, and confirm. Stops the daily domain-renewal reminders.
+    Built 2026-06-08.
   triggers:
   - platform: state
     entity_id: input_boolean.cricketrevolution_domain_renewed
@@ -2256,20 +2279,19 @@
   - action: notify.mobile_app_julian
     data:
       title: Domain renewal confirmed
-      message: cricketrevolution.com.au marked as re-registered — daily reminders stopped.
+      message: cricketrevolution.com.au marked as re-registered — daily reminders
+        stopped.
   mode: single
 - id: lighting_all_lanes_on_busy_evening
   alias: Lighting - All Lanes On (Busy Evening)
-  description: >-
-    From the evening start (input_datetime.lighting_all_lanes_evening_start,
-    default 4:00 PM) until the absolute catch-all time, when a booking begins
-    (using the same 11-min lead-in as the per-bay starts) or on a 10-min
-    re-check, if the evening's PEAK CONCURRENT bookings reaches the threshold
-    (input_number.lighting_all_lanes_min_concurrent, default 3) it floods ALL 5
-    lane highbays on and latches busy mode. They stay on (re-asserted by 'All
-    Lanes Keep-On') until the last booking ends, when the night staggered
-    shutdown (or the daylight-end automation) takes over and clears the latch.
-    Built 2026-06-08.
+  description: From the evening start (input_datetime.lighting_all_lanes_evening_start,
+    default 4:00 PM) until the absolute catch-all time, when a booking begins (using
+    the same 11-min lead-in as the per-bay starts) or on a 10-min re-check, if the
+    evening's PEAK CONCURRENT bookings reaches the threshold (input_number.lighting_all_lanes_min_concurrent,
+    default 3) it floods ALL 5 lane highbays on and latches busy mode. They stay on
+    (re-asserted by 'All Lanes Keep-On') until the last booking ends, when the night
+    staggered shutdown (or the daylight-end automation) takes over and clears the
+    latch. Built 2026-06-08.
   triggers:
   - platform: calendar
     event: start
@@ -2304,15 +2326,12 @@
     entity_id: input_boolean.lighting_all_lanes_active
     state: 'off'
   - condition: template
-    value_template: >-
-      {% set cutoff = strptime(states('input_datetime.lighting_all_lanes_evening_start'),'%H:%M:%S').time() %}
-      {% set hardoff = strptime(states('input_datetime.lighting_hard_off_catchall'),'%H:%M:%S').time() %}
-      {% if trigger.id == 'booking' %}
-      {{ as_local(as_datetime(trigger.calendar_event.start)).time() >= cutoff and now().time() < hardoff }}
-      {% else %}
-      {% set on = expand('calendar.lane_1_bowling_machine','calendar.lane_2_bowling_machine','calendar.lane_3_truman_or_bowling_machine','calendar.lane_4_run_up_net','calendar.lane_5_run_up_net') | selectattr('state','eq','on') | list | count %}
-      {{ now().time() >= cutoff and now().time() < hardoff and on > 0 }}
-      {% endif %}
+    value_template: '{% set cutoff = strptime(states(''input_datetime.lighting_all_lanes_evening_start''),''%H:%M:%S'').time()
+      %} {% set hardoff = strptime(states(''input_datetime.lighting_hard_off_catchall''),''%H:%M:%S'').time()
+      %} {% if trigger.id == ''booking'' %} {{ as_local(as_datetime(trigger.calendar_event.start)).time()
+      >= cutoff and now().time() < hardoff }} {% else %} {% set on = expand(''calendar.lane_1_bowling_machine'',''calendar.lane_2_bowling_machine'',''calendar.lane_3_truman_or_bowling_machine'',''calendar.lane_4_run_up_net'',''calendar.lane_5_run_up_net'')
+      | selectattr(''state'',''eq'',''on'') | list | count %} {{ now().time() >= cutoff
+      and now().time() < hardoff and on > 0 }} {% endif %}'
   actions:
   - action: calendar.get_events
     target:
@@ -2323,19 +2342,22 @@
       - calendar.lane_4_run_up_net
       - calendar.lane_5_run_up_net
     data:
-      start_date_time: '{{ today_at(states(''input_datetime.lighting_all_lanes_evening_start'')) }}'
+      start_date_time: '{{ today_at(states(''input_datetime.lighting_all_lanes_evening_start''))
+        }}'
       end_date_time: '{{ today_at(''23:59:59'') }}'
     response_variable: lane_events
   - if:
     - condition: template
-      value_template: >-
-        {% set cutoff = as_timestamp(today_at(states('input_datetime.lighting_all_lanes_evening_start'))) %}
-        {% set ns = namespace(iv=[]) %}
-        {% for cal, d in lane_events.items() %}{% for ev in d.events %}{% set ns.iv = ns.iv + [(as_timestamp(as_datetime(ev.start)), as_timestamp(as_datetime(ev.end)))] %}{% endfor %}{% endfor %}
-        {% set p = namespace(instants=[cutoff], peak=0) %}
-        {% for s, e in ns.iv %}{% if s >= cutoff %}{% set p.instants = p.instants + [s] %}{% endif %}{% endfor %}
-        {% for t in p.instants %}{% set c = namespace(n=0) %}{% for s, e in ns.iv %}{% if s <= t and t < e %}{% set c.n = c.n + 1 %}{% endif %}{% endfor %}{% if c.n > p.peak %}{% set p.peak = c.n %}{% endif %}{% endfor %}
-        {{ p.peak >= (states('input_number.lighting_all_lanes_min_concurrent') | int(3)) }}
+      value_template: '{% set cutoff = as_timestamp(today_at(states(''input_datetime.lighting_all_lanes_evening_start'')))
+        %} {% set ns = namespace(iv=[]) %} {% for cal, d in lane_events.items() %}{%
+        for ev in d.events %}{% set ns.iv = ns.iv + [(as_timestamp(as_datetime(ev.start)),
+        as_timestamp(as_datetime(ev.end)))] %}{% endfor %}{% endfor %} {% set p =
+        namespace(instants=[cutoff], peak=0) %} {% for s, e in ns.iv %}{% if s >=
+        cutoff %}{% set p.instants = p.instants + [s] %}{% endif %}{% endfor %} {%
+        for t in p.instants %}{% set c = namespace(n=0) %}{% for s, e in ns.iv %}{%
+        if s <= t and t < e %}{% set c.n = c.n + 1 %}{% endif %}{% endfor %}{% if
+        c.n > p.peak %}{% set p.peak = c.n %}{% endif %}{% endfor %} {{ p.peak >=
+        (states(''input_number.lighting_all_lanes_min_concurrent'') | int(3)) }}'
     then:
     - action: light.turn_on
       target:
@@ -2351,12 +2373,11 @@
   mode: single
 - id: lighting_all_lanes_keep_on
   alias: Lighting - All Lanes Keep-On (re-assert)
-  description: >-
-    While busy mode is latched, if any lane highbay gets switched off (e.g. by a
-    per-bay END automation as bookings finish), switch it straight back on so all
-    lane lights stay on until the last booking ends. The night staggered shutdown,
-    the daylight-end automation and the absolute catch-all all clear the latch
-    FIRST, so they are not fought. Built 2026-06-08.
+  description: While busy mode is latched, if any lane highbay gets switched off (e.g.
+    by a per-bay END automation as bookings finish), switch it straight back on so
+    all lane lights stay on until the last booking ends. The night staggered shutdown,
+    the daylight-end automation and the absolute catch-all all clear the latch FIRST,
+    so they are not fought. Built 2026-06-08.
   triggers:
   - platform: state
     entity_id:
@@ -2378,11 +2399,10 @@
   max: 5
 - id: lighting_all_lanes_end_daylight
   alias: Lighting - All Lanes Mode End (Daylight)
-  description: >-
-    Busy-mode safety for the rare case the last booking ends while it's still
-    daylight (before sunset-30m): clear the busy-mode latch FIRST (so Keep-On
-    stops), then turn all lane highbays off. The after-dark case is handled by
-    'Night - All Off + Highbay 3 Residual'. Built 2026-06-08.
+  description: 'Busy-mode safety for the rare case the last booking ends while it''s
+    still daylight (before sunset-30m): clear the busy-mode latch FIRST (so Keep-On
+    stops), then turn all lane highbays off. The after-dark case is handled by ''Night
+    - All Off + Highbay 3 Residual''. Built 2026-06-08.'
   triggers:
   - platform: state
     entity_id:
@@ -2421,4 +2441,28 @@
       - light.highbay_3
       - light.highbay_4
       - light.highbay_5
+  mode: single
+- id: '1781066813073'
+  alias: Google Calendar - Fast Sync (lanes, every 2 min)
+  description: Forces an incremental Google Calendar sync on the 5 lane calendars
+    every 2 minutes (HA's native Google poll is a hardcoded 15 min). Cuts the lag
+    between a Krickora booking/extension being written to Google Calendar and HA seeing
+    it, so door codes load in time for near-start bookings. Operating hours only to
+    avoid pointless overnight API calls.
+  triggers:
+  - platform: time_pattern
+    minutes: /2
+  conditions:
+  - condition: time
+    after: 05:00:00
+    before: '23:00:00'
+  actions:
+  - action: homeassistant.update_entity
+    target:
+      entity_id:
+      - calendar.lane_1_bowling_machine
+      - calendar.lane_2_bowling_machine
+      - calendar.lane_3_truman_or_bowling_machine
+      - calendar.lane_4_run_up_net
+      - calendar.lane_5_run_up_net
   mode: single
