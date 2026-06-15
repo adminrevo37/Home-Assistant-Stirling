@@ -2466,3 +2466,75 @@
       - calendar.lane_4_run_up_net
       - calendar.lane_5_run_up_net
   mode: single
+- id: '1781517514481'
+  alias: Control4 - Connection Watchdog (auto-reload on dead feed)
+  description: 'Detects a dead Control4 Director feed (websocket/poll drop that freezes
+    ALL Control4 entity states - e.g. lights showing OFF while physically ON, as happened
+    2026-06-15 ~13:00). Active liveness probe every 2 min: force homeassistant.update_entity
+    on two Control4 probe entities, wait 15s, then check whether they refreshed. If
+    neither refreshed (>90s stale) or both unavailable, the Director feed is dead
+    -> reload_config_entry on the Control4 entry (entry_id 01KM09V3X1JDWRBA7KSWMD1WAJ)
+    to resync, and push Julian ONCE per episode (throttled via input_boolean.control4_feed_down)
+    + a recovery push when it comes back. The integration is already on the latest
+    version (1.7.0); reload is the only fix. Probe-refresh-on-healthy confirmed via
+    update_entity 2026-06-15. Built 2026-06-15 -> BUILD_HA_2026-06-15.'
+  triggers:
+  - trigger: time_pattern
+    minutes: /2
+  actions:
+  - action: homeassistant.update_entity
+    continue_on_error: true
+    data:
+      entity_id:
+      - sensor.non_dimmable_light_centralized_power
+      - light.highbay_3
+  - delay: 00:00:15
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{% set probes = [''sensor.non_dimmable_light_centralized_power'',''light.highbay_3'']
+          %}{% set ns = namespace(healthy=false) %}{% for p in probes %}{% set st
+          = states(p) %}{% set lr = as_timestamp(states[p].last_reported) %}{% if
+          st not in [''unavailable'',''unknown''] and lr and (as_timestamp(now())
+          - lr) < 90 %}{% set ns.healthy = true %}{% endif %}{% endfor %}{{ not ns.healthy
+          }}'
+      sequence:
+      - action: homeassistant.reload_config_entry
+        data:
+          entry_id: 01KM09V3X1JDWRBA7KSWMD1WAJ
+      - if:
+        - condition: state
+          entity_id: input_boolean.control4_feed_down
+          state: 'off'
+        then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.control4_feed_down
+        - action: notify.mobile_app_julian
+          data:
+            title: ⚠️ Control4 feed stale - auto-reloaded
+            message: HA lost live state from the Control4 Director (lights/locks would
+              show wrong state). Auto-reloaded the Control4 integration to resync.
+              If this keeps repeating, check the Director (192.168.1.107) and the
+              HA<->C4 network link.
+            data:
+              tag: control4_feed_down
+    default:
+    - if:
+      - condition: state
+        entity_id: input_boolean.control4_feed_down
+        state: 'on'
+      then:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.control4_feed_down
+      - action: notify.mobile_app_julian
+        data:
+          message: clear_notification
+          data:
+            tag: control4_feed_down
+      - action: notify.mobile_app_julian
+        data:
+          title: ✅ Control4 feed recovered
+          message: HA is receiving live Control4 state again (auto-reload worked).
+  mode: single

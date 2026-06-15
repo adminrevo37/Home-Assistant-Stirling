@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 import logging
 import time
@@ -40,9 +40,22 @@ from ..const import (
 )
 from ..domain.config import build_slot_unique_id
 from ..domain.coordinator import LockUsercodeUpdateCoordinator
+from ..domain.credentials import (
+    Credential,
+    CredentialRef,
+    CredentialType,
+    LockCapabilities,
+    SetUserResult,
+    User,
+    WriteResult,
+    credential_from_slot,
+    user_from_slot,
+)
 from ..domain.exceptions import (
+    CodeRejectedError,
     DuplicateCodeError,
     LockCodeManagerError,
+    LockCodeManagerProviderError,
     LockDisconnected,
     LockOperationFailed,
     ProviderNotImplementedError,
@@ -50,11 +63,17 @@ from ..domain.exceptions import (
 from ..domain.models import SlotCredential
 from ..domain.queries import find_entry_for_lock_slot, get_managed_slots
 from ..domain.util import mask_pin
+from ._util import make_tagged_name, parse_tag
 from .const import LOGGER
 
 _LOGGER = logging.getLogger(__name__)
 
 MIN_OPERATION_DELAY = 2.0
+
+# How long an optimistic write waits for confirmation (push event or hard-refresh
+# presence) before the sync layer gives up waiting and re-syncs. See the Phase 2
+# push-as-commit spec.
+PENDING_WRITE_TTL = 60.0
 _OPERATION_MESSAGES: dict[Literal["get", "set", "clear", "refresh"], str] = {
     "get": "get from",
     "set": "set on",
@@ -175,6 +194,11 @@ class BaseLock:
     _push_unsubs: list[Callable[[], None]] = field(
         default_factory=list, init=False, repr=False
     )
+    # Read via ``_get_cached_capabilities``; cleared by recreating the
+    # provider on integration reload.
+    _capabilities_cache: LockCapabilities | None = field(
+        default=None, init=False, repr=False
+    )
     _last_operation_time: float = field(default=0.0, init=False)
     _min_operation_delay: float = field(default=MIN_OPERATION_DELAY, init=False)
     _last_connection_up: bool | None = field(default=None, init=False)
@@ -187,6 +211,15 @@ class BaseLock:
     _setup_running: bool = field(default=False, init=False)
     _lcm_config_entry: ConfigEntry | None = field(default=None, init=False)
     _rejected_code_slots: set[int] = field(default_factory=set, init=False)
+    # Slots with an outstanding optimistic (ambiguous-but-treated-as-completed)
+    # write awaiting confirmation, mapped to (believed_pin, monotonic_deadline).
+    # A confirmation -- a push event or a hard-refresh read observing the slot
+    # present -- clears the entry and re-pushes the believed value as verified;
+    # if none arrives before the deadline, the sync layer re-syncs. See the
+    # Phase 2 push-as-commit spec.
+    _pending_writes: dict[int, tuple[str, float]] = field(
+        default_factory=dict, init=False
+    )
     # Reconnect task spawned by the config-entry state listener when the lock
     # integration transitions to LOADED. Tracked so async_unload can cancel it
     # before teardown -- otherwise a late reconnect can call
@@ -350,11 +383,63 @@ class BaseLock:
     @final
     @callback
     def _push_credential_update(
-        self, code_slot: int, credential: SlotCredential
+        self, code_slot: int, credential: SlotCredential, *, optimistic: bool = False
     ) -> None:
-        """Push a coordinator credential update; no-op when no coordinator is attached."""
-        if self.coordinator is not None:
+        """
+        Push a coordinator credential update; no-op when no coordinator is attached.
+
+        ``optimistic=True`` marks the slot unverified (an ambiguous write we are
+        treating as completed but have not confirmed). The default keeps the
+        slot verified.
+        """
+        if self.coordinator is None:
+            return
+        # Only pass the kwarg when optimistic, so the common verified push keeps
+        # its plain call shape (and existing call-shape assertions hold).
+        if optimistic:
+            self.coordinator.push_update({code_slot: credential}, optimistic=True)
+        else:
             self.coordinator.push_update({code_slot: credential})
+
+    @callback
+    def _record_optimistic_write(self, code_slot: int, pin: str) -> None:
+        """
+        Record an outstanding optimistic write and push its believed value.
+
+        Called by the seam when ``async_set_credential`` returns OPTIMISTIC.
+        The slot is pushed as ``known(pin)`` but marked unverified; it awaits
+        a confirmation (push event or hard-refresh presence) via
+        ``_confirm_slot``, or re-syncs once the deadline passes.
+        """
+        self._pending_writes[code_slot] = (pin, time.monotonic() + PENDING_WRITE_TTL)
+        self._push_credential_update(
+            code_slot, SlotCredential.known(pin), optimistic=True
+        )
+
+    @callback
+    def _confirm_slot(self, code_slot: int, observed: SlotCredential) -> None:
+        """
+        Resolve an observation (push event or hard-refresh read) for a slot.
+
+        When an optimistic write for the slot is outstanding and the observed
+        state shows a code present, the observation confirms our write: keep
+        the believed value (even if the observation itself is masked/unreadable)
+        and mark it verified. The one exception is a *readable* observation of a
+        different code -- that is an external change racing our write, so we take
+        the observation rather than masking it with our believed value.
+        Otherwise -- no pending write, or the slot is now empty -- take the
+        observation as the verified state. Either way the pending entry is
+        cleared.
+        """
+        pending = self._pending_writes.pop(code_slot, None)
+        if pending is not None and observed.is_present:
+            pin, _deadline = pending
+            if observed.is_readable and observed.readable_pin != pin:
+                self._push_credential_update(code_slot, observed)
+            else:
+                self._push_credential_update(code_slot, SlotCredential.known(pin))
+            return
+        self._push_credential_update(code_slot, observed)
 
     @final
     def is_slot_managed(self, code_slot: int) -> bool:
@@ -424,6 +509,24 @@ class BaseLock:
         When True, the lock will receive real-time value updates via
         subscribe_push_updates() instead of periodic polling. Polling is
         still used for initial load and drift detection (hard_refresh_interval).
+        """
+        return False
+
+    @property
+    def supports_native_users(self) -> bool:
+        """
+        Return whether the provider speaks the User->Credential model natively.
+
+        True for providers whose integration manages users and credentials as
+        distinct entities (the Z-Wave unified access control surface, the
+        Matter DoorLock cluster). The base orchestration then runs the
+        user-first lifecycle: create or update the user, then write its
+        credential; delete the user when its last credential is removed.
+
+        False (the default) for slot-only providers (zha, zigbee2mqtt,
+        schlage, akuvox, virtual): the base skips every user operation and
+        addresses the credential by slot, so behavior is identical to the
+        legacy one-Personal-Identification-Number-per-slot model.
         """
         return False
 
@@ -515,11 +618,28 @@ class BaseLock:
         """
         Set up lock and coordinator, signaling completion to waiters.
 
-        Provider ``async_setup()`` runs first so providers can initialize
-        any state the coordinator needs during its first refresh.
+        Validates the lock advertises PIN credential support for
+        native-user providers; structural failures
+        (``LockCodeManagerProviderError``) propagate and prevent setup.
+        ``supports_user_management`` is deliberately NOT required: a
+        native-user provider can serve a slot-only lock (e.g. a Z-Wave
+        User Code CC fallback), in which case the seam's
+        ``_supports_user_records`` gate skips the user lifecycle and
+        routes through the credential primitives directly.
+        Transport-level failures
+        (``LockDisconnected``/``LockOperationFailed``) during the
+        capability probe OR the provider's own ``async_setup`` are logged
+        and the coordinator is created anyway so the integration retries
+        once the lock comes online.
         """
         self._lcm_config_entry = config_entry
         try:
+            if self.supports_native_users:
+                caps = await self._get_cached_capabilities()
+                if CredentialType.PIN not in caps.credential_types:
+                    raise LockCodeManagerProviderError(
+                        f"{self.lock.entity_id}: lock does not advertise PIN credential support"
+                    )
             await self.async_setup(config_entry)
         except (LockDisconnected, LockOperationFailed) as err:
             LOGGER.warning(
@@ -801,20 +921,29 @@ class BaseLock:
         usercode: str,
         name: str | None = None,
         source: Literal["sync", "direct"] = "direct",
-    ) -> bool:
+    ) -> WriteResult:
         """
-        Set a usercode on a code slot.
+        Set a usercode on a code slot via the User->Credential primitives.
 
-        Returns True if the value was changed, False if already set to this
-        value. If the provider cannot determine whether a change occurred,
-        return True so the coordinator refreshes and verifies the state.
-
-        ``source`` indicates whether the call originates from the sync
-        manager ("sync") or a user action ("direct").
+        Projects the slot to a single Personal Identification Number
+        credential. Native-user providers run the create-on-first user
+        lifecycle via ``_set_credential``; slot-only providers write the
+        credential directly, addressing it by slot. Returns the provider's
+        ``WriteResult`` (NO_CHANGE / CONFIRMED / OPTIMISTIC).
         """
-        self._raise_not_implemented(
-            "async_set_usercode",
-            "Override this method to set a usercode on the lock.",
+        state = SlotCredential.known(usercode)
+        credential = credential_from_slot(code_slot, state)
+        pin = self._require_readable_pin(credential)
+        if not self.supports_native_users:
+            return await self.async_set_credential(
+                code_slot, credential, pin, name=name, source=source
+            )
+        return await self._set_credential(
+            user_from_slot(code_slot, state, name),
+            credential,
+            pin,
+            name=name,
+            source=source,
         )
 
     @final
@@ -847,7 +976,7 @@ class BaseLock:
                     lock_entity_id=self.lock.entity_id,
                 )
 
-        changed = await self._execute_rate_limited(
+        result: WriteResult = await self._execute_rate_limited(
             "set",
             self.async_set_usercode,
             code_slot,
@@ -856,24 +985,100 @@ class BaseLock:
             name=name,
             source=source,
         )
+        if result is WriteResult.OPTIMISTIC:
+            # Ambiguous write: record it pending and push the believed value as
+            # unverified, then actively read the lock back to confirm it. Some
+            # stacks send no confirming push for an ambiguous write (node-zwave-js
+            # emits no credential event when its post-write verify fails on a
+            # masked lock), so waiting passively would let the breaker suspend a
+            # slot whose code actually landed before the hourly drift refresh can
+            # run. The read confirms a present-but-masked slot; a genuinely-absent
+            # slot stays pending and the sync tick re-syncs after the TTL.
+            self._record_optimistic_write(code_slot, str(usercode))
+            if self.coordinator is not None:
+                await self.coordinator.async_confirm_pending_writes()
+        elif result is WriteResult.CONFIRMED:
+            # The lock acknowledged the write: supersede any pending optimistic
+            # state and clear a stale unverified flag from a prior optimistic
+            # write, so the slot can converge instead of churning to a suspend.
+            self._pending_writes.pop(code_slot, None)
+            if self.coordinator is not None:
+                self.coordinator.mark_verified(code_slot)
         # Skip coordinator refresh for push providers — they update optimistically
         # via push_update(), and refreshing from cache could overwrite with stale
         # data when the driver defers cache updates until device confirmation.
-        if changed and self.coordinator and not self.supports_push:
+        if result.changed and self.coordinator and not self.supports_push:
             await self.coordinator.async_request_refresh()
 
     async def async_clear_usercode(self, code_slot: int) -> bool:
         """
-        Clear a usercode on a code slot.
+        Clear a usercode on a code slot via the User->Credential primitives.
 
-        Returns True if the value was changed, False if already cleared.
-        If the provider cannot determine whether a change occurred, return
-        True so the coordinator refreshes and verifies the state.
+        Slot-only providers address the credential by slot and delete it
+        directly. Native-user providers must target the credential's actual
+        owning user, which is not assumed to equal the slot index: a
+        credential may have been created on the lock by another controller,
+        or the integration may have allocated a user identifier that differs
+        from the slot. The owning ``user_id`` is resolved from the lock's
+        current users and threaded through the ``CredentialRef`` so the
+        provider's delete primitive can address the credential precisely.
+        The lock-side user stays put; it is torn down only when the slot
+        is removed from LCM config (see ``async_release_managed_slot``).
+        Returns True if the value changed, False if it was already cleared
+        -- and True when the provider cannot determine whether a change
+        occurred, so the coordinator refreshes and verifies the actual
+        state.
         """
-        self._raise_not_implemented(
-            "async_clear_usercode",
-            "Override this method to clear a usercode from the lock.",
+        if not self.supports_native_users:
+            ref = CredentialRef(
+                user_id=code_slot, type=CredentialType.PIN, slot=code_slot
+            )
+            return await self.async_delete_credential(ref)
+
+        # Owner resolution is two-pass to match the same identity rule the
+        # set path uses (see Matter's _find_user_index_for_slot). The
+        # canonical pass matches by the ``lcm:<slot>:`` tag in user.name;
+        # the legacy fallback handles pre-PR-B installs where
+        # ``credential.slot`` was pinned to the LCM slot. Matching by
+        # ``credential.slot == code_slot`` alone is unsafe once providers
+        # let the lock auto-allocate the credential index -- a tagged
+        # user for slot A whose credential lands at index B would be
+        # mis-matched when clearing slot B.
+        users = await self.async_get_users()
+        # Both lookups require the user to actually own a PIN credential
+        # at the slot we're clearing. Under the persistent-user-anchor
+        # lifecycle a tagged user can exist without a PIN (between
+        # writes); resolving such a user as the owner would drive a
+        # spurious ``async_delete_credential`` call whose provider-
+        # specific return value can incorrectly report changed=True.
+        owner_user_id: int | None
+        try:
+            owner_user_id = next(
+                user.user_id
+                for user in users
+                if user.name and parse_tag(user.name)[0] == code_slot
+                for credential in user.pin_credentials
+                if credential.slot == code_slot
+            )
+        except StopIteration:
+            owner_user_id = next(
+                (
+                    user.user_id
+                    for user in users
+                    if parse_tag(user.name or "")[0] is None
+                    for credential in user.pin_credentials
+                    if credential.slot == code_slot
+                ),
+                None,
+            )
+        if owner_user_id is None:
+            # No user owns this slot's credential -- nothing to clear.
+            return False
+
+        ref = CredentialRef(
+            user_id=owner_user_id, type=CredentialType.PIN, slot=code_slot
         )
+        return await self._delete_credential(ref)
 
     @final
     async def async_internal_clear_usercode(
@@ -888,17 +1093,439 @@ class BaseLock:
             code_slot,
             source,
         )
+        # A clear supersedes any outstanding optimistic set on this slot, so the
+        # stale pending entry must not keep gating reconciliation (the sync tick
+        # keys PENDING_CONFIRMATION on this dict).
+        self._pending_writes.pop(code_slot, None)
         changed = await self._execute_rate_limited(
             "clear", self.async_clear_usercode, code_slot
         )
         if changed and self.coordinator and not self.supports_push:
             await self.coordinator.async_request_refresh()
 
+    async def _project_users_to_slots(
+        self, credential_type: CredentialType
+    ) -> dict[int, SlotCredential]:
+        """
+        Project the lock's users to a slot -> ``SlotCredential`` map.
+
+        Every managed slot is present even when empty: the projection
+        starts from ``managed_slots`` mapped to ``SlotCredential.empty()``
+        and then overlays the credentials of ``credential_type`` read via
+        ``async_get_users``. This preserves the slot-keyed contract the
+        coordinator, sync manager, and slot entities depend on -- a
+        managed slot missing from the map is treated as unavailable, not
+        empty, so the empty placeholders are load-bearing. Occupied slots
+        the lock reports that are not managed are surfaced too.
+        Credentials of other types are dropped here -- the seam keeps
+        everything below it slot-shaped and single-type this round.
+
+        This is the chokepoint for "the base class filters per credential
+        type before passing to the coordinator/entities" (Option A in the
+        design discussion). Adding a second supported type means calling
+        this helper from a second projection method -- providers store
+        every type they can map, so no provider changes are required.
+
+        TODO(option-b): when the integration adds a second supported
+        credential type (Z-Wave User Credential CC also exposes
+        ``PASSWORD``), revisit whether the coordinator/entities should
+        instead be type-scoped from the top -- one set of slot entities
+        per credential type -- rather than threading the type through a
+        single projection. The provider-side model is already ready for
+        that move; the open question is configuration / user experience
+        (do users configure "PIN slots 1-10" and "password slots 1-5"
+        separately, or is each slot polymorphic?).
+        """
+        codes = {slot: SlotCredential.empty() for slot in self.managed_slots}
+        codes.update(
+            {
+                credential.slot: credential.state
+                for user in await self.async_get_users()
+                for credential in user.credentials_of_type(credential_type)
+            }
+        )
+        return codes
+
     async def async_get_usercodes(self) -> dict[int, SlotCredential]:
-        """Return a dict mapping slot numbers to ``SlotCredential`` values for the coordinator."""
+        """
+        Return the slot -> ``SlotCredential`` map for Personal Identification Numbers.
+
+        Thin Personal-Identification-Number-shaped wrapper over
+        ``_project_users_to_slots``; preserved as a stable name because
+        the coordinator, sync manager, and slot entities are all
+        Personal Identification Number-scoped today.
+        """
+        return await self._project_users_to_slots(CredentialType.PIN)
+
+    @final
+    async def _get_cached_capabilities(self) -> LockCapabilities:
+        """
+        Return the lock's capabilities, populating the cache on first call.
+
+        Cache lives for the provider instance's lifetime; reload
+        recreates the provider and naturally invalidates the cache.
+        """
+        if self._capabilities_cache is None:
+            self._capabilities_cache = await self.async_get_capabilities()
+        return self._capabilities_cache
+
+    async def _supports_user_records(self) -> bool:
+        """
+        Return whether the lock exposes a separate user-record write path.
+
+        False covers both no-user-management locks and the implicit-user
+        case (e.g. Z-Wave User Code CC: the user IS the credential).
+        """
+        caps = await self._get_cached_capabilities()
+        return caps.supports_user_management and caps.max_user_name_length > 0
+
+    async def _build_tagged_user_name(
+        self, slot: int, display: str | None
+    ) -> str | None:
+        """
+        Build the LCM-tagged user name for a slot, fitting the lock's length.
+
+        Emits ``lcm:{slot}:{display}`` (canonical format from
+        :func:`._util.make_tagged_name`) and truncates the display portion
+        so the overall length fits ``max_user_name_length``. The tag prefix
+        is sacred -- it's how :func:`._util.parse_tag` recovers the slot
+        binding on subsequent reads -- so when the full prefix fits,
+        truncation only ever shortens the user-supplied display.
+
+        When the lock's limit can't even fit the canonical prefix
+        (``len("lcm:{slot}:") > max_user_name_length``), the helper
+        falls back to writing just the slot number as the user name
+        (``str(slot)``). :func:`._util.parse_tag` recognizes
+        digit-only names as a length-constrained encoding of the slot
+        binding. If even the slot digits don't fit
+        (``len(str(slot)) > max_user_name_length``, e.g. slot 255 on a
+        2-char-limit lock), the helper returns ``None`` rather than
+        truncating the slot to a different number and silently
+        mis-binding the user. The seam treats ``None`` as "leave name
+        alone," which means LCM cannot identify its own user on such a
+        lock -- those locks are effectively unmanaged at the user-name
+        level.
+
+        Returns ``None`` when the lock has no concept of named users
+        (``supports_user_management`` is False or
+        ``max_user_name_length <= 0``); the seam's
+        ``_supports_user_records`` gate already short-circuits the
+        user-write path on such locks, but the guard here is
+        defensive in case the helper is called outside that gate. A
+        best-effort capabilities-fetch failure also returns ``None``
+        rather than blocking the write -- the cache stays unset so the
+        next call retries.
+
+        Worst-case canonical prefix overhead is 8 characters
+        (``lcm:255:``); on a 10-character-limit lock that leaves 2
+        characters of display, which is degenerate but functional.
+        Locks advertising a length below that (rare) hit the slot-only
+        fallback or the ``None`` return.
+        """
+        try:
+            caps = await self._get_cached_capabilities()
+        except LockDisconnected, LockOperationFailed:
+            return None
+        if not caps.supports_user_management or caps.max_user_name_length <= 0:
+            return None
+        tagged = make_tagged_name(slot, display)
+        if len(tagged) <= caps.max_user_name_length:
+            return tagged
+        if len(f"lcm:{slot}:") > caps.max_user_name_length:
+            # Canonical prefix doesn't fit. Try the slot-only fallback so
+            # the slot binding survives the read; if the slot digits
+            # themselves can't fit either, return ``None`` rather than
+            # truncate the slot number to a different one and mis-bind
+            # the user.
+            slot_str = str(slot)
+            if len(slot_str) > caps.max_user_name_length:
+                return None
+            return slot_str
+        # Canonical prefix fits; truncate only the display portion.
+        return tagged[: caps.max_user_name_length]
+
+    async def _assert_credential_type_supported(self, credential: Credential) -> None:
+        """
+        Raise ``CodeRejectedError`` if the lock doesn't advertise the type.
+
+        Capability-driven defense for ``async_set_credential``. Picks up
+        new types (e.g. PASSWORD) automatically once a lock starts
+        advertising them in ``credential_types`` -- no provider-side
+        change needed.
+        """
+        caps = await self._get_cached_capabilities()
+        if credential.type not in caps.credential_types:
+            raise CodeRejectedError(
+                code_slot=credential.slot,
+                lock_entity_id=self.lock.entity_id,
+                reason=f"unsupported credential type: {credential.type}",
+            )
+
+    async def _assert_credential_ref_supported(self, ref: CredentialRef) -> None:
+        """
+        Raise ``CodeRejectedError`` if the lock doesn't advertise the type.
+
+        Delete-path sibling of ``_assert_credential_type_supported``.
+        """
+        caps = await self._get_cached_capabilities()
+        if ref.type not in caps.credential_types:
+            raise CodeRejectedError(
+                code_slot=ref.slot,
+                lock_entity_id=self.lock.entity_id,
+                reason=f"unsupported credential type: {ref.type}",
+            )
+
+    def _require_readable_pin(self, credential: Credential) -> str:
+        """
+        Return the credential's readable PIN, or raise ``CodeRejectedError``.
+
+        Called by the seam (``async_set_usercode`` and ``_set_credential``)
+        before dispatching to the provider's ``async_set_credential``
+        override; the resolved ``pin: str`` is threaded through as a
+        positional argument so the provider receives a guaranteed string
+        and does not need its own defensive check.
+
+        The seam already builds credentials from a string usercode so
+        ``readable_pin`` is non-None by construction along that path -- the
+        guard catches future regressions (a credential constructed outside
+        the seam, a refactor that loses the invariant) and never the
+        normal flow. Providers MUST NOT re-add their own readable-pin
+        check; doing so duplicates the contract and re-introduces the
+        ``or ""`` silent coercion pattern this helper exists to eliminate.
+        """
+        pin = credential.readable_pin
+        if pin is None:
+            raise CodeRejectedError(
+                code_slot=credential.slot,
+                lock_entity_id=self.lock.entity_id,
+                reason="cannot write an unreadable credential",
+            )
+        return pin
+
+    @final
+    async def _set_credential(
+        self,
+        user: User,
+        credential: Credential,
+        pin: str,
+        *,
+        name: str | None,
+        source: Literal["sync", "direct"],
+    ) -> WriteResult:
+        """
+        Run the create-on-first user lifecycle around a credential write.
+
+        Native-user only (the slot adapters call the credential primitive
+        directly). Asserts the lock advertises ``credential.type`` and
+        replaces ``user.name`` with the LCM-tagged name built via
+        ``_build_tagged_user_name(credential.slot, user.name)`` before
+        handing the user to the provider, so each provider's
+        ``async_set_user`` can write the tagged name verbatim. The tag
+        carries the slot binding the find-or-create-by-tag lookup
+        recovers on subsequent operations. Rolls back a newly-created
+        user when the credential write fails so the lock isn't left
+        with a credential-less user the slot-keyed coordinator
+        can't reconcile. Returns True if the value changed.
+
+        ``pin`` is the resolved readable PIN that the caller (the seam in
+        ``async_set_usercode``) has already validated via
+        ``_require_readable_pin``; threading it through avoids a second
+        validation pass in the provider.
+        """
+        await self._assert_credential_type_supported(credential)
+        if await self._supports_user_records():
+            tagged = await self._build_tagged_user_name(credential.slot, user.name)
+            if tagged is None:
+                # No stable slot tag fits the lock's max_user_name_length --
+                # writing a user without one (or with name=None) would break
+                # the find-or-create-by-tag lookup the next operation needs.
+                # Fail loudly rather than create an unrecoverable user.
+                raise LockOperationFailed(
+                    f"Lock {self.lock.entity_id} cannot encode a stable slot "
+                    f"tag for slot {credential.slot}; refusing to write a "
+                    "credential whose owning user could not be re-identified"
+                )
+            user_for_write = user if tagged == user.name else replace(user, name=tagged)
+            result = await self.async_set_user(user_for_write)
+            credential_user_id = result.user_id
+            rollback_user_id = result.user_id if result.created else None
+        else:
+            credential_user_id = user.user_id
+            rollback_user_id = None
+        try:
+            return await self.async_set_credential(
+                credential_user_id, credential, pin, name=name, source=source
+            )
+        except Exception:
+            if rollback_user_id is not None:
+                try:
+                    await self.async_delete_user(rollback_user_id)
+                except Exception as rollback_err:
+                    LOGGER.warning(
+                        "Lock %s: failed to roll back newly created user %s "
+                        "after a failed credential write: %s",
+                        self.lock.entity_id,
+                        rollback_user_id,
+                        rollback_err,
+                    )
+            raise
+
+    @final
+    async def _delete_credential(self, ref: CredentialRef) -> bool:
+        """
+        Delete a credential without touching its owning user.
+
+        Native-user only. Asserts the lock advertises ``ref.type``, then
+        deletes the credential. The lock-side user is now an LCM-managed
+        slot anchor (see the user-tag idempotency design) -- created on
+        first slot-configured write and removed only on slot removal
+        from LCM config via ``async_release_managed_slot``. Clear and
+        rewrite cycles preserve the slot's lock-side user, so this
+        helper is now a thin guard around ``async_delete_credential``.
+        Returns True if changed.
+        """
+        await self._assert_credential_ref_supported(ref)
+        return await self.async_delete_credential(ref)
+
+    async def async_release_managed_slot(self, slot: int) -> None:
+        """
+        Release any lock-side state LCM owns for ``slot``.
+
+        Called by ``__init__.py``'s teardown path once a slot is removed
+        from LCM config (per the user-tag idempotency design's lifecycle
+        decoupling: a lock-side user is the slot's persistent anchor and
+        survives PIN clear/rewrite cycles, so it can only be torn down
+        when the slot itself is removed from LCM management).
+
+        Default is a no-op: slot-only providers have no user record to
+        tear down, and native-user providers that have not yet migrated
+        to the tag scheme don't carry a recoverable slot binding either.
+        Providers that DO carry the binding (Matter, eventually Z-Wave
+        User Credential CC) override this to find the user tagged for
+        ``slot`` and delete it -- the cascade defined by the lock's
+        protocol then removes the user's credentials.
+        """
+        return
+
+    async def async_set_user(self, user: User) -> SetUserResult:
+        """
+        Create or update a lock user.
+
+        Native-user providers only. Returns a ``SetUserResult`` carrying the
+        resolved ``user_id`` (threaded into the following
+        ``async_set_credential`` call, so a provider whose integration
+        auto-allocates the identifier must return the allocated value) and
+        ``created`` -- True when this call added a new user, False when it
+        updated an existing one. ``created`` lets the base roll the user back
+        if the subsequent credential write fails. The Z-Wave set-credential
+        command requires an existing user, which is why the base runs this
+        first.
+
+        ``user.name`` of ``None`` means leave the existing name unchanged (not
+        clear it), matching how the providers already treat an absent name.
+        """
         self._raise_not_implemented(
-            "async_get_usercodes",
-            "Override this method to retrieve usercodes from the lock.",
+            "async_set_user",
+            "Override on native-user providers to create or update a lock "
+            "user and return a SetUserResult(user_id, created).",
+        )
+
+    async def async_delete_user(self, user_id: int) -> None:
+        """
+        Delete a lock user (and, per the Z-Wave/Matter spec, its credentials).
+
+        Native-user providers only. Under the user-tag idempotency design
+        the lock-side user is an LCM-managed slot anchor: it persists
+        through PIN clear / rewrite cycles and is removed only when the
+        slot is dropped from LCM config (the base calls this from a
+        provider's ``async_release_managed_slot`` override). Also called
+        as a rollback path when a credential write fails for a freshly
+        created user.
+        """
+        self._raise_not_implemented(
+            "async_delete_user",
+            "Override on native-user providers to delete a lock user.",
+        )
+
+    async def async_set_credential(
+        self,
+        user_id: int,
+        credential: Credential,
+        pin: str,
+        *,
+        name: str | None,
+        source: Literal["sync", "direct"],
+    ) -> WriteResult:
+        """
+        Set or update one credential, returning the write outcome.
+
+        Every migrated provider implements this. ``user_id`` identifies the
+        owning user for native-user providers; slot-only providers ignore it
+        and address the credential by ``credential.slot``. ``pin`` is the
+        resolved readable PIN string; the base seam validates that
+        ``credential.readable_pin`` is non-None and passes it through so
+        providers receive a guaranteed string and don't need their own
+        defensive checks. Providers raise ``DuplicateCodeError`` when the
+        lock rejects the value as a duplicate. Native-user providers carry
+        the user's name on the user record, so they may treat ``name`` here
+        as advisory; slot-only providers use it (for example as a tagged
+        code name). A ``name`` of ``None`` means leave any existing name
+        unchanged, never clear it.
+
+        Return ``WriteResult.NO_CHANGE`` if the value was already set,
+        ``WriteResult.CONFIRMED`` when the lock acknowledged the write, and
+        ``WriteResult.OPTIMISTIC`` when the result is ambiguous (the write may
+        have landed but is unconfirmed -- e.g. a write-only/masked lock). The
+        outcome drives the coordinator refresh and the verified/unverified
+        slot lifecycle.
+        """
+        self._raise_not_implemented(
+            "async_set_credential",
+            "Override to write a credential to the lock.",
+        )
+
+    async def async_delete_credential(self, ref: CredentialRef) -> bool:
+        """
+        Delete the credential addressed by ``ref``; return whether it changed.
+
+        Every migrated provider implements this. Slot-only providers use
+        ``ref.slot`` and ignore ``ref.user_id``.
+
+        Return True if the credential was removed, False if it was already
+        absent. When the provider cannot determine whether a change occurred,
+        return True: the returned flag drives the coordinator refresh, so
+        reporting True makes it re-read and verify rather than leaving stale
+        state.
+        """
+        self._raise_not_implemented(
+            "async_delete_credential",
+            "Override to delete a credential from the lock.",
+        )
+
+    async def async_get_users(self) -> list[User]:
+        """
+        Read every user and their credentials from the lock.
+
+        Backs the default ``async_get_usercodes`` projection. Native-user
+        providers map their integration's user list; slot-only providers
+        project each occupied slot to a single-credential user via
+        ``user_from_slot``.
+        """
+        self._raise_not_implemented(
+            "async_get_users",
+            "Override to read users and credentials from the lock.",
+        )
+
+    async def async_get_capabilities(self) -> LockCapabilities:
+        """
+        Report the lock's user/credential capabilities.
+
+        Native-user providers must override; the base orchestration reads
+        this to decide whether to write a user record before a credential.
+        """
+        self._raise_not_implemented(
+            "async_get_capabilities",
+            "Override to report the lock's user/credential capabilities.",
         )
 
     @final

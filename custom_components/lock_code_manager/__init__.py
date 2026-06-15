@@ -81,6 +81,7 @@ from .const import (
     Platform,
 )
 from .domain.config import EntryConfig
+from .domain.exceptions import LockDisconnected, LockOperationFailed
 from .domain.locks import async_create_lock_instance, get_locks_from_targets
 from .domain.models import (
     LockCodeManagerConfigEntry,
@@ -750,23 +751,6 @@ async def async_unload_entry(
     if unload_ok:
         await async_unload_lock(hass, config_entry)
 
-        # Clean up repair issues for this config entry.
-        entry_id = config_entry.entry_id
-        config = get_entry_config(config_entry)
-        for slot_num in config.slots:
-            async_delete_issue(hass, DOMAIN, f"slot_disabled_{entry_id}_{slot_num}")
-            async_delete_issue(hass, DOMAIN, f"pin_required_{entry_id}_{slot_num}")
-        for lock_entity_id in config.locks:
-            # Only delete lock_offline if no other LCM entry manages this lock
-            if not _lock_managed_by_other_entry(hass, config_entry, lock_entity_id):
-                async_delete_issue(hass, DOMAIN, f"lock_offline_{lock_entity_id}")
-            for slot_num in config.slots:
-                async_delete_issue(
-                    hass,
-                    DOMAIN,
-                    f"slot_suspended_{entry_id}_{lock_entity_id}_{slot_num}",
-                )
-
     # Only clean up the strategy resource if no other Lock Code Manager
     # entries remain loaded. The current entry is still listed (in
     # UNLOAD_IN_PROGRESS / NOT_LOADED state at this point) so filter it
@@ -782,6 +766,38 @@ async def async_unload_entry(
         await _async_cleanup_strategy_resource(hass, hass_data)
 
     return unload_ok
+
+
+async def async_remove_entry(
+    hass: HomeAssistant, config_entry: LockCodeManagerConfigEntry
+) -> None:
+    """
+    Clean up persistent repair issues when the entry is fully removed.
+
+    Called by Home Assistant only on entry deletion -- not on unload,
+    reload, disable, or HA restart. The repair issues created by this
+    integration are flagged ``is_persistent=True`` precisely so they
+    survive restarts and reloads; deleting them in ``async_unload_entry``
+    (the previous behavior) wiped them on every restart, causing the
+    "click an issue and it says repaired" short-circuit. With cleanup
+    moved here, persistent issues persist until the user actually
+    removes the entry.
+    """
+    entry_id = config_entry.entry_id
+    config = get_entry_config(config_entry)
+    for slot_num in config.slots:
+        async_delete_issue(hass, DOMAIN, f"slot_disabled_{entry_id}_{slot_num}")
+        async_delete_issue(hass, DOMAIN, f"pin_required_{entry_id}_{slot_num}")
+    for lock_entity_id in config.locks:
+        # Only delete lock_offline if no other LCM entry manages this lock.
+        if not _lock_managed_by_other_entry(hass, config_entry, lock_entity_id):
+            async_delete_issue(hass, DOMAIN, f"lock_offline_{lock_entity_id}")
+        for slot_num in config.slots:
+            async_delete_issue(
+                hass,
+                DOMAIN,
+                f"slot_suspended_{entry_id}_{lock_entity_id}_{slot_num}",
+            )
 
 
 async def _async_setup_new_locks(
@@ -976,6 +992,31 @@ async def async_update_listener(
                     entry_title,
                     slot_num,
                 )
+
+    # Release lock-side state LCM owns for any (lock, slot) pair that no
+    # longer exists in config. Native-user providers (Matter, Z-Wave User
+    # Credential CC under the user-tag idempotency design) override
+    # ``async_release_managed_slot`` to delete the LCM-tagged user that
+    # anchored the slot; slot-only providers leave the default no-op in
+    # place. This runs before ``locks_to_remove`` processing so providers
+    # in ``runtime_data.locks`` are still usable.
+    for lock_entity_id, slot_num in diff.pairs_removed:
+        release_lock = runtime_data.locks.get(lock_entity_id)
+        if release_lock is None:
+            continue
+        try:
+            await release_lock.async_release_managed_slot(slot_num)
+        except (LockDisconnected, LockOperationFailed) as err:
+            # The slot is gone from LCM config either way; lock-side cleanup
+            # is best-effort and must not block the teardown.
+            _LOGGER.warning(
+                "%s (%s): could not release slot %s on lock %s: %s",
+                entry_id,
+                entry_title,
+                slot_num,
+                lock_entity_id,
+                err,
+            )
 
     # Remove old lock entities
     if locks_to_remove:
