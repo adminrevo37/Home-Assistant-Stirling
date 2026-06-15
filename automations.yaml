@@ -2284,43 +2284,46 @@
   mode: single
 - id: lighting_all_lanes_on_busy_evening
   alias: Lighting - All Lanes On (Busy Evening)
-  description: From the evening start (input_datetime.lighting_all_lanes_evening_start,
+  description: 'From the evening start (input_datetime.lighting_all_lanes_evening_start,
     default 4:00 PM) until the absolute catch-all time, when a booking begins (using
     the same 11-min lead-in as the per-bay starts) or on a 10-min re-check, if the
-    evening's PEAK CONCURRENT bookings reaches the threshold (input_number.lighting_all_lanes_min_concurrent,
+    evening''s PEAK CONCURRENT bookings reaches the threshold (input_number.lighting_all_lanes_min_concurrent,
     default 3) it floods ALL 5 lane highbays on and latches busy mode. They stay on
-    (re-asserted by 'All Lanes Keep-On') until the last booking ends, when the night
+    (re-asserted by ''All Lanes Keep-On'') until the last booking ends, when the night
     staggered shutdown (or the daylight-end automation) takes over and clears the
-    latch. Built 2026-06-08.
+    latch. Built 2026-06-08. | UPDATED 2026-06-15: weekday-only (Mon-Fri) gate added
+    - busy mode now engages ONLY on weeknights, from 4pm, at the -11min booking lead
+    (same moment the lane lights turn on), when the night will peak at >=3 concurrent
+    bookings. Weekends excluded.'
   triggers:
-  - platform: calendar
-    event: start
+  - event: start
     entity_id: calendar.lane_1_bowling_machine
     offset: -0:11:00
     id: booking
-  - platform: calendar
-    event: start
+    trigger: calendar
+  - event: start
     entity_id: calendar.lane_2_bowling_machine
     offset: -0:11:00
     id: booking
-  - platform: calendar
-    event: start
+    trigger: calendar
+  - event: start
     entity_id: calendar.lane_3_truman_or_bowling_machine
     offset: -0:11:00
     id: booking
-  - platform: calendar
-    event: start
+    trigger: calendar
+  - event: start
     entity_id: calendar.lane_4_run_up_net
     offset: -0:11:00
     id: booking
-  - platform: calendar
-    event: start
+    trigger: calendar
+  - event: start
     entity_id: calendar.lane_5_run_up_net
     offset: -0:11:00
     id: booking
-  - platform: time_pattern
-    minutes: /10
+    trigger: calendar
+  - minutes: /10
     id: recheck
+    trigger: time_pattern
   conditions:
   - condition: state
     entity_id: input_boolean.lighting_all_lanes_active
@@ -2332,6 +2335,13 @@
       >= cutoff and now().time() < hardoff }} {% else %} {% set on = expand(''calendar.lane_1_bowling_machine'',''calendar.lane_2_bowling_machine'',''calendar.lane_3_truman_or_bowling_machine'',''calendar.lane_4_run_up_net'',''calendar.lane_5_run_up_net'')
       | selectattr(''state'',''eq'',''on'') | list | count %} {{ now().time() >= cutoff
       and now().time() < hardoff and on > 0 }} {% endif %}'
+  - condition: time
+    weekday:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
   actions:
   - action: calendar.get_events
     target:
