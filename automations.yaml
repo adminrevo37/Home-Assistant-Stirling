@@ -23,12 +23,15 @@
 - id: bay1_booking_end
   alias: Bay 1 Booking - END
   description: '10 min after booking: turn off highbay 1 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual.'
+    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
+    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
+    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
+    flicker from Keep-On re-asserting a neighbour light).'
   triggers:
   - event: end
     entity_id: calendar.lane_1_bowling_machine
     offset: 0:10:00
-    platform: calendar
+    trigger: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_1_bowling_machine
@@ -36,6 +39,9 @@
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay1_helper
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'off'
   - if:
     - condition: sun
       after: sunset
@@ -92,12 +98,15 @@
 - id: bay2_booking_end
   alias: Bay 2 Booking - END
   description: '10 min after booking: turn off highbay 2 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual.'
+    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
+    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
+    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
+    flicker from Keep-On re-asserting a neighbour light).'
   triggers:
   - event: end
     entity_id: calendar.lane_2_bowling_machine
     offset: 0:10:00
-    platform: calendar
+    trigger: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_2_bowling_machine
@@ -105,6 +114,9 @@
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay2_helper
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'off'
   - if:
     - condition: sun
       after: sunset
@@ -161,12 +173,15 @@
 - id: bay3_booking_end
   alias: Bay 3 Booking - END
   description: '10 min after booking: turn off highbay 3 in daylight; at night reserve
-    highbay 3 (residual) and only drop neighbours. Common lights handled separately.'
+    highbay 3 (residual) and only drop neighbours. Common lights handled separately.
+    | Busy-mode guard 2026-06-16: while lighting_all_lanes_active is latched, END
+    only clears the helper and leaves highbays to Keep-On / night shutdown (stops
+    the off->on flicker from Keep-On re-asserting a neighbour light).'
   triggers:
   - event: end
     entity_id: calendar.lane_3_truman_or_bowling_machine
     offset: 0:10:00
-    platform: calendar
+    trigger: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_3_truman_or_bowling_machine
@@ -174,6 +189,9 @@
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay3_helper
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'off'
   - if:
     - condition: sun
       after: sunset
@@ -231,12 +249,15 @@
 - id: bay4_booking_end
   alias: Bay 4 Booking - END
   description: '10 min after booking: turn off highbay 4 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual.'
+    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
+    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
+    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
+    flicker from Keep-On re-asserting a neighbour light).'
   triggers:
   - event: end
     entity_id: calendar.lane_4_run_up_net
     offset: 0:10:00
-    platform: calendar
+    trigger: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_4_run_up_net
@@ -244,6 +265,9 @@
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay4_helper
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'off'
   - if:
     - condition: sun
       after: sunset
@@ -300,12 +324,15 @@
 - id: bay5_booking_end
   alias: Bay 5 Booking - END
   description: '10 min after booking: turn off highbay 5 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual.'
+    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
+    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
+    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
+    flicker from Keep-On re-asserting a neighbour light).'
   triggers:
   - event: end
     entity_id: calendar.lane_5_run_up_net
     offset: 0:10:00
-    platform: calendar
+    trigger: calendar
   actions:
   - condition: state
     entity_id: calendar.lane_5_run_up_net
@@ -313,6 +340,9 @@
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.bay5_helper
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'off'
   - if:
     - condition: sun
       after: sunset
