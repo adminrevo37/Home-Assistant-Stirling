@@ -443,3 +443,15 @@ utility_meter:
     name: Energy Meter Daily - Fan - exhaust2
 
 
+
+# Bridge legacy push service name to Julian's current device.
+# 13 alert automations call notify.mobile_app_julian, but his Companion app
+# re-registered as "iPhone (3)" -> notify.mobile_app_iphone_3, so every alert
+# (Control4 feed, keypad offline/overheat, roller-door left-open, fire exit,
+# battery/zigbee, domain reminders) was firing into a dead service. This group
+# restores notify.mobile_app_julian by forwarding to the live device service.
+notify:
+  - name: mobile_app_julian
+    platform: group
+    services:
+      - service: mobile_app_iphone_3
