@@ -2578,3 +2578,71 @@
           title: ✅ Control4 feed recovered
           message: HA is receiving live Control4 state again (auto-reload worked).
   mode: single
+- id: '1781763822413'
+  alias: Control4 - Light Command Verify (reload on frozen feedback)
+  description: 'Catches a PARTIAL Control4 feed freeze that the age-based watchdog
+    misses: the websocket returns STALE state VALUES while last_reported timestamps
+    still tick (as happened 2026-06-18 - lanes 1+3 physically ON, HA stuck OFF, app
+    icons not updating, history logged no on/off). Whenever HA commands a Control4
+    facility light on/off, wait 10s (scan_interval is 5s) and check the light actually
+    reflects the commanded state. If any commanded light is still wrong, the feedback
+    feed is frozen -> reload_config_entry to resync. Throttled per-episode via input_boolean.control4_feed_down
+    (shared with the age-watchdog, which clears it + sends the recovery push). Complements
+    (does NOT replace) the age-based watchdog, which covers a FULL feed death. Built
+    2026-06-18.'
+  triggers:
+  - trigger: event
+    event_type: call_service
+    event_data:
+      domain: light
+      service: turn_on
+  - trigger: event
+    event_type: call_service
+    event_data:
+      domain: light
+      service: turn_off
+  conditions:
+  - condition: template
+    value_template: '{% set d = trigger.event.data %}{% set sd = d.service_data |
+      default({}) %}{% set tg = d.target | default({}) %}{% set a = sd.entity_id |
+      default([]) %}{% set b = tg.entity_id | default([]) %}{% set a = [a] if a is
+      string else a %}{% set b = [b] if b is string else b %}{% set ids = (a + b)
+      | unique | list %}{% set c4 = [''light.highbay_1'',''light.highbay_2'',''light.highbay_3'',''light.highbay_4'',''light.highbay_5'',''light.fluro_x_4'',''light.inside_wall_lights'',''light.mezzanine_wall_lights'',''light.office_downlights'',''light.outside_wall_lights'']
+      %}{{ (ids | select(''in'', c4) | list | length) > 0 }}'
+  actions:
+  - delay: 00:00:10
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{% set d = trigger.event.data %}{% set sd = d.service_data
+          | default({}) %}{% set tg = d.target | default({}) %}{% set a = sd.entity_id
+          | default([]) %}{% set b = tg.entity_id | default([]) %}{% set a = [a] if
+          a is string else a %}{% set b = [b] if b is string else b %}{% set ids =
+          (a + b) | unique | list %}{% set c4 = [''light.highbay_1'',''light.highbay_2'',''light.highbay_3'',''light.highbay_4'',''light.highbay_5'',''light.fluro_x_4'',''light.inside_wall_lights'',''light.mezzanine_wall_lights'',''light.office_downlights'',''light.outside_wall_lights'']
+          %}{% set targets = ids | select(''in'', c4) | list %}{% set want = ''on''
+          if d.service == ''turn_on'' else ''off'' %}{% set ns = namespace(mismatch=false)
+          %}{% for e in targets %}{% if states(e) != want %}{% set ns.mismatch = true
+          %}{% endif %}{% endfor %}{{ ns.mismatch }}'
+      sequence:
+      - action: homeassistant.reload_config_entry
+        data:
+          entry_id: 01KM09V3X1JDWRBA7KSWMD1WAJ
+      - if:
+        - condition: state
+          entity_id: input_boolean.control4_feed_down
+          state: 'off'
+        then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.control4_feed_down
+        - action: notify.mobile_app_iphone_3
+          data:
+            title: ⚠️ Control4 feed frozen - auto-reloaded
+            message: A lighting command did not reflect within 10s (Control4 reported
+              stale state - lights/icons would show wrong on/off). Auto-reloaded the
+              Control4 integration to resync. If this repeats, check the Director
+              (192.168.1.107) and the HA<->C4 network link.
+            data:
+              tag: control4_feed_down
+  mode: parallel
+  max: 15
