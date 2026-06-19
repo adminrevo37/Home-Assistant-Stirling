@@ -53,5 +53,17 @@ devices:
     friendly_name: Plug 2
   '0x54ef4410014ae8c0':
     friendly_name: Fire Exit Door (WEST)
+  '0xa4c13851f47cb91d':
+    friendly_name: Lane 1 Left
+  '0xa4c138bc9b38b0c2':
+    friendly_name: '0xa4c138bc9b38b0c2'
+  '0xa4c138fdcd4c98b3':
+    friendly_name: Lane 2 Left
+  '0xa4c13879a2af63a1':
+    friendly_name: Lane 2 Right
+  '0xa4c138d3ea816fa6':
+    friendly_name: Lane 3 Left
+  '0xa4c13861a6ad537a':
+    friendly_name: Lane 3 Right
 availability:
   enabled: true

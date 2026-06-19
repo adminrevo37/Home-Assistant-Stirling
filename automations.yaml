@@ -2646,3 +2646,259 @@
               tag: control4_feed_down
   mode: parallel
   max: 15
+- id: '1781853441969'
+  alias: Lane 1 - Bowling Machine Power
+  description: "Powers Lane 1's two bowling-machine plugs around bookings (calendar.lane_1_bowling_machine).
+    Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
+    on -5/off +3. BOTH plugs together (Truman gating deferred until Krickora has the
+    option → assume both). Keep-on: never cut power if another booking on this lane
+    is active or starts within ~12 min. Built 2026-06-18 → SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+  triggers:
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
+    offset: -0:10:00
+    id: coach_start
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
+    offset: -0:05:00
+    id: cust_start
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: end
+    offset: 0:03:00
+    id: cust_end
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: end
+    offset: 0:10:00
+    id: coach_end
+  actions:
+  - choose:
+    - conditions:
+      - '{{ (trigger.id == ''coach_start'' and is_coach) or (trigger.id == ''cust_start''
+        and is_customer) }}'
+      sequence:
+      - action: switch.turn_on
+        target:
+          entity_id:
+          - switch.lane_1_left
+          - switch.lane_1_right
+    - conditions:
+      - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
+        and is_customer) }}'
+      sequence:
+      - action: calendar.get_events
+        target:
+          entity_id: calendar.lane_1_bowling_machine
+        data:
+          start_date_time: '{{ (now() - timedelta(minutes=1)).isoformat() }}'
+          end_date_time: '{{ (now() + timedelta(minutes=12)).isoformat() }}'
+        response_variable: up
+      - if:
+        - '{{ (up[''calendar.lane_1_bowling_machine''].events | default([])) | count
+          == 0 }}'
+        then:
+        - action: switch.turn_off
+          target:
+            entity_id:
+            - switch.lane_1_left
+            - switch.lane_1_right
+  mode: queued
+  max: 10
+  variables:
+    is_coach: '{{ ''Coach Session'' in (trigger.calendar_event.description | default(''''))
+      }}'
+    is_customer: '{{ ''Net Session'' in (trigger.calendar_event.description | default(''''))
+      }}'
+- id: '1781853447617'
+  alias: Lane 2 - Bowling Machine Power
+  description: "Powers Lane 2's two bowling-machine plugs around bookings (calendar.lane_2_bowling_machine).
+    Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
+    on -5/off +3. BOTH plugs together. Keep-on: never cut power if another booking
+    on this lane is active or starts within ~12 min. Built 2026-06-18 → SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+  triggers:
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
+    offset: -0:10:00
+    id: coach_start
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
+    offset: -0:05:00
+    id: cust_start
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: end
+    offset: 0:03:00
+    id: cust_end
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: end
+    offset: 0:10:00
+    id: coach_end
+  actions:
+  - choose:
+    - conditions:
+      - '{{ (trigger.id == ''coach_start'' and is_coach) or (trigger.id == ''cust_start''
+        and is_customer) }}'
+      sequence:
+      - action: switch.turn_on
+        target:
+          entity_id:
+          - switch.lane_2_left
+          - switch.lane_2_right
+    - conditions:
+      - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
+        and is_customer) }}'
+      sequence:
+      - action: calendar.get_events
+        target:
+          entity_id: calendar.lane_2_bowling_machine
+        data:
+          start_date_time: '{{ (now() - timedelta(minutes=1)).isoformat() }}'
+          end_date_time: '{{ (now() + timedelta(minutes=12)).isoformat() }}'
+        response_variable: up
+      - if:
+        - '{{ (up[''calendar.lane_2_bowling_machine''].events | default([])) | count
+          == 0 }}'
+        then:
+        - action: switch.turn_off
+          target:
+            entity_id:
+            - switch.lane_2_left
+            - switch.lane_2_right
+  mode: queued
+  max: 10
+  variables:
+    is_coach: '{{ ''Coach Session'' in (trigger.calendar_event.description | default(''''))
+      }}'
+    is_customer: '{{ ''Net Session'' in (trigger.calendar_event.description | default(''''))
+      }}'
+- id: '1781853454698'
+  alias: Lane 3 - Bowling Machine Power
+  description: "Powers Lane 3's two bowling-machine plugs around bookings (calendar.lane_3_truman_or_bowling_machine).
+    Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
+    on -5/off +3. BOTH plugs together (Truman gating deferred → assume both). Keep-on:
+    never cut power if another booking on this lane is active or starts within ~12
+    min. Built 2026-06-18 → SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+  triggers:
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    offset: -0:10:00
+    id: coach_start
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    offset: -0:05:00
+    id: cust_start
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: end
+    offset: 0:03:00
+    id: cust_end
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: end
+    offset: 0:10:00
+    id: coach_end
+  actions:
+  - choose:
+    - conditions:
+      - '{{ (trigger.id == ''coach_start'' and is_coach) or (trigger.id == ''cust_start''
+        and is_customer) }}'
+      sequence:
+      - action: switch.turn_on
+        target:
+          entity_id:
+          - switch.lane_3_left
+          - switch.lane_3_right
+    - conditions:
+      - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
+        and is_customer) }}'
+      sequence:
+      - action: calendar.get_events
+        target:
+          entity_id: calendar.lane_3_truman_or_bowling_machine
+        data:
+          start_date_time: '{{ (now() - timedelta(minutes=1)).isoformat() }}'
+          end_date_time: '{{ (now() + timedelta(minutes=12)).isoformat() }}'
+        response_variable: up
+      - if:
+        - '{{ (up[''calendar.lane_3_truman_or_bowling_machine''].events | default([]))
+          | count == 0 }}'
+        then:
+        - action: switch.turn_off
+          target:
+            entity_id:
+            - switch.lane_3_left
+            - switch.lane_3_right
+  mode: queued
+  max: 10
+  variables:
+    is_coach: '{{ ''Coach Session'' in (trigger.calendar_event.description | default(''''))
+      }}'
+    is_customer: '{{ ''Net Session'' in (trigger.calendar_event.description | default(''''))
+      }}'
+- id: '1781854318155'
+  alias: Bowling Machines - Reconcile to bookings (outage/restart safety)
+  description: 'Fail-safe: re-syncs the 3 lanes'' machine plugs to the booking schedule
+    after a power outage, HA restart, or a plug reconnecting to Zigbee. Per lane:
+    a booking active or starting within ~11 min -> both plugs ON; otherwise -> OFF.
+    Covers an outage spanning a booking start (HA missed the -10 trigger), a Zigbee
+    coordinator reboot, and plugging a plug in mid-session (auto-powers it if its
+    lane is booked now). Complements the plugs'' power-outage-memory=''restore''.
+    20s debounce after the trigger to let integrations settle / collapse the burst
+    of reconnects. Built 2026-06-18 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06.'
+  triggers:
+  - trigger: homeassistant
+    event: start
+  - trigger: state
+    entity_id:
+    - switch.lane_1_left
+    - switch.lane_1_right
+    - switch.lane_2_left
+    - switch.lane_2_right
+    - switch.lane_3_left
+    - switch.lane_3_right
+    from: unavailable
+  actions:
+  - delay: 00:00:20
+  - repeat:
+      for_each: '{{ lanes }}'
+      sequence:
+      - action: calendar.get_events
+        target:
+          entity_id: '{{ repeat.item.cal }}'
+        data:
+          start_date_time: '{{ (now() - timedelta(minutes=1)).isoformat() }}'
+          end_date_time: '{{ (now() + timedelta(minutes=11)).isoformat() }}'
+        response_variable: ev
+      - if:
+        - '{{ (ev[repeat.item.cal].events | default([])) | count > 0 }}'
+        then:
+        - action: switch.turn_on
+          target:
+            entity_id: '{{ repeat.item.plugs | join('','') }}'
+        else:
+        - action: switch.turn_off
+          target:
+            entity_id: '{{ repeat.item.plugs | join('','') }}'
+  mode: restart
+  variables:
+    lanes:
+    - cal: calendar.lane_1_bowling_machine
+      plugs:
+      - switch.lane_1_left
+      - switch.lane_1_right
+    - cal: calendar.lane_2_bowling_machine
+      plugs:
+      - switch.lane_2_left
+      - switch.lane_2_right
+    - cal: calendar.lane_3_truman_or_bowling_machine
+      plugs:
+      - switch.lane_3_left
+      - switch.lane_3_right
