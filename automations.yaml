@@ -567,11 +567,25 @@
   mode: single
 - id: bay1_code_activate
   alias: Bay 1 - Door Code Activate
+  description: "Loads the booking's door code into a Bay 1 keypad slot. Coach (\U0001F3CF
+    Coach Session) = 45 min before start; customer (\U0001F3AF Net Session) = 30 min
+    before. Booker type from the calendar event description. Updated 2026-06-20."
   triggers:
-  - event: start
+  - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
+    event: start
+    offset: -0:45:00
+    id: coach
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
     offset: -0:30:00
-    platform: calendar
+    id: cust
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
+      | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
+      | default(''''))) }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -672,11 +686,24 @@
   mode: single
 - id: bay2_code_activate
   alias: Bay 2 - Door Code Activate
+  description: Loads the booking's door code into a Bay 2 keypad slot. Coach = 45
+    min before; customer = 30 min before. Updated 2026-06-20.
   triggers:
-  - event: start
+  - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
+    event: start
+    offset: -0:45:00
+    id: coach
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
     offset: -0:30:00
-    platform: calendar
+    id: cust
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
+      | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
+      | default(''''))) }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -777,11 +804,24 @@
   mode: single
 - id: bay3_code_activate
   alias: Bay 3 - Door Code Activate
+  description: Loads the booking's door code into a Bay 3 keypad slot. Coach = 45
+    min before; customer = 30 min before. Updated 2026-06-20.
   triggers:
-  - event: start
+  - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    offset: -0:45:00
+    id: coach
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
     offset: -0:30:00
-    platform: calendar
+    id: cust
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
+      | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
+      | default(''''))) }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -882,11 +922,24 @@
   mode: single
 - id: bay4_code_activate
   alias: Bay 4 - Door Code Activate
+  description: Loads the booking's door code into a Bay 4 keypad slot. Coach = 45
+    min before; customer = 30 min before. Updated 2026-06-20.
   triggers:
-  - event: start
+  - trigger: calendar
     entity_id: calendar.lane_4_run_up_net
+    event: start
+    offset: -0:45:00
+    id: coach
+  - trigger: calendar
+    entity_id: calendar.lane_4_run_up_net
+    event: start
     offset: -0:30:00
-    platform: calendar
+    id: cust
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
+      | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
+      | default(''''))) }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -987,11 +1040,24 @@
   mode: single
 - id: bay5_code_activate
   alias: Bay 5 - Door Code Activate
+  description: Loads the booking's door code into a Bay 5 keypad slot. Coach = 45
+    min before; customer = 30 min before. Updated 2026-06-20.
   triggers:
-  - event: start
+  - trigger: calendar
     entity_id: calendar.lane_5_run_up_net
+    event: start
+    offset: -0:45:00
+    id: coach
+  - trigger: calendar
+    entity_id: calendar.lane_5_run_up_net
+    event: start
     offset: -0:30:00
-    platform: calendar
+    id: cust
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
+      | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
+      | default(''''))) }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -1169,35 +1235,6 @@
     minutes: /1
   actions:
   - action: shell_command.c4_entry_log
-- id: door_visual_sensor_poll
-  alias: Roller Door - Visual Sensor Poll
-  description: 'Every 15 s: snapshot pier_facing_entry camera, run c4_door_visual.py,
-    update input_boolean.roller_door_visual_open.
-
-    '
-  triggers:
-  - trigger: time_pattern
-    seconds: /15
-  actions:
-  - action: camera.snapshot
-    target:
-      entity_id: camera.pier_facing_entry
-    data:
-      filename: /config/www/door_check_latest.jpg
-  - action: shell_command.c4_door_visual_check
-    response_variable: visual_result
-  - if:
-    - condition: template
-      value_template: '{{ ''open'' in (visual_result.stdout | default('''')) }}'
-    then:
-    - action: input_boolean.turn_on
-      target:
-        entity_id: input_boolean.roller_door_visual_open
-    else:
-    - action: input_boolean.turn_off
-      target:
-        entity_id: input_boolean.roller_door_visual_open
-  mode: single
 - id: roller_door_opened_notify
   alias: Roller Door - Notify Staff on Open
   description: 'Notifies staff ONLY if the front roller door is left open for 3 minutes
@@ -1220,57 +1257,6 @@
       title: "\U0001F6AA Roller Door Left Open"
       message: The front roller door has been open for 3 minutes.
   mode: single
-- id: roller_door_auto_close
-  alias: Roller Door - Auto Close + Alert if Left Open
-  description: "After door opens: two LOCK+UNLOCK close attempts then a snapshot +
-    staff alert. LOCK resets C4 state; UNLOCK triggers the motor (toggle close from
-    open limit). Timings are configurable via:\n  input_number.door_close_attempt1_secs
-    \ (calibrated 60s = 19s motor travel + 41s entry buffer)\n  input_number.door_close_attempt2_secs
-    \ (calibrated 35s after attempt 1 — ensures visual sensor has updated after close)\n
-    \ input_number.door_close_alert_secs     (calibrated 20s after attempt 2)\nTotal
-    window = 115s. Mode restart: resets if door reopens.\n"
-  triggers:
-  - trigger: state
-    entity_id: input_boolean.roller_door_visual_open
-    to: 'on'
-  actions:
-  - condition: state
-    entity_id: input_boolean.door_service_mode
-    state: 'off'
-  - delay:
-      seconds: '{{ states(''input_number.door_close_attempt1_secs'') | int(75) }}'
-  - condition: state
-    entity_id: input_boolean.roller_door_visual_open
-    state: 'on'
-  - action: shell_command.c4_lock_door
-  - delay: 00:00:01
-  - action: shell_command.c4_unlock_door
-  - delay:
-      seconds: '{{ states(''input_number.door_close_attempt2_secs'') | int(25) }}'
-  - condition: state
-    entity_id: input_boolean.roller_door_visual_open
-    state: 'on'
-  - action: shell_command.c4_lock_door
-  - delay: 00:00:01
-  - action: shell_command.c4_unlock_door
-  - delay:
-      seconds: '{{ states(''input_number.door_close_alert_secs'') | int(20) }}'
-  - condition: state
-    entity_id: input_boolean.roller_door_visual_open
-    state: 'on'
-  - action: camera.snapshot
-    target:
-      entity_id: camera.pier_facing_entry
-    data:
-      filename: /config/www/door_alert_snapshot.jpg
-  - delay: 00:00:02
-  - action: notify.notify
-    data:
-      title: "\U0001F6A8 Front Door Open 2 Min"
-      message: The front roller door has been open for 2 minutes. Please check entry.
-      data:
-        image: /local/door_alert_snapshot.jpg
-  mode: restart
 - id: '1780070397691'
   alias: Night - Activate Neighbour Highbays on Bay Start
   description: 'Safety net: when any bay_helper turns ON during dusk/night (sun within
@@ -1617,23 +1603,25 @@
     OPEN. 3min = broad push to all (notify.notify) + snapshot, ''auto-close likely
     failed''. 5min & 10min = CRITICAL alert to Julian''s iPhone at max volume (bypasses
     silent/DND) + snapshot. Suppressed in service/hold-open mode. Reworked 2026-06-08
-    per Inspector: 3/5/10 ladder, 5+10 critical-to-Julian.'
+    per Inspector: 3/5/10 ladder, 5+10 critical-to-Julian. 2026-06-20: tapping the
+    notification deep-links to the live view of camera.pier_facing_entry (front roller
+    door).'
   triggers:
-  - platform: state
-    entity_id: binary_sensor.roller_door_contact
+  - entity_id: binary_sensor.roller_door_contact
     to: 'on'
     for: 00:03:00
     id: 3min
-  - platform: state
-    entity_id: binary_sensor.roller_door_contact
+    trigger: state
+  - entity_id: binary_sensor.roller_door_contact
     to: 'on'
     for: 00:05:00
     id: 5min
-  - platform: state
-    entity_id: binary_sensor.roller_door_contact
+    trigger: state
+  - entity_id: binary_sensor.roller_door_contact
     to: 'on'
     for: 00:10:00
     id: 10min
+    trigger: state
   conditions:
   - condition: state
     entity_id: input_boolean.door_service_mode
@@ -1658,6 +1646,8 @@
             Please check the entry.
           data:
             image: /local/door_alert_snapshot.jpg
+            url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+            clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
     - conditions:
       - condition: trigger
         id: 5min
@@ -1669,6 +1659,8 @@
             the entry.
           data:
             image: /local/door_alert_snapshot.jpg
+            url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+            clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
             push:
               sound:
                 name: default
@@ -1685,13 +1677,13 @@
             the entry now.
           data:
             image: /local/door_alert_snapshot.jpg
+            url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+            clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
             push:
               sound:
                 name: default
                 critical: 1
                 volume: 1
-  mode: queued
-  max: 3
 - id: keypad_validate_entry
   alias: Customer Keypad - Validate Entry & Open Door
   description: Customer entry keypad fires esphome.keypad_code with the typed PIN.
@@ -2650,9 +2642,10 @@
   alias: Lane 1 - Bowling Machine Power
   description: "Powers Lane 1's two bowling-machine plugs around bookings (calendar.lane_1_bowling_machine).
     Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
-    on -5/off +3. BOTH plugs together (Truman gating deferred until Krickora has the
-    option → assume both). Keep-on: never cut power if another booking on this lane
-    is active or starts within ~12 min. Built 2026-06-18 → SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+    on -5/off +3. TRUMAN GATING LIVE (keyed off input_select.truman_location): non-Truman
+    lane -> both; Truman lane -> coach=both, customer with '(Truman)'=both, customer
+    without=normal plug only. Keep-on unchanged. Built 2026-06-18; Truman gating wired
+    2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -2682,9 +2675,7 @@
       sequence:
       - action: switch.turn_on
         target:
-          entity_id:
-          - switch.lane_1_left
-          - switch.lane_1_right
+          entity_id: '{{ plugs_to_on }}'
     - conditions:
       - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
         and is_customer) }}'
@@ -2712,12 +2703,20 @@
       }}'
     is_customer: '{{ ''Net Session'' in (trigger.calendar_event.description | default(''''))
       }}'
+    plugs_to_on: '{% set d = trigger.calendar_event.description | default('''') %}{%
+      set is_coach = ''Coach Session'' in d %}{% set is_customer = ''Net Session''
+      in d %}{% set tl = states(''input_select.truman_location'') %}{% set here =
+      tl in [''Lane 1 Left'',''Lane 1 Right''] %}{% set paid = ''(Truman)'' in d %}{%
+      if (not here) or is_coach or (is_customer and paid) %}switch.lane_1_left,switch.lane_1_right{%
+      else %}{{ ''switch.lane_1_right'' if tl == ''Lane 1 Left'' else ''switch.lane_1_left''
+      }}{% endif %}'
 - id: '1781853447617'
   alias: Lane 2 - Bowling Machine Power
   description: "Powers Lane 2's two bowling-machine plugs around bookings (calendar.lane_2_bowling_machine).
     Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
-    on -5/off +3. BOTH plugs together. Keep-on: never cut power if another booking
-    on this lane is active or starts within ~12 min. Built 2026-06-18 → SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+    on -5/off +3. TRUMAN GATING LIVE (input_select.truman_location): non-Truman lane
+    -> both; Truman lane -> coach=both, customer '(Truman)'=both, customer without=normal
+    only. Keep-on unchanged. Truman gating wired 2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
@@ -2747,9 +2746,7 @@
       sequence:
       - action: switch.turn_on
         target:
-          entity_id:
-          - switch.lane_2_left
-          - switch.lane_2_right
+          entity_id: '{{ plugs_to_on }}'
     - conditions:
       - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
         and is_customer) }}'
@@ -2777,13 +2774,20 @@
       }}'
     is_customer: '{{ ''Net Session'' in (trigger.calendar_event.description | default(''''))
       }}'
+    plugs_to_on: '{% set d = trigger.calendar_event.description | default('''') %}{%
+      set is_coach = ''Coach Session'' in d %}{% set is_customer = ''Net Session''
+      in d %}{% set tl = states(''input_select.truman_location'') %}{% set here =
+      tl in [''Lane 2 Left'',''Lane 2 Right''] %}{% set paid = ''(Truman)'' in d %}{%
+      if (not here) or is_coach or (is_customer and paid) %}switch.lane_2_left,switch.lane_2_right{%
+      else %}{{ ''switch.lane_2_right'' if tl == ''Lane 2 Left'' else ''switch.lane_2_left''
+      }}{% endif %}'
 - id: '1781853454698'
   alias: Lane 3 - Bowling Machine Power
   description: "Powers Lane 3's two bowling-machine plugs around bookings (calendar.lane_3_truman_or_bowling_machine).
     Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
-    on -5/off +3. BOTH plugs together (Truman gating deferred → assume both). Keep-on:
-    never cut power if another booking on this lane is active or starts within ~12
-    min. Built 2026-06-18 → SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+    on -5/off +3. TRUMAN GATING LIVE (input_select.truman_location): non-Truman lane
+    -> both; Truman lane -> coach=both, customer '(Truman)'=both, customer without=normal
+    only. Keep-on unchanged. Truman gating wired 2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
@@ -2813,9 +2817,7 @@
       sequence:
       - action: switch.turn_on
         target:
-          entity_id:
-          - switch.lane_3_left
-          - switch.lane_3_right
+          entity_id: '{{ plugs_to_on }}'
     - conditions:
       - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
         and is_customer) }}'
@@ -2843,6 +2845,13 @@
       }}'
     is_customer: '{{ ''Net Session'' in (trigger.calendar_event.description | default(''''))
       }}'
+    plugs_to_on: '{% set d = trigger.calendar_event.description | default('''') %}{%
+      set is_coach = ''Coach Session'' in d %}{% set is_customer = ''Net Session''
+      in d %}{% set tl = states(''input_select.truman_location'') %}{% set here =
+      tl in [''Lane 3 Left'',''Lane 3 Right''] %}{% set paid = ''(Truman)'' in d %}{%
+      if (not here) or is_coach or (is_customer and paid) %}switch.lane_3_left,switch.lane_3_right{%
+      else %}{{ ''switch.lane_3_right'' if tl == ''Lane 3 Left'' else ''switch.lane_3_left''
+      }}{% endif %}'
 - id: '1781854318155'
   alias: Bowling Machines - Reconcile to bookings (outage/restart safety)
   description: 'Fail-safe: re-syncs the 3 lanes'' machine plugs to the booking schedule
