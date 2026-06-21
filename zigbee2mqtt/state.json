@@ -9,22 +9,22 @@
         "linkquality": 192
     },
     "0xa4c138074803a9a9": {
-        "energy": 62.17,
-        "voltage": 238,
+        "energy": 62.58,
+        "voltage": 239,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 143,
+        "power": 145,
         "current": 0.71,
         "linkquality": 188
     },
     "0xa4c138ba345696ae": {
         "state": "ON",
         "energy": 1.7,
-        "voltage": 238,
+        "voltage": 239,
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
@@ -36,7 +36,7 @@
     },
     "0x54ef4410014ae8c0": {
         "contact": true,
-        "voltage": 3074,
+        "voltage": 3072,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 11,
@@ -45,7 +45,7 @@
     },
     "0xa4c13851f47cb91d": {
         "energy": 0.14,
-        "voltage": 241,
+        "voltage": 242,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,8 +70,8 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 241,
-        "energy": 0.69,
+        "voltage": 242,
+        "energy": 0.7,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -83,21 +83,21 @@
         "linkquality": 148
     },
     "0xa4c13879a2af63a1": {
-        "energy": 0.06,
-        "voltage": 241,
+        "energy": 0.07,
+        "voltage": 242,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 0,
+        "power": 3,
         "current": 0.02,
         "linkquality": 136
     },
     "0xa4c138d3ea816fa6": {
         "energy": 0.06,
-        "voltage": 241,
+        "voltage": 242,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
