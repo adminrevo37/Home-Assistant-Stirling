@@ -22,17 +22,23 @@
   mode: single
 - id: bay1_booking_end
   alias: Bay 1 Booking - END
-  description: '10 min after booking: turn off highbay 1 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
-    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
-    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
-    flicker from Keep-On re-asserting a neighbour light).'
+  description: '10 min after booking: force-refresh the lane calendar, then turn off
+    highbay 1 (neighbour-aware at night). Common lights handled separately; highbay
+    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
+    is latched, END only clears the helper and leaves highbays to Keep-On / night
+    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
+    entity + delay 2s before any state check or light action, so last-minute back-to-back
+    bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_1_bowling_machine
     offset: 0:10:00
     trigger: calendar
   actions:
+  - action: homeassistant.update_entity
+    target:
+      entity_id: calendar.lane_1_bowling_machine
+  - delay: 00:00:02
   - condition: state
     entity_id: calendar.lane_1_bowling_machine
     state: 'off'
@@ -97,17 +103,23 @@
   mode: single
 - id: bay2_booking_end
   alias: Bay 2 Booking - END
-  description: '10 min after booking: turn off highbay 2 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
-    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
-    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
-    flicker from Keep-On re-asserting a neighbour light).'
+  description: '10 min after booking: force-refresh the lane calendar, then turn off
+    highbay 2 (neighbour-aware at night). Common lights handled separately; highbay
+    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
+    is latched, END only clears the helper and leaves highbays to Keep-On / night
+    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
+    entity + delay 2s before any state check or light action, so last-minute back-to-back
+    bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_2_bowling_machine
     offset: 0:10:00
     trigger: calendar
   actions:
+  - action: homeassistant.update_entity
+    target:
+      entity_id: calendar.lane_2_bowling_machine
+  - delay: 00:00:02
   - condition: state
     entity_id: calendar.lane_2_bowling_machine
     state: 'off'
@@ -172,17 +184,23 @@
   mode: single
 - id: bay3_booking_end
   alias: Bay 3 Booking - END
-  description: '10 min after booking: turn off highbay 3 in daylight; at night reserve
-    highbay 3 (residual) and only drop neighbours. Common lights handled separately.
-    | Busy-mode guard 2026-06-16: while lighting_all_lanes_active is latched, END
-    only clears the helper and leaves highbays to Keep-On / night shutdown (stops
-    the off->on flicker from Keep-On re-asserting a neighbour light).'
+  description: '10 min after booking: force-refresh the lane calendar, then turn off
+    highbay 3 in daylight; at night reserve highbay 3 (residual) and only drop neighbours.
+    Common lights handled separately. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
+    is latched, END only clears the helper and leaves highbays to Keep-On / night
+    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
+    entity + delay 2s before any state check or light action, so last-minute back-to-back
+    bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_3_truman_or_bowling_machine
     offset: 0:10:00
     trigger: calendar
   actions:
+  - action: homeassistant.update_entity
+    target:
+      entity_id: calendar.lane_3_truman_or_bowling_machine
+  - delay: 00:00:02
   - condition: state
     entity_id: calendar.lane_3_truman_or_bowling_machine
     state: 'off'
@@ -248,17 +266,23 @@
   mode: single
 - id: bay4_booking_end
   alias: Bay 4 Booking - END
-  description: '10 min after booking: turn off highbay 4 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
-    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
-    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
-    flicker from Keep-On re-asserting a neighbour light).'
+  description: '10 min after booking: force-refresh the lane calendar, then turn off
+    highbay 4 (neighbour-aware at night). Common lights handled separately; highbay
+    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
+    is latched, END only clears the helper and leaves highbays to Keep-On / night
+    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
+    entity + delay 2s before any state check or light action, so last-minute back-to-back
+    bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_4_run_up_net
     offset: 0:10:00
     trigger: calendar
   actions:
+  - action: homeassistant.update_entity
+    target:
+      entity_id: calendar.lane_4_run_up_net
+  - delay: 00:00:02
   - condition: state
     entity_id: calendar.lane_4_run_up_net
     state: 'off'
@@ -323,17 +347,23 @@
   mode: single
 - id: bay5_booking_end
   alias: Bay 5 Booking - END
-  description: '10 min after booking: turn off highbay 5 (neighbour-aware at night).
-    Common lights handled separately; highbay 3 reserved as night residual. | Busy-mode
-    guard 2026-06-16: while lighting_all_lanes_active is latched, END only clears
-    the helper and leaves highbays to Keep-On / night shutdown (stops the off->on
-    flicker from Keep-On re-asserting a neighbour light).'
+  description: '10 min after booking: force-refresh the lane calendar, then turn off
+    highbay 5 (neighbour-aware at night). Common lights handled separately; highbay
+    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
+    is latched, END only clears the helper and leaves highbays to Keep-On / night
+    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
+    entity + delay 2s before any state check or light action, so last-minute back-to-back
+    bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_5_run_up_net
     offset: 0:10:00
     trigger: calendar
   actions:
+  - action: homeassistant.update_entity
+    target:
+      entity_id: calendar.lane_5_run_up_net
+  - delay: 00:00:02
   - condition: state
     entity_id: calendar.lane_5_run_up_net
     state: 'off'
@@ -2680,6 +2710,10 @@
       - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
         and is_customer) }}'
       sequence:
+      - action: homeassistant.update_entity
+        target:
+          entity_id: calendar.lane_1_bowling_machine
+      - delay: 00:00:02
       - action: calendar.get_events
         target:
           entity_id: calendar.lane_1_bowling_machine
@@ -2751,6 +2785,10 @@
       - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
         and is_customer) }}'
       sequence:
+      - action: homeassistant.update_entity
+        target:
+          entity_id: calendar.lane_2_bowling_machine
+      - delay: 00:00:02
       - action: calendar.get_events
         target:
           entity_id: calendar.lane_2_bowling_machine
@@ -2822,6 +2860,10 @@
       - '{{ (trigger.id == ''coach_end'' and is_coach) or (trigger.id == ''cust_end''
         and is_customer) }}'
       sequence:
+      - action: homeassistant.update_entity
+        target:
+          entity_id: calendar.lane_3_truman_or_bowling_machine
+      - delay: 00:00:02
       - action: calendar.get_events
         target:
           entity_id: calendar.lane_3_truman_or_bowling_machine
