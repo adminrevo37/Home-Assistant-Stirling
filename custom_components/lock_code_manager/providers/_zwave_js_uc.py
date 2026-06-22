@@ -372,9 +372,8 @@ class ZWaveJSUserCodeFallbackSupport(BaseLock):
                     lock_entity_id=self.lock.entity_id,
                     reason=f"set value returned {result.status.name}",
                 )
-            # Transient non-OK (canonically ``FAIL``): match the 3.x
-            # behavior of the HA service we used to call -- log and
-            # let the optimistic push + next sync tick converge.
+            # Transient non-OK (canonically ``FAIL``) is non-fatal: the
+            # optimistic push covers UI and the next sync tick reconciles.
             _LOGGER.info(
                 "Lock %s slot %s: set returned %s; "
                 "trusting optimistic push and continuing",
@@ -457,8 +456,9 @@ class ZWaveJSUserCodeFallbackSupport(BaseLock):
         true post-write state, so the coordinator already has the
         truth. Failing the whole operation here turns a flaky lock into
         a slot-suspension feedback loop -- the exact pathology the
-        fallback is meant to dodge. The hourly hard-refresh backstop
-        reconciles any genuine cache drift.
+        fallback is meant to dodge. The on-demand refresh on missing or
+        unknown slots, plus the next sync tick, reconcile any genuine
+        cache drift.
 
         Non-Z-Wave exceptions (programming bugs) still propagate.
         """

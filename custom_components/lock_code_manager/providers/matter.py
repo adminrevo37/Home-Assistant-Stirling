@@ -18,10 +18,11 @@ from matter_server.client.exceptions import MatterClientException
 from matter_server.common.errors import MatterError
 from matter_server.common.models import EventType
 
-from homeassistant.components.matter.helpers import (
-    get_matter,
-    get_node_from_device_entry,
+from homeassistant.components.matter.const import (
+    DOMAIN as MATTER_DOMAIN,
+    ID_TYPE_DEVICE_ID,
 )
+from homeassistant.components.matter.helpers import get_device_id
 from homeassistant.components.matter.lock_helpers import (
     SetCredentialFailedError,
     clear_lock_credential,
@@ -31,7 +32,8 @@ from homeassistant.components.matter.lock_helpers import (
     set_lock_credential,
     set_lock_user,
 )
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
@@ -48,7 +50,6 @@ from ..domain.credentials import (
 from ..domain.exceptions import (
     CodeRejectedError,
     DuplicateCodeError,
-    LockCodeManagerProviderError,
     LockDisconnected,
     LockOperationFailed,
 )
@@ -207,47 +208,180 @@ class MatterLock(BaseLock):
         """
         return True
 
-    def _get_matter_node(self) -> Any | None:
+    def _fresh_device_entry(self) -> Any | None:
         """
-        Get the MatterNode for this lock from the Matter integration.
+        Re-resolve the lock's device entry from the registry on every call.
 
-        Uses the Matter integration's helper to resolve the node from the
-        device entry, which correctly handles the device identifier format.
-        Returns the node object with .node_id and access to the client.
+        The snapshot captured at setup (``self.device_entry``) can go stale --
+        e.g. the device is re-created when the lock is re-commissioned -- so read
+        the current device_id from the entity registry and look the device up
+        fresh rather than trusting the cached entry (issue #1268).
         """
-        if not self.device_entry:
+        entity = self.ent_reg.async_get(self.lock.entity_id)
+        # Prefer the live device_id, but fall back to the snapshot's device_id
+        # when the registry entry is missing OR carries no device (a registry
+        # entry momentarily detached from its device must not strand the lock).
+        device_id = (entity.device_id if entity else None) or self.lock.device_id
+        if not device_id:
             return None
+        return self.dev_reg.async_get(device_id)
+
+    def _owning_matter_client(self, device: Any) -> Any | None:
+        """
+        Return the matter_client of the Matter config entry that owns ``device``.
+
+        The Matter integration's ``get_node_from_device_entry`` resolves through
+        ``get_matter()``, which returns ``entries[0]`` under a documented
+        single-fabric assumption ("This assumes only one Matter connection/fabric
+        can exist"). With more than one Matter entry that picks an arbitrary
+        fabric whose node set never contains this lock, so resolution fails
+        permanently even though the lock entity -- bound to its own entry's
+        client -- keeps working (issue #1268). Resolve against the entry that
+        actually owns the device instead, preferring its primary config entry.
+        """
+        seen: set[str] = set()
+        for entry_id in (device.primary_config_entry, *device.config_entries):
+            if not entry_id or entry_id in seen:
+                continue
+            seen.add(entry_id)
+            entry = self.hass.config_entries.async_get_entry(entry_id)
+            if (
+                entry is not None
+                and entry.domain == MATTER_DOMAIN
+                and entry.state is ConfigEntryState.LOADED
+            ):
+                return entry.runtime_data.adapter.matter_client
+        return None
+
+    def _match_node(self, client: Any, device: Any) -> Any | None:
+        """
+        Find ``device``'s MatterNode within ``client``'s current node set.
+
+        Mirrors the Matter integration's ``get_node_from_device_entry`` matching
+        -- compare the device's stored ``deviceid_`` identifier against each
+        node endpoint's computed device id -- but against the owning entry's
+        client. Uses ``str.removeprefix``, not ``str.lstrip``: ``lstrip`` takes a
+        character set, not a prefix, and would corrupt ids that happen to start
+        with one of those characters.
+        """
+        prefix = f"{ID_TYPE_DEVICE_ID}_"
+        device_id_full = next(
+            (
+                identifier[1]
+                for identifier in device.identifiers
+                if identifier[0] == MATTER_DOMAIN and identifier[1].startswith(prefix)
+            ),
+            None,
+        )
+        if device_id_full is None:
+            return None
+        device_id = device_id_full.removeprefix(prefix)
+        server_info = client.server_info
+        if server_info is None:
+            return None
+        return next(
+            (
+                node
+                for node in client.get_nodes()
+                for endpoint in node.endpoints.values()
+                if get_device_id(server_info, endpoint) == device_id
+            ),
+            None,
+        )
+
+    def _resolve(self) -> tuple[Any | None, Any | None, Any | None]:
+        """
+        Resolve (client, node, device) for this lock in a single pass.
+
+        ``client`` is the owning entry's MatterClient, ``node`` its matched
+        MatterNode, ``device`` the registry entry they were resolved from.
+        Any of client/node may be None when unresolved; ``device`` is returned
+        even then so callers can report and log against it. Resolution errors
+        are swallowed to None -- this seam never raises; callers decide whether
+        a missing client/node is fatal.
+        """
+        device = self._fresh_device_entry()
+        if device is None:
+            return None, None, None
         try:
-            return get_node_from_device_entry(self.hass, self.device_entry)
+            client = self._owning_matter_client(device)
+            if client is None:
+                return None, None, device
+            return client, self._match_node(client, device), device
         except Exception as err:
             LOGGER.debug(
-                "Failed to resolve Matter node for %s: %s",
+                "Failed to resolve Matter client/node for %s: %s",
                 self.lock.entity_id,
                 err,
             )
-            return None
-
-    def _get_matter_client(self) -> Any | None:
-        """Get the MatterClient via the Matter integration helper."""
-        try:
-            return get_matter(self.hass).matter_client
-        except Exception as err:
-            LOGGER.debug(
-                "Failed to get Matter client for %s: %s",
-                self.lock.entity_id,
-                err,
-            )
-            return None
+            return None, None, device
 
     def _require_client_and_node(self) -> tuple[Any, Any]:
-        """Get client and node, raising LockDisconnected if unavailable."""
-        client = self._get_matter_client()
-        node = self._get_matter_node()
-        if not client or not node:
+        """
+        Resolve client and node, raising LockDisconnected if either is missing.
+
+        The failures are reported distinctly: a missing client is the Matter
+        integration not being loaded; a client whose server_info has not arrived
+        yet (e.g. mid-reconnect) is "not ready"; an otherwise-unresolved node is
+        the device not being in the owning client's current node set (issue
+        #1268). On a node miss, log the comparison so the cause -- multiple
+        fabrics vs a stale device -- is diagnosable.
+        """
+        client, node, device = self._resolve()
+        if not client:
             raise LockDisconnected(
-                f"Matter client or node unavailable for {self.lock.entity_id}"
+                f"Matter client unavailable for {self.lock.entity_id}"
+            )
+        if not node:
+            if getattr(client, "server_info", None) is None:
+                raise LockDisconnected(
+                    f"Matter client for {self.lock.entity_id} is not ready "
+                    "(server info unavailable)"
+                )
+            self._log_node_resolution_failure(device, client)
+            raise LockDisconnected(
+                f"Matter node not found for {self.lock.entity_id}; device is not "
+                "in the Matter client's current node set"
             )
         return client, node
+
+    def _log_node_resolution_failure(self, device: Any, client: Any) -> None:
+        """
+        Log why node resolution failed -- diagnostic only, never raises.
+
+        Surfaces the data that distinguishes the candidate causes (issue #1268):
+        more than one loaded Matter entry (wrong-fabric resolution) vs a stale
+        or unmatched device identifier. ``device`` is the entry the failed
+        resolution actually used, passed in so the log describes that exact
+        device rather than re-resolving it.
+        """
+        try:
+            matter_entries = self.hass.config_entries.async_loaded_entries(
+                MATTER_DOMAIN
+            )
+            try:
+                node_count = len(client.get_nodes())
+            except Exception:
+                node_count = -1
+            LOGGER.debug(
+                "Matter node resolution failed for %s: device_identifiers=%s, "
+                "primary_config_entry=%s, device_config_entries=%s, "
+                "loaded_matter_entries=%s, owning_client_node_count=%s, "
+                "server_info_present=%s",
+                self.lock.entity_id,
+                getattr(device, "identifiers", None),
+                getattr(device, "primary_config_entry", None),
+                getattr(device, "config_entries", None),
+                [entry.entry_id for entry in matter_entries],
+                node_count,
+                getattr(client, "server_info", None) is not None,
+            )
+        except Exception:
+            LOGGER.debug(
+                "Matter node resolution failed for %s (diagnostics unavailable)",
+                self.lock.entity_id,
+                exc_info=True,
+            )
 
     # -- Credential primitives -----------------------------------------------
 
@@ -399,13 +533,12 @@ class MatterLock(BaseLock):
         if existing_user_index is not None:
             # UPDATE: rename via set_lock_user.
             #
-            # set_lock_user here is a metadata-only name update. The
-            # historical Matter contract (PR #1077) tolerated name-set
-            # failures so a transient 500 or a name the lock rejects
-            # does not block the subsequent credential write; the user
-            # still exists at the known index, the only thing lost is
-            # the name update. If every candidate in the cascade fails
-            # with MatterError we log a warning and fall through.
+            # set_lock_user here is a metadata-only name update.
+            # Name-set failures must not block the subsequent credential
+            # write -- the user still exists at the known index and only
+            # the cosmetic name update is lost. The cascade tries each
+            # candidate name; if every one fails with MatterError we log
+            # a warning and fall through.
             candidates = self._user_name_candidates(slot, user.name)
             try:
                 (
@@ -419,16 +552,15 @@ class MatterLock(BaseLock):
                     candidate_names=candidates,
                 )
             except (LockDisconnected, LockOperationFailed, MatterError) as err:
-                # UPDATE's historical contract (PR #1077): tolerate any
-                # rename failure so the subsequent credential write still
-                # proceeds. The user record is still valid at
-                # ``existing_user_index`` -- the only thing lost is the
-                # cosmetic name update. The helper raises typed seam
-                # exceptions (LockDisconnected for transport failures,
+                # UPDATE tolerates any rename failure so the subsequent
+                # credential write still proceeds. The user record is
+                # still valid at ``existing_user_index`` -- only the
+                # cosmetic name update is lost. The helper raises typed
+                # seam exceptions (LockDisconnected for transport,
                 # LockOperationFailed for validation rejections,
                 # MatterError when every candidate hit a lock-side
-                # rejection); we swallow all three here on the UPDATE
-                # path and log a warning instead.
+                # rejection); all three are swallowed here on the UPDATE
+                # path and logged as a warning.
                 LOGGER.warning(
                     "Lock %s: failed to update user name on slot %s "
                     "(user_index=%s); continuing without name update. "
@@ -693,8 +825,8 @@ class MatterLock(BaseLock):
 
         ``credential_index=None`` auto-allocates the next free credential slot
         (CREATE). Passing an existing index addresses the user's current PIN
-        credential for MODIFY. ``code_slot`` is the LCM slot only and is used
-        for error reporting; it is no longer pinned to the Matter index.
+        credential for MODIFY. ``code_slot`` is the LCM slot, used only for
+        error reporting; the Matter credential index is opaque to LCM.
 
         Raises SetCredentialFailedError on lock rejection,
         CodeRejectedError on validation failure,
@@ -733,11 +865,10 @@ class MatterLock(BaseLock):
         """
         Return the user's current Matter PIN credential index, or ``None``.
 
-        LCM no longer pins ``credential_index`` to the LCM slot; instead it
-        treats Matter's credential index as opaque and rediscovers it per
-        operation. This helper deliberately walks the **raw** lock-side
-        user data (not ``async_get_users``) so the returned value is the
-        Matter credential index Matter expects for
+        LCM treats Matter's credential index as opaque and rediscovers it
+        per operation. This helper deliberately walks the **raw**
+        lock-side user data (not ``async_get_users``) so the returned
+        value is the Matter credential index Matter expects for
         ``set_lock_credential`` / ``clear_lock_credential`` -- not the
         LCM-projected slot that ``async_get_users`` exposes upward.
         """
@@ -920,18 +1051,25 @@ class MatterLock(BaseLock):
         """No matter-specific setup; base validates required capabilities."""
 
     async def async_is_device_available(self) -> bool:
-        """Return whether the Matter lock device is available for commands."""
-        try:
-            client, node = self._require_client_and_node()
-            await get_lock_info(client, node)
-        except (LockCodeManagerProviderError, HomeAssistantError) as err:
-            LOGGER.debug(
-                "Lock %s: availability check failed: %s",
-                self.lock.entity_id,
-                err,
-            )
-            return False
-        return True
+        """
+        Return whether the Matter lock is reachable, per the lock entity's state.
+
+        Matter reachability is layered: Home Assistant to the matter-server
+        (websocket transport), then the matter-server to the lock (IP / Thread /
+        Bluetooth Low Energy). The lock entity's availability (``node.available``)
+        is the integration's own answer to "can the server reach this lock",
+        computed after it sorts those layers out, and it survives a transport blip
+        -- unlike re-deriving the node from the device registry, which transiently
+        fails while the matter client rebuilds its node set on reconnect and would
+        trip the breaker on a fault that isn't about the lock (issue #1268). The
+        read primitives still resolve the node, so a genuine outage surfaces as
+        LockDisconnected.
+        """
+        state = self.hass.states.get(self.lock.entity_id)
+        return state is not None and state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        )
 
     # -- Event subscription via push framework --------------------------------
 
@@ -951,8 +1089,7 @@ class MatterLock(BaseLock):
         if self._push_unsubs:
             return
 
-        client = self._get_matter_client()
-        node = self._get_matter_node()
+        client, node, _device = self._resolve()
         node_id = node.node_id if node else None
         if not client or node_id is None:
             raise LockDisconnected(
@@ -1004,8 +1141,8 @@ class MatterLock(BaseLock):
         Only PIN credentials (credentialType=1) trigger the event -- other
         credential types (RFID, fingerprint, etc.) are ignored.
 
-        The event's ``credentials[].credentialIndex`` is the Matter credential
-        index, which is no longer pinned to the LCM slot under the user-tag
+        The event's ``credentials[].credentialIndex`` is the Matter
+        credential index, which LCM treats as opaque under the user-tag
         model. To find the LCM slot we resolve via the event's top-level
         ``userIndex`` -> user.name -> ``lcm:<slot>:`` tag, falling back to
         walking the user list for a PIN credential at ``credentialIndex``
@@ -1131,12 +1268,12 @@ class MatterLock(BaseLock):
         the owning user's name and parsing its ``lcm:<slot>:`` tag --
         ``userIndex`` alone is sufficient. ``dataIndex`` (the Matter
         credential index) is captured best-effort for log context only;
-        it's no longer pinned to the LCM slot under the user-tag model
-        and dropping otherwise-resolvable events when it's missing or
-        malformed would silently lose state updates. The lookup is async
-        (a fresh ``_raw_lock_users`` round-trip) so the callback
-        schedules a task rather than blocking the event loop. Events
-        for users LCM doesn't own (untagged names) are ignored.
+        under the user-tag model it is opaque to LCM, and dropping
+        otherwise-resolvable events when it's missing or malformed would
+        silently lose state updates. The lookup is async (a fresh
+        ``_raw_lock_users`` round-trip) so the callback schedules a task
+        rather than blocking the event loop. Events for users LCM
+        doesn't own (untagged names) are ignored.
         """
         data: dict[str, Any] = getattr(node_event, "data", None) or {}
 

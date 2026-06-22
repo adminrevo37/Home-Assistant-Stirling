@@ -2953,3 +2953,23 @@
       plugs:
       - switch.lane_3_left
       - switch.lane_3_right
+- id: '1782097005885'
+  alias: Power Outage Recovery — HA restart
+  description: Fires on every HA start (power outage or deliberate restart). Waits
+    3 min for C4 and network to settle, reloads the Control4 config entry to resync
+    lighting/lock state, then sends a push alert. Pi kiosk and TV CEC recover automatically
+    via their own boot services.
+  triggers:
+  - trigger: homeassistant
+    event: start
+  actions:
+  - delay: 00:03:00
+  - action: homeassistant.reload_config_entry
+    data:
+      entry_id: 01KM09V3X1JDWRBA7KSWMD1WAJ
+  - action: notify.mobile_app_julian
+    data:
+      title: Power restored — HA online
+      message: HA restarted. C4 reloaded. Pi kiosk + TV CEC recover within ~3 min
+        of Pi boot.
+  mode: single

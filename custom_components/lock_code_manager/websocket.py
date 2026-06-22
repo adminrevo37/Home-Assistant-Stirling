@@ -116,11 +116,6 @@ CALENDAR_ATTR_START_TIME = "start_time"
 CALENDAR_ATTR_END_TIME = "end_time"
 
 
-# =============================================================================
-# State Helper Functions
-# =============================================================================
-
-
 def _slot_code_payload(
     code: str | SlotCredential | None,
     *,
@@ -241,11 +236,6 @@ def _get_last_changed(
         if state.last_changed:
             return state.last_changed.isoformat()
     return None
-
-
-# =============================================================================
-# Config Entry Helpers
-# =============================================================================
 
 
 def _find_config_entry_by_title(hass: HomeAssistant, title: str) -> ConfigEntry | None:
@@ -494,47 +484,56 @@ class SlotMetadata:
     enabled: bool | None = None
 
 
+def _build_slot_entities(
+    ent_reg: er.EntityRegistry, entry_id: str, slot_num: int
+) -> SlotEntities:
+    """
+    Build a fully-populated SlotEntities for a given (entry, slot) pair.
+
+    Both the per-lock iterator (``_get_slot_entity_ids``) and the
+    per-slot subscription resolver go through this primitive so the
+    ``unique_id`` formula and the field list live in exactly one place.
+    """
+
+    def _id(domain: str, key: str) -> str | None:
+        return ent_reg.async_get_entity_id(
+            domain, DOMAIN, _slot_unique_id(entry_id, slot_num, key)
+        )
+
+    return SlotEntities(
+        slot_num=slot_num,
+        config_entry_id=entry_id,
+        name_entity_id=_id(TEXT_DOMAIN, CONF_NAME),
+        pin_entity_id=_id(TEXT_DOMAIN, CONF_PIN),
+        enabled_entity_id=_id(SWITCH_DOMAIN, CONF_ENABLED),
+        active_entity_id=_id(BINARY_SENSOR_DOMAIN, ATTR_ACTIVE),
+        event_entity_id=_id(EVENT_DOMAIN, EVENT_PIN_USED),
+    )
+
+
 def _get_slot_entity_ids(
     hass: HomeAssistant, lock_entity_id: str
 ) -> dict[int, SlotEntities]:
-    """Return a dict of slot number to SlotEntities for the four primary per-slot entities."""
-    slot_entities: dict[int, SlotEntities] = {}
+    """Return a dict of slot number to SlotEntities for every slot LCM manages on a lock."""
     ent_reg = er.async_get(hass)
-
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        config = get_entry_config(entry)
-        if not config.has_lock(lock_entity_id):
-            continue
-
-        for slot_int in config.slots:
-
-            def _entity_id(
-                domain: str,
-                key: str,
-                entry_id: str = entry.entry_id,
-                slot: int = slot_int,
-            ) -> str | None:
-                return ent_reg.async_get_entity_id(
-                    domain, DOMAIN, _slot_unique_id(entry_id, slot, key)
-                )
-
-            slot_entities[slot_int] = SlotEntities(
-                slot_num=slot_int,
-                config_entry_id=entry.entry_id,
-                name_entity_id=_entity_id(TEXT_DOMAIN, CONF_NAME),
-                pin_entity_id=_entity_id(TEXT_DOMAIN, CONF_PIN),
-                active_entity_id=_entity_id(BINARY_SENSOR_DOMAIN, ATTR_ACTIVE),
-                enabled_entity_id=_entity_id(SWITCH_DOMAIN, CONF_ENABLED),
-            )
-
-    return slot_entities
+    return {
+        slot_int: _build_slot_entities(ent_reg, entry.entry_id, slot_int)
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if get_entry_config(entry).has_lock(lock_entity_id)
+        for slot_int in get_entry_config(entry).slots
+    }
 
 
 def _get_slot_metadata(
-    hass: HomeAssistant, lock_entity_id: str
+    hass: HomeAssistant, slot_entity_ids: dict[int, SlotEntities]
 ) -> dict[int, SlotMetadata]:
-    """Return a dict of slot number to SlotMetadata for all slots LCM manages on a lock."""
-    slot_entities = _get_slot_entity_ids(hass, lock_entity_id)
+    """
+    Derive SlotMetadata for each slot from pre-resolved SlotEntities.
+
+    Callers already need ``slot_entity_ids`` for other purposes, so
+    passing it in avoids re-walking the entity registry just to rebuild
+    the same dict.
+    """
     return {
         slot_num: SlotMetadata(
             name=_get_text_state(hass, ids.name_entity_id),
@@ -542,7 +541,7 @@ def _get_slot_metadata(
             active=_get_bool_state(hass, ids.active_entity_id),
             enabled=_get_bool_state(hass, ids.enabled_entity_id),
         )
-        for slot_num, ids in slot_entities.items()
+        for slot_num, ids in slot_entity_ids.items()
     }
 
 
@@ -578,8 +577,8 @@ def _serialize_lock_coordinator(
     coordinator = lock.coordinator
     data = coordinator.data if coordinator is not None else {}
     managed_slots = get_managed_slots(hass, lock.lock.entity_id)
-    slot_metadata = _get_slot_metadata(hass, lock.lock.entity_id)
     slot_entity_ids = _get_slot_entity_ids(hass, lock.lock.entity_id)
+    slot_metadata = _get_slot_metadata(hass, slot_entity_ids)
 
     slots = []
     for slot, code in sorted(data.items()):
@@ -689,28 +688,6 @@ async def subscribe_lock_codes(
     _send_update()
 
 
-def _get_slot_entity_data(
-    hass: HomeAssistant, config_entry: ConfigEntry, slot_num: int
-) -> SlotEntities:
-    """Get entity IDs for a specific slot."""
-    ent_reg = er.async_get(hass)
-    entry_id = config_entry.entry_id
-
-    def _get_entity_id(domain: str, key: str) -> str | None:
-        return ent_reg.async_get_entity_id(
-            domain, DOMAIN, _slot_unique_id(entry_id, slot_num, key)
-        )
-
-    return SlotEntities(
-        slot_num=slot_num,
-        name_entity_id=_get_entity_id(TEXT_DOMAIN, CONF_NAME),
-        pin_entity_id=_get_entity_id(TEXT_DOMAIN, CONF_PIN),
-        enabled_entity_id=_get_entity_id(SWITCH_DOMAIN, CONF_ENABLED),
-        active_entity_id=_get_entity_id(BINARY_SENSOR_DOMAIN, ATTR_ACTIVE),
-        event_entity_id=_get_entity_id(EVENT_DOMAIN, EVENT_PIN_USED),
-    )
-
-
 def _get_slot_in_sync_entity_ids(
     hass: HomeAssistant, config_entry: ConfigEntry, slot_num: int
 ) -> dict[str, str]:
@@ -751,7 +728,6 @@ def _get_condition_entity_data(
     if not state:
         return None
 
-    # Extract domain from entity_id
     domain = split_entity_id(condition_entity_id)[0]
     is_active = state.state == STATE_ON
 
@@ -921,7 +897,6 @@ def _serialize_slot_card_data(
     calendar_next_event: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Serialize slot data for the slot card."""
-    # Get slot metadata using module-level helpers
     name = _get_text_state(hass, slot_entities.name_entity_id) or ""
     pin = _get_text_state(hass, slot_entities.pin_entity_id)
     enabled = _get_bool_state(hass, slot_entities.enabled_entity_id)
@@ -931,10 +906,8 @@ def _serialize_slot_card_data(
         hass, slot_entities.event_entity_id
     )
 
-    # Get condition entity from config using helper
     condition_entity_id = _get_slot_condition_entity_id(config_entry, slot_num)
 
-    # Build per-lock status
     entry_locks = config_entry.runtime_data.locks
     entry_lock_ids = get_entry_config(config_entry).locks
 
@@ -950,7 +923,6 @@ def _serialize_slot_card_data(
         if (lock := entry_locks.get(lock_entity_id))
     ]
 
-    # Build result
     result: dict[str, Any] = {
         ATTR_SLOT_NUM: slot_num,
         ATTR_CONFIG_ENTRY_ID: config_entry.entry_id,
@@ -1031,7 +1003,6 @@ async def subscribe_code_slot(
     slot_num = msg[ATTR_SLOT]
     reveal = msg["reveal"]
 
-    # Validate slot exists in config
     if not get_entry_config(config_entry).has_slot(slot_num):
         connection.send_error(
             msg["id"],
@@ -1046,7 +1017,7 @@ async def subscribe_code_slot(
     def _resolve_entity_ids() -> tuple[SlotEntities, dict[str, str], str | None]:
         """Resolve current entity IDs for this slot from the entity registry."""
         return (
-            _get_slot_entity_data(hass, config_entry, slot_num),
+            _build_slot_entities(er.async_get(hass), config_entry.entry_id, slot_num),
             _get_slot_in_sync_entity_ids(hass, config_entry, slot_num),
             _get_slot_condition_entity_id(config_entry, slot_num),
         )
