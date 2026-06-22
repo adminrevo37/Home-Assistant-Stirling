@@ -599,7 +599,9 @@
   alias: Bay 1 - Door Code Activate
   description: "Loads the booking's door code into a Bay 1 keypad slot. Coach (\U0001F3CF
     Coach Session) = 45 min before start; customer (\U0001F3AF Net Session) = 30 min
-    before. Booker type from the calendar event description. Updated 2026-06-20."
+    before. Booker type from the calendar event description. Updated 2026-06-20. Backup
+    triggers at T-20/T-10/T-5 catch last-minute bookings (slot_to_use idempotent).
+    Updated 2026-06-22."
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -611,11 +613,26 @@
     event: start
     offset: -0:30:00
     id: cust
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
+    offset: -0:20:00
+    id: late20
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
+    offset: -0:10:00
+    id: late10
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
+    offset: -0:05:00
+    id: late5
   conditions:
   - condition: template
     value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
       | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
-      | default(''''))) }}'
+      | default(''''))) or trigger.id in [''late20'', ''late10'', ''late5''] }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -625,9 +642,11 @@
   - condition: template
     value_template: '{{ door_code != '''' }}'
   - variables:
-      slot_to_use: '{% if states(''input_text.bay1_code_slot_a'') == '''' %}11 {%
-        elif states(''input_text.bay1_code_slot_b'') == '''' %}12 {% elif states(''input_text.bay1_code_slot_c'')
-        == '''' %}13 {% else %}0{% endif %}'
+      slot_to_use: '{% set a = states(''input_text.bay1_code_slot_a'').split('':'')[0]
+        %}{% set b = states(''input_text.bay1_code_slot_b'').split('':'')[0] %}{%
+        set c = states(''input_text.bay1_code_slot_c'').split('':'')[0] %}{% if door_code
+        and door_code in [a, b, c] %}0{% elif a == '''' %}11 {% elif b == '''' %}12
+        {% elif c == '''' %}13 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_use | int > 0 }}'
   - action: shell_command.c4_set_code
@@ -717,7 +736,8 @@
 - id: bay2_code_activate
   alias: Bay 2 - Door Code Activate
   description: Loads the booking's door code into a Bay 2 keypad slot. Coach = 45
-    min before; customer = 30 min before. Updated 2026-06-20.
+    min before; customer = 30 min before. Updated 2026-06-20. Backup triggers at T-20/T-10/T-5
+    catch last-minute bookings (slot_to_use idempotent). Updated 2026-06-22.
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
@@ -729,11 +749,26 @@
     event: start
     offset: -0:30:00
     id: cust
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
+    offset: -0:20:00
+    id: late20
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
+    offset: -0:10:00
+    id: late10
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
+    offset: -0:05:00
+    id: late5
   conditions:
   - condition: template
     value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
       | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
-      | default(''''))) }}'
+      | default(''''))) or trigger.id in [''late20'', ''late10'', ''late5''] }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -743,9 +778,11 @@
   - condition: template
     value_template: '{{ door_code != '''' }}'
   - variables:
-      slot_to_use: '{% if states(''input_text.bay2_code_slot_a'') == '''' %}14 {%
-        elif states(''input_text.bay2_code_slot_b'') == '''' %}15 {% elif states(''input_text.bay2_code_slot_c'')
-        == '''' %}16 {% else %}0{% endif %}'
+      slot_to_use: '{% set a = states(''input_text.bay2_code_slot_a'').split('':'')[0]
+        %}{% set b = states(''input_text.bay2_code_slot_b'').split('':'')[0] %}{%
+        set c = states(''input_text.bay2_code_slot_c'').split('':'')[0] %}{% if door_code
+        and door_code in [a, b, c] %}0{% elif a == '''' %}14 {% elif b == '''' %}15
+        {% elif c == '''' %}16 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_use | int > 0 }}'
   - action: shell_command.c4_set_code
@@ -835,7 +872,8 @@
 - id: bay3_code_activate
   alias: Bay 3 - Door Code Activate
   description: Loads the booking's door code into a Bay 3 keypad slot. Coach = 45
-    min before; customer = 30 min before. Updated 2026-06-20.
+    min before; customer = 30 min before. Updated 2026-06-20. Backup triggers at T-20/T-10/T-5
+    catch last-minute bookings (slot_to_use idempotent). Updated 2026-06-22.
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
@@ -847,11 +885,26 @@
     event: start
     offset: -0:30:00
     id: cust
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    offset: -0:20:00
+    id: late20
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    offset: -0:10:00
+    id: late10
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    offset: -0:05:00
+    id: late5
   conditions:
   - condition: template
     value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
       | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
-      | default(''''))) }}'
+      | default(''''))) or trigger.id in [''late20'', ''late10'', ''late5''] }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -861,9 +914,11 @@
   - condition: template
     value_template: '{{ door_code != '''' }}'
   - variables:
-      slot_to_use: '{% if states(''input_text.bay3_code_slot_a'') == '''' %}17 {%
-        elif states(''input_text.bay3_code_slot_b'') == '''' %}18 {% elif states(''input_text.bay3_code_slot_c'')
-        == '''' %}19 {% else %}0{% endif %}'
+      slot_to_use: '{% set a = states(''input_text.bay3_code_slot_a'').split('':'')[0]
+        %}{% set b = states(''input_text.bay3_code_slot_b'').split('':'')[0] %}{%
+        set c = states(''input_text.bay3_code_slot_c'').split('':'')[0] %}{% if door_code
+        and door_code in [a, b, c] %}0{% elif a == '''' %}17 {% elif b == '''' %}18
+        {% elif c == '''' %}19 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_use | int > 0 }}'
   - action: shell_command.c4_set_code
@@ -953,7 +1008,8 @@
 - id: bay4_code_activate
   alias: Bay 4 - Door Code Activate
   description: Loads the booking's door code into a Bay 4 keypad slot. Coach = 45
-    min before; customer = 30 min before. Updated 2026-06-20.
+    min before; customer = 30 min before. Updated 2026-06-20. Backup triggers at T-20/T-10/T-5
+    catch last-minute bookings (slot_to_use idempotent). Updated 2026-06-22.
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_4_run_up_net
@@ -965,11 +1021,26 @@
     event: start
     offset: -0:30:00
     id: cust
+  - trigger: calendar
+    entity_id: calendar.lane_4_run_up_net
+    event: start
+    offset: -0:20:00
+    id: late20
+  - trigger: calendar
+    entity_id: calendar.lane_4_run_up_net
+    event: start
+    offset: -0:10:00
+    id: late10
+  - trigger: calendar
+    entity_id: calendar.lane_4_run_up_net
+    event: start
+    offset: -0:05:00
+    id: late5
   conditions:
   - condition: template
     value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
       | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
-      | default(''''))) }}'
+      | default(''''))) or trigger.id in [''late20'', ''late10'', ''late5''] }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -979,9 +1050,11 @@
   - condition: template
     value_template: '{{ door_code != '''' }}'
   - variables:
-      slot_to_use: '{% if states(''input_text.bay4_code_slot_a'') == '''' %}20 {%
-        elif states(''input_text.bay4_code_slot_b'') == '''' %}21 {% elif states(''input_text.bay4_code_slot_c'')
-        == '''' %}22 {% else %}0{% endif %}'
+      slot_to_use: '{% set a = states(''input_text.bay4_code_slot_a'').split('':'')[0]
+        %}{% set b = states(''input_text.bay4_code_slot_b'').split('':'')[0] %}{%
+        set c = states(''input_text.bay4_code_slot_c'').split('':'')[0] %}{% if door_code
+        and door_code in [a, b, c] %}0{% elif a == '''' %}20 {% elif b == '''' %}21
+        {% elif c == '''' %}22 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_use | int > 0 }}'
   - action: shell_command.c4_set_code
@@ -1071,7 +1144,8 @@
 - id: bay5_code_activate
   alias: Bay 5 - Door Code Activate
   description: Loads the booking's door code into a Bay 5 keypad slot. Coach = 45
-    min before; customer = 30 min before. Updated 2026-06-20.
+    min before; customer = 30 min before. Updated 2026-06-20. Backup triggers at T-20/T-10/T-5
+    catch last-minute bookings (slot_to_use idempotent). Updated 2026-06-22.
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_5_run_up_net
@@ -1083,11 +1157,26 @@
     event: start
     offset: -0:30:00
     id: cust
+  - trigger: calendar
+    entity_id: calendar.lane_5_run_up_net
+    event: start
+    offset: -0:20:00
+    id: late20
+  - trigger: calendar
+    entity_id: calendar.lane_5_run_up_net
+    event: start
+    offset: -0:10:00
+    id: late10
+  - trigger: calendar
+    entity_id: calendar.lane_5_run_up_net
+    event: start
+    offset: -0:05:00
+    id: late5
   conditions:
   - condition: template
     value_template: '{{ (trigger.id == ''coach'' and ''Coach Session'' in (trigger.calendar_event.description
       | default(''''))) or (trigger.id == ''cust'' and ''Net Session'' in (trigger.calendar_event.description
-      | default(''''))) }}'
+      | default(''''))) or trigger.id in [''late20'', ''late10'', ''late5''] }}'
   actions:
   - variables:
       door_code: "{{ (trigger.calendar_event.description or '')\n   | regex_findall('DOOR
@@ -1097,9 +1186,11 @@
   - condition: template
     value_template: '{{ door_code != '''' }}'
   - variables:
-      slot_to_use: '{% if states(''input_text.bay5_code_slot_a'') == '''' %}23 {%
-        elif states(''input_text.bay5_code_slot_b'') == '''' %}24 {% elif states(''input_text.bay5_code_slot_c'')
-        == '''' %}25 {% else %}0{% endif %}'
+      slot_to_use: '{% set a = states(''input_text.bay5_code_slot_a'').split('':'')[0]
+        %}{% set b = states(''input_text.bay5_code_slot_b'').split('':'')[0] %}{%
+        set c = states(''input_text.bay5_code_slot_c'').split('':'')[0] %}{% if door_code
+        and door_code in [a, b, c] %}0{% elif a == '''' %}23 {% elif b == '''' %}24
+        {% elif c == '''' %}25 {% else %}0{% endif %}'
   - condition: template
     value_template: '{{ slot_to_use | int > 0 }}'
   - action: shell_command.c4_set_code
