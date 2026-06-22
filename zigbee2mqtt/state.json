@@ -1,7 +1,7 @@
 {
     "0x54ef4410014ae72a": {
         "contact": false,
-        "voltage": 3103,
+        "voltage": 3101,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 9,
@@ -9,34 +9,34 @@
         "linkquality": 120
     },
     "0xa4c138074803a9a9": {
-        "energy": 65.27,
-        "voltage": 235,
+        "energy": 65.98,
+        "voltage": 240,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 142,
-        "current": 0.71,
+        "power": 146,
+        "current": 0.72,
         "linkquality": 188
     },
     "0xa4c138ba345696ae": {
         "state": "ON",
-        "energy": 1.73,
-        "voltage": 231,
+        "energy": 1.74,
+        "voltage": 235,
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 4,
-        "current": 0.04,
+        "power": 0,
+        "current": 0.01,
         "linkquality": 124
     },
     "0x54ef4410014ae8c0": {
         "contact": true,
-        "voltage": 3081,
+        "voltage": 3074,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 11,
@@ -45,7 +45,7 @@
     },
     "0xa4c13851f47cb91d": {
         "energy": 0.26,
-        "voltage": 235,
+        "voltage": 238,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,7 +70,7 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 238,
+        "voltage": 237,
         "energy": 0.8,
         "state": "OFF",
         "countdown": 0,
@@ -84,7 +84,7 @@
     },
     "0xa4c13879a2af63a1": {
         "energy": 0.09,
-        "voltage": 235,
+        "voltage": 237,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -97,7 +97,7 @@
     },
     "0xa4c138d3ea816fa6": {
         "energy": 0.16,
-        "voltage": 239,
+        "voltage": 243,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
