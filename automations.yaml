@@ -522,9 +522,10 @@
   mode: single
 - id: night_staggered_shutdown
   alias: Night - All Off + Highbay 3 Residual
-  description: 'When all 5 bay helpers are off after dark: turn off highbays 1/2/4/5
-    and keep highbay 3 on as the residual safety light while customers pack up. Seamless
-    handover, no dark gap. (Was Night - Staggered Shutdown.)'
+  description: 'When all 5 bay helpers are off after dark: check for upcoming bookings
+    within 30 min. If gap >30 min, turn off highbays 1/2/4/5 and keep highbay 3 on
+    as the residual safety light. If a booking starts within 30 min, skip shutdown
+    to avoid a dark gap.'
   triggers:
   - trigger: state
     entity_id:
@@ -547,19 +548,43 @@
     - input_boolean.bay5_helper
     state: 'off'
   actions:
-  - action: input_boolean.turn_off
-    target:
-      entity_id: input_boolean.lighting_all_lanes_active
-  - action: light.turn_off
+  - action: calendar.get_events
     target:
       entity_id:
-      - light.highbay_1
-      - light.highbay_2
-      - light.highbay_4
-      - light.highbay_5
-  - action: light.turn_on
-    target:
-      entity_id: light.highbay_3
+      - calendar.lane_1_bowling_machine
+      - calendar.lane_2_bowling_machine
+      - calendar.lane_3_truman_or_bowling_machine
+      - calendar.lane_4_run_up_net
+      - calendar.lane_5_run_up_net
+    data:
+      start_date_time: '{{ now().isoformat() }}'
+      end_date_time: '{{ (now() + timedelta(minutes=30)).isoformat() }}'
+    response_variable: upcoming_30min
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ upcoming_30min.values() | map(attribute=''events'') |
+          sum(start=[]) | count == 0 }}'
+      sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.lighting_all_lanes_active
+      - action: light.turn_off
+        target:
+          entity_id:
+          - light.highbay_1
+          - light.highbay_2
+          - light.highbay_4
+          - light.highbay_5
+      - action: light.turn_on
+        target:
+          entity_id: light.highbay_3
+    default:
+    - action: logbook.log
+      data:
+        name: Night Shutdown
+        message: Shutdown skipped — booking starting within 30 min, keeping lights
+          on.
   mode: single
 - id: night_highbay3_off
   alias: Night - Highbay 3 Residual Off
@@ -3341,4 +3366,25 @@
           entity_id: input_text.bay5_code_slot_c
         data:
           value: '{{ b5_code }}:{{ b5_name }}'
+  mode: single
+- id: '1782125791078'
+  alias: Lucas Corbett entry notify (one-shot 22 Jun)
+  description: Fires once when door unlocks during Lucas Corbett 8pm booking window,
+    then disables itself
+  triggers:
+  - trigger: state
+    entity_id: lock.front_door_lock
+    to: unlocked
+  conditions:
+  - condition: time
+    after: '19:30:00'
+    before: '21:15:00'
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: Lucas Corbett entered
+      message: Door opened during 8pm booking window — Lucas Corbett is in.
+  - action: automation.turn_off
+    target:
+      entity_id: automation.lucas_corbett_entry_notify_one_shot_22_jun
   mode: single
