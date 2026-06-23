@@ -221,48 +221,33 @@ sample_booking_bay_3:
     data: {}
   alias: Sample Booking Bay 3
   description: ''
-###############################################################################
-##### ROLLER DOOR — Service mode toggle
-# Pressing this script/button from the dashboard:
-#   - If service mode OFF → sends UNLOCK (opens door) + enables service mode
-#   - If service mode ON  → sends LOCK  (closes door) + disables service mode
-# While service mode is ON the auto-close automation is suppressed entirely.
-###############################################################################
 door_service_toggle:
-  alias: "Roller Door - Service Toggle"
-  description: >
-    Open/close the front roller door for service staff.
-    Enables service mode (bypasses auto-close) when opening;
-    disables it when closing.
+  alias: Roller Door - Service Toggle
+  description: 'Open/close the front roller door for service staff. Enables service
+    mode (bypasses auto-close) when opening; disables it when closing.
+
+    '
   icon: mdi:garage
   sequence:
-    - if:
-        - condition: state
-          entity_id: input_boolean.door_service_mode
-          state: 'off'
-      then:
-        # Currently closed / service mode off → OPEN the door.
-        # LOCK resets C4 state to "locked"; the subsequent UNLOCK then
-        # triggers the motor.  Plain UNLOCK is a no-op if C4 state is
-        # already "unlocked" (can happen after testing or power events).
-        - action: shell_command.c4_lock_door
-        - delay: "00:00:01"
-        - action: shell_command.c4_unlock_door
-        - action: input_boolean.turn_on
-          target:
-            entity_id: input_boolean.door_service_mode
-      else:
-        # Currently open / service mode on → CLOSE the door
-        # LOCK resets C4 state to "locked"; UNLOCK then triggers the motor.
-        # Without LOCK first, C4 sees state already "unlocked" and ignores UNLOCK.
-        - action: shell_command.c4_lock_door
-        - delay: "00:00:01"
-        - action: shell_command.c4_unlock_door
-        - action: input_boolean.turn_off
-          target:
-            entity_id: input_boolean.door_service_mode
+  - if:
+    - condition: state
+      entity_id: input_boolean.door_service_mode
+      state: 'off'
+    then:
+    - action: shell_command.c4_lock_door
+    - delay: 00:00:01
+    - action: shell_command.c4_unlock_door
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.door_service_mode
+    else:
+    - action: shell_command.c4_lock_door
+    - delay: 00:00:01
+    - action: shell_command.c4_unlock_door
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.door_service_mode
   mode: single
-
 notify_script:
   use_blueprint:
     path: homeassistant/confirmable_notification.yaml
@@ -280,3 +265,84 @@ notify_script:
         data: {}
   alias: NOTIFY SCRIPT - Lights
   description: ''
+reconcile_bay_door_codes:
+  alias: Reconcile Bay Door Codes
+  description: 'Single source of truth for one bay''s 3 keypad slots. Reads the lane
+    calendar, builds the desired set of door codes (bookings from coach T-45 / customer
+    T-30 before start, through end+15min grace), then forces slots a/b/c to exactly
+    match that set: clears stale/duplicate/ended codes, loads missing ones. Idempotent
+    (no writes when already correct). Replaces the old activate + deactivate + catch-all.
+    Manual codes with no booking are NOT preserved.'
+  mode: queued
+  max: 6
+  fields:
+    cal:
+      description: Lane calendar entity_id
+    sa:
+      description: Slot A input_text entity_id
+    sb:
+      description: Slot B input_text entity_id
+    sc:
+      description: Slot C input_text entity_id
+    c4a:
+      description: Control4 slot number for A
+    c4b:
+      description: Control4 slot number for B
+    c4c:
+      description: Control4 slot number for C
+  sequence:
+  - action: calendar.get_events
+    target:
+      entity_id: '{{ cal }}'
+    data:
+      start_date_time: '{{ (now() - timedelta(minutes=30)).isoformat() }}'
+      end_date_time: '{{ (now() + timedelta(minutes=45)).isoformat() }}'
+    response_variable: evsraw
+  - variables:
+      desired: '{% set ns = namespace(items=[], codes=[]) %}{% set events = (evsraw.get(cal)
+        or {}).get(''events'', []) %}{% for e in events %}{% set desc = e.get(''description'')
+        or '''' %}{% set code = desc | regex_findall(''DOOR CODE: ([\d ]+)'') | first
+        | default('''') | replace('' '', '''') | trim %}{% set name = desc | regex_findall(''Customer:
+        (.+)'') | first | default(''Guest'') | trim %}{% set lead = 45 if ''Coach
+        Session'' in desc else 30 %}{% set sstr = e.get(''start'') | string %}{% set
+        estr = e.get(''end'') | string %}{% if code != '''' and code not in ns.codes
+        and ''T'' in sstr and ''T'' in estr %}{% set st = as_datetime(sstr) %}{% set
+        en = as_datetime(estr) %}{% if st is not none and en is not none and now()
+        >= (st - timedelta(minutes=lead)) and now() <= (en + timedelta(minutes=15))
+        %}{% set ns.items = ns.items + [code ~ '':'' ~ name] %}{% set ns.codes = ns.codes
+        + [code] %}{% endif %}{% endif %}{% endfor %}{{ ns.items[:3] }}'
+      target_a: '{{ desired[0] if (desired | length) > 0 else '''' }}'
+      target_b: '{{ desired[1] if (desired | length) > 1 else '''' }}'
+      target_c: '{{ desired[2] if (desired | length) > 2 else '''' }}'
+  - repeat:
+      for_each: '{{ [ {''e'': sa, ''c4'': c4a, ''t'': target_a}, {''e'': sb, ''c4'':
+        c4b, ''t'': target_b}, {''e'': sc, ''c4'': c4c, ''t'': target_c} ] }}'
+      sequence:
+      - choose:
+        - conditions:
+          - '{{ states(repeat.item.e) != repeat.item.t }}'
+          sequence:
+          - choose:
+            - conditions:
+              - '{{ repeat.item.t == '''' }}'
+              sequence:
+              - action: shell_command.c4_clear_code
+                data:
+                  slot: '{{ repeat.item.c4 }}'
+              - action: input_text.set_value
+                target:
+                  entity_id: '{{ repeat.item.e }}'
+                data:
+                  value: ''
+            default:
+            - action: shell_command.c4_set_code
+              data:
+                slot: '{{ repeat.item.c4 }}'
+                code: '{{ repeat.item.t.split('':'')[0] }}'
+                name: '{{ repeat.item.t.split('':'')[1] if '':'' in repeat.item.t
+                  else ''Guest'' }}'
+            - action: input_text.set_value
+              target:
+                entity_id: '{{ repeat.item.e }}'
+              data:
+                value: '{{ repeat.item.t }}'

@@ -3388,3 +3388,66 @@
     target:
       entity_id: automation.lucas_corbett_entry_notify_one_shot_22_jun
   mode: single
+- id: door_code_reconcile_allbays
+  alias: Door Code Reconcile - Every Minute (all bays)
+  description: 'Single source of truth for all 5 bays'' keypad slots. Every minute,
+    runs script.reconcile_bay_door_codes per bay: forces each bay''s 3 slots to exactly
+    match the calendar''s desired door codes (coach T-45 / customer T-30 before start
+    through end+15min grace) - loads missing, clears stale/ended/duplicate. Replaces
+    bay_N_door_code_activate + bay_N_door_code_deactivate + door_code_catch_all_every_minute
+    (all disabled 2026-06-23). Self-healing across HA restarts, missed end-triggers,
+    modified bookings. NOTE: manual codes with no booking are NOT preserved.'
+  triggers:
+  - trigger: time_pattern
+    minutes: /1
+  conditions:
+  - condition: time
+    after: 05:00:00
+    before: '23:00:00'
+  actions:
+  - action: script.reconcile_bay_door_codes
+    data:
+      cal: calendar.lane_1_bowling_machine
+      sa: input_text.bay1_code_slot_a
+      sb: input_text.bay1_code_slot_b
+      sc: input_text.bay1_code_slot_c
+      c4a: '11'
+      c4b: '12'
+      c4c: '13'
+  - action: script.reconcile_bay_door_codes
+    data:
+      cal: calendar.lane_2_bowling_machine
+      sa: input_text.bay2_code_slot_a
+      sb: input_text.bay2_code_slot_b
+      sc: input_text.bay2_code_slot_c
+      c4a: '14'
+      c4b: '15'
+      c4c: '16'
+  - action: script.reconcile_bay_door_codes
+    data:
+      cal: calendar.lane_3_truman_or_bowling_machine
+      sa: input_text.bay3_code_slot_a
+      sb: input_text.bay3_code_slot_b
+      sc: input_text.bay3_code_slot_c
+      c4a: '17'
+      c4b: '18'
+      c4c: '19'
+  - action: script.reconcile_bay_door_codes
+    data:
+      cal: calendar.lane_4_run_up_net
+      sa: input_text.bay4_code_slot_a
+      sb: input_text.bay4_code_slot_b
+      sc: input_text.bay4_code_slot_c
+      c4a: '20'
+      c4b: '21'
+      c4c: '22'
+  - action: script.reconcile_bay_door_codes
+    data:
+      cal: calendar.lane_5_run_up_net
+      sa: input_text.bay5_code_slot_a
+      sb: input_text.bay5_code_slot_b
+      sc: input_text.bay5_code_slot_c
+      c4a: '23'
+      c4b: '24'
+      c4c: '25'
+  mode: single
