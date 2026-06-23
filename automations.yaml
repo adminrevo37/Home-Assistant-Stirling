@@ -3388,31 +3388,3 @@
     target:
       entity_id: automation.lucas_corbett_entry_notify_one_shot_22_jun
   mode: single
-- id: new
-  alias: Front Door - Person at Intercom Push
-  description: Push to Julian's phone when a person is detected at the front intercom
-    camera (Control4 DS3 ring button is not exposed to HA, so person-detection is
-    the proxy for 'someone at the front door'). 90s self-cooldown to avoid spam.
-  triggers:
-  - trigger: state
-    entity_id: binary_sensor.front_intercom_person_occupancy
-    from: 'off'
-    to: 'on'
-  conditions:
-  - condition: template
-    value_template: '{{ this.attributes.last_triggered is none or (now() - this.attributes.last_triggered).total_seconds()
-      > 90 }}'
-  actions:
-  - action: notify.mobile_app_julian
-    data:
-      title: Someone at the front door
-      message: Person detected at the front intercom — {{ now().strftime('%-I:%M %p')
-        }}
-      data:
-        image: /api/camera_proxy/camera.front_intercom
-        tag: front-door-intercom
-        url: /ccab4aaf_frigate/cameras/front_intercom
-        push:
-          sound: default
-          interruption-level: time-sensitive
-  mode: single
