@@ -3451,3 +3451,18 @@
       c4b: '24'
       c4c: '25'
   mode: single
+- id: door_code_exempt_nightly_clear
+  alias: Door Code Exempt - Nightly Clear
+  description: Clears input_text.door_code_exempt every night at 22:30 so manual standing
+    door codes never persist past the day. The reconcile sweep (runs until 23:00)
+    then removes the now-unexempted code from its slot within a minute.
+  triggers:
+  - trigger: time
+    at: '22:30:00'
+  actions:
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.door_code_exempt
+    data:
+      value: ''
+  mode: single

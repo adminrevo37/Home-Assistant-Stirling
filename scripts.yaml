@@ -270,9 +270,10 @@ reconcile_bay_door_codes:
   description: 'Single source of truth for one bay''s 3 keypad slots. Reads the lane
     calendar, builds the desired set of door codes (bookings from coach T-45 / customer
     T-30 before start, through end+15min grace), then forces slots a/b/c to exactly
-    match that set: clears stale/duplicate/ended codes, loads missing ones. Idempotent
-    (no writes when already correct). Replaces the old activate + deactivate + catch-all.
-    Manual codes with no booking are NOT preserved.'
+    match that set: clears stale/duplicate/ended codes, loads missing ones. Calendar
+    codes take priority; any code listed in input_text.door_code_exempt that is currently
+    present in this bay is also kept (manual standing codes). Idempotent. Replaces
+    the old activate + deactivate + catch-all.'
   mode: queued
   max: 6
   fields:
@@ -310,7 +311,14 @@ reconcile_bay_door_codes:
         en = as_datetime(estr) %}{% if st is not none and en is not none and now()
         >= (st - timedelta(minutes=lead)) and now() <= (en + timedelta(minutes=15))
         %}{% set ns.items = ns.items + [code ~ '':'' ~ name] %}{% set ns.codes = ns.codes
-        + [code] %}{% endif %}{% endif %}{% endfor %}{{ ns.items[:3] }}'
+        + [code] %}{% endif %}{% endif %}{% endfor %}{% set slotcodes = [ states(sa).split('':'')[0],
+        states(sb).split('':'')[0], states(sc).split('':'')[0] ] %}{% set exraw =
+        states(''input_text.door_code_exempt'') %}{% set exlist = (exraw if exraw
+        not in [''unknown'',''unavailable'',''None''] else '''').split('','') %}{%
+        for ent in exlist %}{% set ent2 = ent | trim %}{% set ecode = (ent2.split('':'')[0])
+        | trim %}{% if ent2 != '''' and ecode != '''' and ecode in slotcodes and ecode
+        not in ns.codes %}{% set ns.items = ns.items + [ent2] %}{% set ns.codes =
+        ns.codes + [ecode] %}{% endif %}{% endfor %}{{ ns.items[:3] }}'
       target_a: '{{ desired[0] if (desired | length) > 0 else '''' }}'
       target_b: '{{ desired[1] if (desired | length) > 1 else '''' }}'
       target_c: '{{ desired[2] if (desired | length) > 2 else '''' }}'
