@@ -3471,9 +3471,9 @@
 - id: machine_audit_booking_start
   alias: Machine Audit - Booking Start (capture baseline)
   description: At each lane booking start, records the lane's cumulative machine-minutes
-    counter as the baseline and captures the booking context (customer|bookedMinutes|startISO)
+    counter as the baseline and captures the booking context (customer|bookedMinutes|startISO|email)
     into the lane's audit-booking helper. Paired with Machine Audit - Booking End.
-    Built 2026-06-24.
+    Built 2026-06-24; email appended 2026-06-25 for Krickora Phase-2 matching.
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -3504,9 +3504,11 @@
     n: '{{ trigger.id[1] }}'
     cust: '{{ (trigger.calendar_event.description or '''') | regex_findall(''Customer:
       (.+)'') | first | default(''Unknown'') | trim }}'
+    email: '{{ (trigger.calendar_event.description or '''') | regex_findall(''Email:
+      (.+)'') | first | default('''') | trim }}'
     booked: '{{ ((as_datetime(trigger.calendar_event.end) - as_datetime(trigger.calendar_event.start)).total_seconds()
       / 60) | round(0) | int }}'
-    ctx: '{{ cust }}|{{ booked }}|{{ trigger.calendar_event.start }}'
+    ctx: '{{ cust }}|{{ booked }}|{{ trigger.calendar_event.start }}|{{ email }}'
 - id: machine_audit_booking_end
   alias: Machine Audit - Booking End (compute + record)
   description: At each lane booking end, computes actual machine-use minutes (current
