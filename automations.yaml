@@ -3468,3 +3468,98 @@
     data:
       value: ''
   mode: single
+- id: machine_audit_booking_start
+  alias: Machine Audit - Booking Start (capture baseline)
+  description: At each lane booking start, records the lane's cumulative machine-minutes
+    counter as the baseline and captures the booking context (customer|bookedMinutes|startISO)
+    into the lane's audit-booking helper. Paired with Machine Audit - Booking End.
+    Built 2026-06-24.
+  triggers:
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
+    id: l1
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
+    id: l2
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    id: l3
+  actions:
+  - action: input_number.set_value
+    target:
+      entity_id: input_number.lane_{{ n }}_audit_baseline
+    data:
+      value: '{{ states(''sensor.lane_'' ~ n ~ ''_machine_minutes'') | float(0) }}'
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.lane_{{ n }}_audit_booking
+    data:
+      value: '{{ ctx }}'
+  mode: queued
+  max: 10
+  variables:
+    n: '{{ trigger.id[1] }}'
+    cust: '{{ (trigger.calendar_event.description or '''') | regex_findall(''Customer:
+      (.+)'') | first | default(''Unknown'') | trim }}'
+    booked: '{{ ((as_datetime(trigger.calendar_event.end) - as_datetime(trigger.calendar_event.start)).total_seconds()
+      / 60) | round(0) | int }}'
+    ctx: '{{ cust }}|{{ booked }}|{{ trigger.calendar_event.start }}'
+- id: machine_audit_booking_end
+  alias: Machine Audit - Booking End (compute + record)
+  description: At each lane booking end, computes actual machine-use minutes (current
+    counter minus the baseline captured at start), reads the booked duration + customer
+    from the captured context, logs a utilisation record to the logbook + the Machine
+    Audit Last Record helper, then clears the lane's audit-booking helper. Phase 1
+    (HA). Phase 2 = POST to a Krickora endpoint to pair with customer stats. Built
+    2026-06-24.
+  triggers:
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: end
+    id: l1
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: end
+    id: l2
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: end
+    id: l3
+  conditions:
+  - condition: template
+    value_template: '{{ (ctx | trim) != '''' }}'
+  actions:
+  - action: logbook.log
+    data:
+      name: Machine Audit
+      message: '{{ rec }}'
+      entity_id: sensor.lane_{{ n }}_machine_minutes
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.machine_audit_last_record
+    data:
+      value: '{{ rec[:255] }}'
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.lane_{{ n }}_audit_booking
+    data:
+      value: ''
+  mode: queued
+  max: 10
+  variables:
+    n: '{{ trigger.id[1] }}'
+    counter: '{{ states(''sensor.lane_'' ~ n ~ ''_machine_minutes'') | float(0) }}'
+    baseline: '{{ states(''input_number.lane_'' ~ n ~ ''_audit_baseline'') | float(0)
+      }}'
+    used: '{{ (counter - baseline) | round(1) }}'
+    ctx: '{{ states(''input_text.lane_'' ~ n ~ ''_audit_booking'') | default('''')
+      }}'
+    cust: '{{ ctx.split(''|'')[0] if ''|'' in ctx else ''Unknown'' }}'
+    booked: '{{ (ctx.split(''|'')[1] | float(0)) if (ctx.split(''|'') | length) >
+      1 else 0 }}'
+    util: '{{ ((used / booked * 100) | round(0)) if booked > 0 else 0 }}'
+    rec: Lane {{ n }} | {{ cust }} | booked {{ booked | int }}m / used {{ used }}m
+      ({{ util }}%)
