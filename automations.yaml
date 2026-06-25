@@ -3511,12 +3511,12 @@
     ctx: '{{ cust }}|{{ booked }}|{{ trigger.calendar_event.start }}|{{ email }}'
 - id: machine_audit_booking_end
   alias: Machine Audit - Booking End (compute + record)
-  description: At each lane booking end, computes actual machine-use minutes (current
-    counter minus the baseline captured at start), reads the booked duration + customer
-    from the captured context, logs a utilisation record to the logbook + the Machine
-    Audit Last Record helper, then clears the lane's audit-booking helper. Phase 1
-    (HA). Phase 2 = POST to a Krickora endpoint to pair with customer stats. Built
-    2026-06-24.
+  description: 'At each lane booking end: actual machine-use minutes (counter - baseline),
+    util%, logs a ''Machine Audit'' logbook record + Machine Audit Last Record helper,
+    and POSTs {ts,lane,customer,email,bookedMin,usedMin,utilPct,startISO} to Krickora
+    /ha/usage via shell_command.usage_webhook (HMAC-signed, continue_on_error so logging
+    still works if the shell_command/key isn''t wired yet). Then clears the lane''s
+    audit-booking helper. Built 2026-06-24; POST wired 2026-06-25.'
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -3544,6 +3544,10 @@
       entity_id: input_text.machine_audit_last_record
     data:
       value: '{{ rec[:255] }}'
+  - action: shell_command.usage_webhook
+    data:
+      payload: '{{ payload }}'
+    continue_on_error: true
   - action: input_text.set_value
     target:
       entity_id: input_text.lane_{{ n }}_audit_booking
@@ -3559,9 +3563,15 @@
     used: '{{ (counter - baseline) | round(1) }}'
     ctx: '{{ states(''input_text.lane_'' ~ n ~ ''_audit_booking'') | default('''')
       }}'
-    cust: '{{ ctx.split(''|'')[0] if ''|'' in ctx else ''Unknown'' }}'
-    booked: '{{ (ctx.split(''|'')[1] | float(0)) if (ctx.split(''|'') | length) >
-      1 else 0 }}'
+    parts: '{{ ctx.split(''|'') }}'
+    cust: '{{ parts[0] if (parts | length) > 0 else ''Unknown'' }}'
+    booked: '{{ (parts[1] | float(0)) if (parts | length) > 1 else 0 }}'
+    startiso: '{{ parts[2] if (parts | length) > 2 else '''' }}'
+    email: '{{ parts[3] if (parts | length) > 3 else '''' }}'
     util: '{{ ((used / booked * 100) | round(0)) if booked > 0 else 0 }}'
     rec: Lane {{ n }} | {{ cust }} | booked {{ booked | int }}m / used {{ used }}m
       ({{ util }}%)
+    payload: '{"ts": {{ now().timestamp() | int }}, "lane": {{ n | int }}, "customer":
+      {{ cust | tojson }}, "email": {{ email | tojson }}, "bookedMin": {{ booked |
+      int }}, "usedMin": {{ used }}, "utilPct": {{ util }}, "startISO": {{ startiso
+      | tojson }}}'
