@@ -2788,10 +2788,10 @@
   alias: Lane 1 - Bowling Machine Power
   description: "Powers Lane 1's two bowling-machine plugs around bookings (calendar.lane_1_bowling_machine).
     Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
-    on -5/off +3. TRUMAN GATING LIVE (keyed off input_select.truman_location): non-Truman
-    lane -> both; Truman lane -> coach=both, customer with '(Truman)'=both, customer
-    without=normal plug only. Keep-on unchanged. Built 2026-06-18; Truman gating wired
-    2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+    on -10/off +10 (offsets unified 2026-06-24: all bookings -10/+10). TRUMAN GATING
+    LIVE (keyed off input_select.truman_location): non-Truman lane -> both; Truman
+    lane -> coach=both, customer with '(Truman)'=both, customer without=normal plug
+    only. Keep-on unchanged. Built 2026-06-18; Truman gating wired 2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -2801,12 +2801,12 @@
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
     event: start
-    offset: -0:05:00
+    offset: -0:10:00
     id: cust_start
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
     event: end
-    offset: 0:03:00
+    offset: 0:10:00
     id: cust_end
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -2864,9 +2864,10 @@
   alias: Lane 2 - Bowling Machine Power
   description: "Powers Lane 2's two bowling-machine plugs around bookings (calendar.lane_2_bowling_machine).
     Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
-    on -5/off +3. TRUMAN GATING LIVE (input_select.truman_location): non-Truman lane
-    -> both; Truman lane -> coach=both, customer '(Truman)'=both, customer without=normal
-    only. Keep-on unchanged. Truman gating wired 2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+    on -10/off +10 (offsets unified 2026-06-24: all bookings -10/+10). TRUMAN GATING
+    LIVE (input_select.truman_location): non-Truman lane -> both; Truman lane -> coach=both,
+    customer '(Truman)'=both, customer without=normal only. Keep-on unchanged. Truman
+    gating wired 2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
@@ -2876,12 +2877,12 @@
   - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
     event: start
-    offset: -0:05:00
+    offset: -0:10:00
     id: cust_start
   - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
     event: end
-    offset: 0:03:00
+    offset: 0:10:00
     id: cust_end
   - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
@@ -2939,9 +2940,10 @@
   alias: Lane 3 - Bowling Machine Power
   description: "Powers Lane 3's two bowling-machine plugs around bookings (calendar.lane_3_truman_or_bowling_machine).
     Coach (\U0001F3CF Coach Session) on -10/off +10; customer (\U0001F3AF Net Session)
-    on -5/off +3. TRUMAN GATING LIVE (input_select.truman_location): non-Truman lane
-    -> both; Truman lane -> coach=both, customer '(Truman)'=both, customer without=normal
-    only. Keep-on unchanged. Truman gating wired 2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
+    on -10/off +10 (offsets unified 2026-06-24: all bookings -10/+10). TRUMAN GATING
+    LIVE (input_select.truman_location): non-Truman lane -> both; Truman lane -> coach=both,
+    customer '(Truman)'=both, customer without=normal only. Keep-on unchanged. Truman
+    gating wired 2026-06-20 -> SPEC_ZIGBEE_BOWLING_MACHINE_POWER_2026-06."
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
@@ -2951,12 +2953,12 @@
   - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
     event: start
-    offset: -0:05:00
+    offset: -0:10:00
     id: cust_start
   - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
     event: end
-    offset: 0:03:00
+    offset: 0:10:00
     id: cust_end
   - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
