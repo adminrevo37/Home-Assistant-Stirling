@@ -383,6 +383,36 @@ class MatterLock(BaseLock):
                 exc_info=True,
             )
 
+    async def _invoke_sdk(self, operation: str, coro: Any) -> Any:
+        """
+        Translate raw Matter SDK exceptions into typed seam exceptions.
+
+        Single choke point so individual call sites cannot forget the
+        translation. The three Matter exception families do not subclass each
+        other -- ``MatterError`` and ``MatterClientException`` are independent of
+        ``HomeAssistantError`` -- so a startup ``InvalidState: Not connected``
+        (issue #1257) escapes any site that catches only one family, reaching the
+        sync catchall and suspending the slot. Routing every SDK call through
+        here makes a missed family structurally impossible:
+        ``test_sdk_exception_translation`` fails the build if a new SDK call
+        bypasses this method.
+
+        ``operation`` is the SDK function name woven into the error messages so
+        they stay diagnosable. ``ServiceValidationError`` is a subclass of
+        ``HomeAssistantError`` and maps to ``LockOperationFailed`` (the input was
+        rejected, not the transport), so it MUST be caught first.
+        """
+        try:
+            return await coro
+        except ServiceValidationError as err:
+            raise LockOperationFailed(
+                f"Matter {operation} rejected input for {self.lock.entity_id}: {err}"
+            ) from err
+        except (HomeAssistantError, MatterError, MatterClientException) as err:
+            raise LockDisconnected(
+                f"Matter {operation} failed for {self.lock.entity_id}: {err}"
+            ) from err
+
     # -- Credential primitives -----------------------------------------------
 
     async def _raw_lock_users(self) -> list[dict[str, Any]]:
@@ -396,16 +426,9 @@ class MatterLock(BaseLock):
         callers want the lock's own identifiers.
         """
         client, node = self._require_client_and_node()
-        try:
-            lock_data = await get_lock_users(client, node)
-        except ServiceValidationError as err:
-            raise LockOperationFailed(
-                f"Matter get_lock_users rejected input for {self.lock.entity_id}: {err}"
-            ) from err
-        except HomeAssistantError as err:
-            raise LockDisconnected(
-                f"Matter get_lock_users failed for {self.lock.entity_id}: {err}"
-            ) from err
+        lock_data = await self._invoke_sdk(
+            "get_lock_users", get_lock_users(client, node)
+        )
         return lock_data.get("users", [])
 
     async def async_get_users(self) -> list[User]:
@@ -474,16 +497,7 @@ class MatterLock(BaseLock):
         to 0 (unknown capacity) rather than raising.
         """
         client, node = self._require_client_and_node()
-        try:
-            info = await get_lock_info(client, node)
-        except ServiceValidationError as err:
-            raise LockOperationFailed(
-                f"Matter get_lock_info rejected input for {self.lock.entity_id}: {err}"
-            ) from err
-        except HomeAssistantError as err:
-            raise LockDisconnected(
-                f"Matter get_lock_info failed for {self.lock.entity_id}: {err}"
-            ) from err
+        info = await self._invoke_sdk("get_lock_info", get_lock_info(client, node))
 
         credential_types: dict[CredentialType, CredentialTypeCapability] = {}
         if "pin" in (info.get("supported_credential_types") or []):
@@ -690,7 +704,12 @@ class MatterLock(BaseLock):
                     f"Matter set_lock_user rejected input for "
                     f"{self.lock.entity_id} (user_name={name!r}): {err}"
                 ) from err
-            except HomeAssistantError as err:
+            except (HomeAssistantError, MatterClientException) as err:
+                # Transport failures (incl. ``InvalidState: Not connected`` at
+                # startup, issue #1257) are not charset-recoverable -- the next
+                # candidate name hits the same closed connection -- so short-
+                # circuit to retry instead of falling through. MatterClientException
+                # is independent of HomeAssistantError, hence the explicit catch.
                 raise LockDisconnected(
                     f"Matter set_lock_user failed for {self.lock.entity_id} "
                     f"(user_name={name!r}): {err}"
@@ -774,16 +793,9 @@ class MatterLock(BaseLock):
         credentials and schedules for the user per the Matter specification.
         """
         client, node = self._require_client_and_node()
-        try:
-            await clear_lock_user(client, node, user_id)
-        except ServiceValidationError as err:
-            raise LockOperationFailed(
-                f"Matter clear_lock_user rejected input for {self.lock.entity_id}: {err}"
-            ) from err
-        except HomeAssistantError as err:
-            raise LockDisconnected(
-                f"Matter clear_lock_user failed for {self.lock.entity_id}: {err}"
-            ) from err
+        await self._invoke_sdk(
+            "clear_lock_user", clear_lock_user(client, node, user_id)
+        )
 
     async def async_release_managed_slot(self, slot: int) -> None:
         """
@@ -1025,24 +1037,15 @@ class MatterLock(BaseLock):
             return False
 
         client, node = self._require_client_and_node()
-        try:
-            await clear_lock_credential(
+        await self._invoke_sdk(
+            "clear_lock_credential",
+            clear_lock_credential(
                 client,
                 node,
                 credential_type="pin",
                 credential_index=credential_index,
-            )
-        except ServiceValidationError as err:
-            raise LockOperationFailed(
-                f"Matter clear_lock_credential rejected input for "
-                f"{self.lock.entity_id}: {err}"
-            ) from err
-        except (HomeAssistantError, MatterError, MatterClientException) as err:
-            # Connectivity/server failure (incl. ``InvalidState: Not connected``
-            # at startup, issue #1257) -> retry rather than suspend.
-            raise LockDisconnected(
-                f"Matter clear_lock_credential failed for {self.lock.entity_id}: {err}"
-            ) from err
+            ),
+        )
 
         self._push_credential_update(ref.slot, SlotCredential.empty())
         return True
