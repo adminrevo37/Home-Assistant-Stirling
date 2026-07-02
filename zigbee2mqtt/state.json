@@ -1,16 +1,16 @@
 {
     "0x54ef4410014ae72a": {
-        "contact": false,
-        "voltage": 3085,
+        "contact": true,
+        "voltage": 3087,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 9,
-        "state": "ON",
+        "state": "OFF",
         "linkquality": 92
     },
     "0xa4c138074803a9a9": {
-        "energy": 96.96,
-        "voltage": 237,
+        "energy": 100.44,
+        "voltage": 238,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
@@ -18,12 +18,12 @@
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
         "power": 145,
-        "current": 0.71,
+        "current": 0.7,
         "linkquality": 188
     },
     "0xa4c138ba345696ae": {
         "state": "ON",
-        "energy": 2.28,
+        "energy": 2.35,
         "voltage": 238,
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -44,8 +44,8 @@
         "linkquality": 112
     },
     "0xa4c13851f47cb91d": {
-        "energy": 3.14,
-        "voltage": 243,
+        "energy": 3.48,
+        "voltage": 241,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,8 +70,8 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 242,
-        "energy": 3.67,
+        "voltage": 241,
+        "energy": 4.21,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -83,7 +83,7 @@
         "linkquality": 80
     },
     "0xa4c13879a2af63a1": {
-        "energy": 0.99,
+        "energy": 1.19,
         "voltage": 242,
         "state": "OFF",
         "countdown": 0,
@@ -96,8 +96,8 @@
         "linkquality": 108
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 1.92,
-        "voltage": 241,
+        "energy": 2.19,
+        "voltage": 240,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
