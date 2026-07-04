@@ -1837,8 +1837,8 @@
     -> unlock lock.front_door_lock + log. No match -> log. Fully self-contained templates
     (no inter-variable refs). See BUILD_KEYPAD_PATH_A_JAYCAR.md.
   triggers:
-  - platform: event
-    event_type: esphome.keypad_code
+  - event_type: esphome.keypad_code
+    trigger: event
   actions:
   - condition: template
     value_template: '{{ ((trigger.event.data.pin | default('''') | string) | regex_replace(''[^0-9]'',
@@ -1861,7 +1861,8 @@
     - action: logbook.log
       data:
         name: Keypad Entry
-        message: Invalid code attempt — door not opened
+        message: Invalid code attempt (typed {{ (trigger.event.data.pin | default('')
+          | string) | regex_replace('[^0-9]','') }}) - door not opened
         entity_id: lock.front_door_lock
   - action: shell_command.entry_webhook
     data:
@@ -1878,6 +1879,8 @@
       ~ s) %}{% if val and '':'' in val and (val.split('':'', 1)[0] | trim) == t and
       t != '''' %}{% set ns.found = n ~ ''|'' ~ val.split('':'', 1)[1] %}{% endif
       %}{% endfor %}{% endfor %}{{ ns.found }}'
+  trace:
+    stored_traces: 30
 - id: '1780392305276'
   alias: Zigbee - Low Battery Alert
   description: Notify Julian when a battery-powered Zigbee device drops below 50%
