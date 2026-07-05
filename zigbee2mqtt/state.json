@@ -1,7 +1,7 @@
 {
     "0x54ef4410014ae72a": {
         "contact": true,
-        "voltage": 3080,
+        "voltage": 3079,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 9,
@@ -9,7 +9,7 @@
         "linkquality": 92
     },
     "0xa4c138074803a9a9": {
-        "energy": 107.39,
+        "energy": 110.9,
         "voltage": 237,
         "state": "ON",
         "countdown": 0,
@@ -17,14 +17,14 @@
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 143,
-        "current": 0.7,
+        "power": 146,
+        "current": 0.71,
         "linkquality": 188
     },
     "0xa4c138ba345696ae": {
         "state": "ON",
-        "energy": 2.48,
-        "voltage": 239,
+        "energy": 2.54,
+        "voltage": 236,
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
@@ -44,8 +44,8 @@
         "linkquality": 112
     },
     "0xa4c13851f47cb91d": {
-        "energy": 4.17,
-        "voltage": 242,
+        "energy": 4.59,
+        "voltage": 241,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,8 +70,8 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 239,
-        "energy": 5.07,
+        "voltage": 242,
+        "energy": 5.53,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -83,8 +83,8 @@
         "linkquality": 80
     },
     "0xa4c13879a2af63a1": {
-        "energy": 1.38,
-        "voltage": 239,
+        "energy": 1.63,
+        "voltage": 241,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -96,9 +96,9 @@
         "linkquality": 108
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 2.6,
-        "voltage": 239,
-        "state": "OFF",
+        "energy": 2.87,
+        "voltage": 240,
+        "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
