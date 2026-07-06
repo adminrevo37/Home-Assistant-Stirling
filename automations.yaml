@@ -3578,3 +3578,70 @@
       {{ cust | tojson }}, "email": {{ email | tojson }}, "bookedMin": {{ booked |
       int }}, "usedMin": {{ used }}, "utilPct": {{ util }}, "startISO": {{ startiso
       | tojson }}}'
+- id: roller_door_auto_close_retry
+  alias: Roller Door - Auto-Close Retry (3 min -> 2 pulses -> notify Julian)
+  description: If binary_sensor.roller_door_contact stays OPEN for 3 min (operator
+    30s auto-close failed / door left open), pulse the OPERATE relay (lock.unlock
+    on lock.front_door_lock) to close it. Wait up to 20s for the contact to read closed;
+    if still open, pulse again; wait another 20s; if STILL open, snapshot camera.pier_facing_entry
+    and push Julian with the embedded image. Suppressed while input_boolean.door_service_mode
+    (hold-open) is on. Pulse = lock.unlock (proven door OPERATE; lock auto-relocks
+    between pulses). Built 2026-07-06.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.roller_door_contact
+    to: 'on'
+    for: 00:03:00
+  conditions:
+  - condition: state
+    entity_id: input_boolean.door_service_mode
+    state: 'off'
+  actions:
+  - action: lock.unlock
+    target:
+      entity_id: lock.front_door_lock
+  - wait_for_trigger:
+    - trigger: state
+      entity_id: binary_sensor.roller_door_contact
+      to: 'off'
+    timeout: 00:00:20
+    continue_on_timeout: true
+  - if:
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact
+      state: 'off'
+    then:
+    - stop: Roller door closed after attempt 1
+  - action: lock.unlock
+    target:
+      entity_id: lock.front_door_lock
+  - wait_for_trigger:
+    - trigger: state
+      entity_id: binary_sensor.roller_door_contact
+      to: 'off'
+    timeout: 00:00:20
+    continue_on_timeout: true
+  - if:
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact
+      state: 'off'
+    then:
+    - stop: Roller door closed after attempt 2
+  - action: camera.snapshot
+    target:
+      entity_id: camera.pier_facing_entry
+    data:
+      filename: /config/www/door_autoclose_snapshot.jpg
+  - delay: 00:00:02
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F6A8 Roller Door Won't Close"
+      message: The front roller door was open 3 min. HA tried to close it twice and
+        it is STILL open - please review the entry.
+      data:
+        image: /local/door_autoclose_snapshot.jpg
+        url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+        clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+  mode: single
+  trace:
+    stored_traces: 20
