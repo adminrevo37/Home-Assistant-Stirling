@@ -3473,22 +3473,28 @@
   mode: single
 - id: machine_audit_booking_start
   alias: Machine Audit - Booking Start (capture baseline)
-  description: At each lane booking start, records the lane's cumulative machine-minutes
+  description: 'At each lane booking start, records the lane''s cumulative machine-minutes
     counter as the baseline and captures the booking context (customer|bookedMinutes|startISO|email)
-    into the lane's audit-booking helper. Paired with Machine Audit - Booking End.
-    Built 2026-06-24; email appended 2026-06-25 for Krickora Phase-2 matching.
+    into the lane''s audit-booking helper. Paired with Machine Audit - Booking End.
+    Built 2026-06-24; email appended 2026-06-25. 2026-07-06: start triggers offset
+    +15s so that at a back-to-back boundary the ENDing booking reads its baseline
+    before this start overwrites it (fixes earlier-booking used=0 race; ending booking
+    is attributed up to its exact end time).'
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
     event: start
+    offset: 0:00:15
     id: l1
   - trigger: calendar
     entity_id: calendar.lane_2_bowling_machine
     event: start
+    offset: 0:00:15
     id: l2
   - trigger: calendar
     entity_id: calendar.lane_3_truman_or_bowling_machine
     event: start
+    offset: 0:00:15
     id: l3
   actions:
   - action: input_number.set_value
@@ -3643,5 +3649,62 @@
         url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
         clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
   mode: single
+  trace:
+    stored_traces: 20
+- id: notification_log_capture
+  alias: Notification Log - Capture pushes to Julian
+  description: Intercepts every push sent to Julian (notify.mobile_app_julian and
+    notify.notify) and (1) mirrors the latest into a single rolling HA persistent
+    notification (the bell) so opening HA shows what the last push was + why, (2)
+    writes a timestamped Logbook history against input_text.last_ha_notification,
+    (3) stores the latest text in that helper for a dashboard tile. Captures without
+    editing the ~13 alert automations. Built 2026-07-06.
+  triggers:
+  - trigger: event
+    event_type: call_service
+    event_data:
+      domain: notify
+      service: mobile_app_julian
+    id: julian
+  - trigger: event
+    event_type: call_service
+    event_data:
+      domain: notify
+      service: notify
+    id: broad
+  actions:
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.last_ha_notification
+    data:
+      value: '{{ (now().strftime(''%H:%M'') ~ ''  '' ~ title ~ '': '' ~ message)[:255]
+        }}'
+  - action: logbook.log
+    data:
+      name: Push to Julian
+      message: '{{ title }} - {{ message }} (via notify.{{ svc }})'
+      entity_id: input_text.last_ha_notification
+  - action: persistent_notification.create
+    data:
+      notification_id: last_ha_push
+      title: 'Last push: {{ title }}'
+      message: '{{ message }}
+
+
+        ---
+
+        Sent {{ stamp }} via notify.{{ svc }}
+
+        (This is the most recent push to your phone. Full history: Logbook -> filter
+        ''Last HA Notification''.)'
+  mode: queued
+  max: 30
+  variables:
+    title: '{{ trigger.event.data.service_data.title | default(''Notification'', true)
+      }}'
+    message: '{{ trigger.event.data.service_data.message | default(''(no message)'',
+      true) }}'
+    svc: '{{ trigger.event.data.service }}'
+    stamp: '{{ now().strftime(''%a %d %b %-I:%M %p'') }}'
   trace:
     stored_traces: 20
