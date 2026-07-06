@@ -134,7 +134,7 @@ sensor:
       minutes: 5
 
 shell_command:
-  usage_webhook: 'python3 /config/usage_webhook.py {{ payload | base64_encode }}'
+  usage_webhook: 'python3 /config/usage_webhook.py {{ payload | to_json | base64_encode }}'
   entry_webhook: 'python3 /config/entry_webhook.py "{{ code }}" "{{ result }}" "{{ bay }}"'
   git_push: bash /config/git_push.sh
   git_pull: bash /config/git_pull.sh
