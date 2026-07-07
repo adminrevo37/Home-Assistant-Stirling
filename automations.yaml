@@ -1598,27 +1598,50 @@
   mode: single
 - id: '1780149364218'
   alias: Lighting - Absolute All-Off Catch-All
-  description: 'Absolute backstop: at the configured catch-all time (default 23:00),
-    force all highbays + common lights off regardless of state. Covers zero-booking
-    days and any night the dynamic hard-off did not arm.'
+  description: 'Absolute backstop: at the configured catch-all time (input_datetime.lighting_hard_off_catchall)
+    force all highbays + common lights off. Covers zero-booking days and any night
+    the dynamic hard-off did not arm. UPDATED 2026-07-07 for after-hours (9-10pm)
+    bookings: (a) active-booking GUARD - if any lane calendar is still ''on'' (a live
+    session) it SKIPS the force-off and logs, leaving the bay-end / night-shutdown
+    automations to clear the lights after the session; (b) catch-all time bumped 22:15
+    -> 22:45 for margin after the 10pm after-hours grace-off (22:10).'
   triggers:
   - trigger: time
     at: input_datetime.lighting_hard_off_catchall
+  conditions: []
   actions:
-  - action: input_boolean.turn_off
-    target:
-      entity_id: input_boolean.lighting_all_lanes_active
-  - action: light.turn_off
-    target:
+  - if:
+    - condition: state
       entity_id:
-      - light.highbay_1
-      - light.highbay_2
-      - light.highbay_3
-      - light.highbay_4
-      - light.highbay_5
-      - light.inside_wall_lights
-      - light.fluro_x_4
-      - light.mezzanine_wall_lights
+      - calendar.lane_1_bowling_machine
+      - calendar.lane_2_bowling_machine
+      - calendar.lane_3_truman_or_bowling_machine
+      - calendar.lane_4_run_up_net
+      - calendar.lane_5_run_up_net
+      state: 'off'
+    then:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.lighting_all_lanes_active
+    - action: light.turn_off
+      target:
+        entity_id:
+        - light.highbay_1
+        - light.highbay_2
+        - light.highbay_3
+        - light.highbay_4
+        - light.highbay_5
+        - light.inside_wall_lights
+        - light.fluro_x_4
+        - light.mezzanine_wall_lights
+    else:
+    - action: logbook.log
+      data:
+        name: Lighting Catch-All
+        message: Absolute all-off SKIPPED - a lane booking is still active (after-hours
+          session). Lights left on; bay-end / night-shutdown will clear them after
+          it ends.
+        entity_id: input_datetime.lighting_hard_off_catchall
   mode: single
 - id: '1780149365937'
   alias: Office Lights - Scheduled Off Sweep
