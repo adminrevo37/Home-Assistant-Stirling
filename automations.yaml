@@ -1603,8 +1603,8 @@
     the dynamic hard-off did not arm. UPDATED 2026-07-07 for after-hours (9-10pm)
     bookings: (a) active-booking GUARD - if any lane calendar is still ''on'' (a live
     session) it SKIPS the force-off and logs, leaving the bay-end / night-shutdown
-    automations to clear the lights after the session; (b) catch-all time bumped 22:15
-    -> 22:45 for margin after the 10pm after-hours grace-off (22:10).'
+    automations to clear the lights after the session; (b) catch-all time set to 22:30
+    (was 22:15) for margin after the 10pm after-hours grace-off (22:10).'
   triggers:
   - trigger: time
     at: input_datetime.lighting_hard_off_catchall
