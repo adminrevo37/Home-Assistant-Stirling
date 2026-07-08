@@ -3840,3 +3840,51 @@
   mode: single
   trace:
     stored_traces: 20
+- id: lane_display_tv_power
+  alias: Lane Display TV - Power (booking window)
+  description: Powers the lane-display TV's Zigbee plug (switch.lane_display_tv) ON
+    from ~25 min before the day's first lane booking to ~15 min after the day's last,
+    OFF otherwise. Slightly wider than the Pi's CEC on-window so the TV always has
+    clean power when the board should show. With the TV set to 'Power On Mode = On',
+    re-powering turns it on without CEC - the durable fix for the Falcon deep-standby
+    issue. Per-5-min + on-HA-start = restart-safe. Built 2026-07-08.
+  triggers:
+  - trigger: time_pattern
+    minutes: /5
+  - trigger: homeassistant
+    event: start
+  actions:
+  - action: calendar.get_events
+    target:
+      entity_id:
+      - calendar.lane_1_bowling_machine
+      - calendar.lane_2_bowling_machine
+      - calendar.lane_3_truman_or_bowling_machine
+      - calendar.lane_4_run_up_net
+      - calendar.lane_5_run_up_net
+    data:
+      start_date_time: '{{ today_at(''00:00'') }}'
+      end_date_time: '{{ today_at(''23:59:59'') }}'
+    response_variable: tv_events
+  - variables:
+      want_on: '{% set ns = namespace(starts=[], ends=[]) %}{% for cal, d in tv_events.items()
+        %}{% for e in (d.events | default([])) %}{% set s = e.start.dateTime if (e.start
+        is mapping) else e.start %}{% set en = e.end.dateTime if (e.end is mapping)
+        else e.end %}{% set ns.starts = ns.starts + [as_datetime(s)] %}{% set ns.ends
+        = ns.ends + [as_datetime(en)] %}{% endfor %}{% endfor %}{% if ns.starts |
+        count == 0 %}false{% else %}{{ (now() >= (ns.starts | min) - timedelta(minutes=25))
+        and (now() <= (ns.ends | max) + timedelta(minutes=15)) }}{% endif %}'
+  - if:
+    - condition: template
+      value_template: '{{ want_on | bool(false) }}'
+    then:
+    - action: switch.turn_on
+      target:
+        entity_id: switch.lane_display_tv
+    else:
+    - action: switch.turn_off
+      target:
+        entity_id: switch.lane_display_tv
+  mode: single
+  trace:
+    stored_traces: 20
