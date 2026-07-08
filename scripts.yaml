@@ -354,3 +354,22 @@ reconcile_bay_door_codes:
                 entity_id: '{{ repeat.item.e }}'
               data:
                 value: '{{ repeat.item.t }}'
+team_door_open_short:
+  alias: Team Door - Open & Stop Short
+  description: Pulses the roller-door OPERATE relay to open, waits 17.5s, then pulses
+    again to STOP the door just short of fully open - this prevents the operator's
+    30s auto-close from arming, so the door stays open. Used by the team-booking auto-door.
+    Assumes the door is CLOSED when called. Pulse = lock.unlock on lock.front_door_lock
+    (same OPERATE actuator as normal entry). Built 2026-07-07.
+  icon: mdi:door-sliding-open
+  mode: single
+  sequence:
+  - action: lock.unlock
+    target:
+      entity_id: lock.front_door_lock
+  - delay:
+      seconds: 17
+      milliseconds: 500
+  - action: lock.unlock
+    target:
+      entity_id: lock.front_door_lock
