@@ -3701,6 +3701,10 @@
       domain: notify
       service: notify
     id: broad
+  conditions:
+  - condition: template
+    value_template: '{{ (trigger.event.data.service_data.message | default(''''))
+      not in [''clear_notification'', ''remove_notification''] }}'
   actions:
   - action: input_text.set_value
     target:
