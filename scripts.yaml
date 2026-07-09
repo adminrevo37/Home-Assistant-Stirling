@@ -373,3 +373,83 @@ team_door_open_short:
   - action: lock.unlock
     target:
       entity_id: lock.front_door_lock
+reconcile_highbay_lights:
+  alias: Reconcile Highbay Lights (to bookings)
+  description: 'Re-derives every highbay''s correct state from the bay helpers + day/night
+    + busy mode and sets each on/off to match. Fixes highbay light drift after a Control4
+    dropout: during a C4 outage the calendar bay start/end automations still set the
+    HA-side bay helpers correctly, but their C4 light commands are lost - this re-applies
+    the right lights when C4 returns. Desired hbN = busy-mode OR its own bay booked
+    OR (dark AND a neighbour lane booked); hb3 also stays on whenever dark (night
+    residual). Built 2026-07-09.'
+  icon: mdi:wall-sconce-flat
+  mode: single
+  sequence:
+  - variables:
+      dark: '{{ is_state(''sun.sun'',''below_horizon'') or (is_state(''sun.sun'',''above_horizon'')
+        and (as_timestamp(state_attr(''sun.sun'',''next_setting'')) - as_timestamp(now()))
+        < 1800) }}'
+  - if:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.lighting_all_lanes_active'',''on'')
+        or is_state(''input_boolean.bay1_helper'',''on'') or ((dark|bool) and is_state(''input_boolean.bay2_helper'',''on''))
+        }}'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_1
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_1
+  - if:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.lighting_all_lanes_active'',''on'')
+        or is_state(''input_boolean.bay2_helper'',''on'') or ((dark|bool) and (is_state(''input_boolean.bay1_helper'',''on'')
+        or is_state(''input_boolean.bay3_helper'',''on''))) }}'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_2
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_2
+  - if:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.lighting_all_lanes_active'',''on'')
+        or is_state(''input_boolean.bay3_helper'',''on'') or (dark|bool) }}'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_3
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_3
+  - if:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.lighting_all_lanes_active'',''on'')
+        or is_state(''input_boolean.bay4_helper'',''on'') or ((dark|bool) and (is_state(''input_boolean.bay3_helper'',''on'')
+        or is_state(''input_boolean.bay5_helper'',''on''))) }}'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_4
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_4
+  - if:
+    - condition: template
+      value_template: '{{ is_state(''input_boolean.lighting_all_lanes_active'',''on'')
+        or is_state(''input_boolean.bay5_helper'',''on'') or ((dark|bool) and is_state(''input_boolean.bay4_helper'',''on''))
+        }}'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.highbay_5
+    else:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_5

@@ -3973,3 +3973,44 @@
   mode: single
   trace:
     stored_traces: 20
+- id: highbay_reconcile_after_control4_recovery
+  alias: Highbays - Reconcile after Control4 recovery
+  description: Fixes highbay light drift from the recurring multi-minute Control4
+    dropouts. When C4 recovers (its highbay entities return from 'unavailable' after
+    the feed reloads), or on HA start, or when the Reconcile Bay Lights button is
+    pressed, it re-derives all highbay lights from the current bookings via script.reconcile_highbay_lights.
+    (During a C4 outage the calendar bay start/end automations still set the HA-side
+    bay helpers correctly, but their light commands are lost - this re-applies them.)
+    Door codes + machine plugs already self-reconcile separately. Built 2026-07-09.
+  triggers:
+  - trigger: state
+    entity_id:
+    - light.highbay_1
+    - light.highbay_2
+    - light.highbay_3
+    - light.highbay_4
+    - light.highbay_5
+    from: unavailable
+    id: recovery
+  - trigger: homeassistant
+    event: start
+    id: start
+  - trigger: state
+    entity_id: input_button.reconcile_bay_lights
+    id: manual
+  actions:
+  - if:
+    - condition: template
+      value_template: '{{ trigger.id != ''manual'' }}'
+    then:
+    - delay: 00:00:10
+  - action: script.reconcile_highbay_lights
+  - action: logbook.log
+    data:
+      name: Bay Reconcile
+      message: 'Reconciled highbay lights to current bookings (trigger: {{ trigger.id
+        }}).'
+      entity_id: light.highbay_1
+  mode: single
+  trace:
+    stored_traces: 20
