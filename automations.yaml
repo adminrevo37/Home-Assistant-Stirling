@@ -3888,3 +3888,88 @@
   mode: single
   trace:
     stored_traces: 20
+- id: highbay_clear_stranded_neighbours
+  alias: Highbays - Clear Stranded Neighbour Lights
+  description: 'Fixes the dawn-transition strand: neighbour highbays are lit while
+    dark (incl. pre-sunrise bookings) but the bay-end automations only clear them
+    in the evening (''after sunset''), so a pre-dawn booking''s neighbour lights never
+    got cleared after sunrise. On any booking end (bay helper -> off), turns OFF each
+    highbay only if EVERY lane feeding it (its own lane + the lanes it neighbours)
+    has no active booking. Guarded so it never turns off a light an active booking
+    needs; skipped in busy mode; does NOT touch manually-lit lights (only runs at
+    booking end). Highbay 3 (night residual) is only cleared while the sun is up.
+    Built 2026-07-09.'
+  triggers:
+  - trigger: state
+    entity_id:
+    - input_boolean.bay1_helper
+    - input_boolean.bay2_helper
+    - input_boolean.bay3_helper
+    - input_boolean.bay4_helper
+    - input_boolean.bay5_helper
+    to: 'off'
+  conditions:
+  - condition: state
+    entity_id: input_boolean.lighting_all_lanes_active
+    state: 'off'
+  actions:
+  - delay: 00:00:02
+  - if:
+    - condition: state
+      entity_id:
+      - input_boolean.bay1_helper
+      - input_boolean.bay2_helper
+      state: 'off'
+    then:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_1
+  - if:
+    - condition: state
+      entity_id:
+      - input_boolean.bay1_helper
+      - input_boolean.bay2_helper
+      - input_boolean.bay3_helper
+      state: 'off'
+    then:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_2
+  - if:
+    - condition: state
+      entity_id:
+      - input_boolean.bay2_helper
+      - input_boolean.bay3_helper
+      - input_boolean.bay4_helper
+      state: 'off'
+    - condition: state
+      entity_id: sun.sun
+      state: above_horizon
+    then:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_3
+  - if:
+    - condition: state
+      entity_id:
+      - input_boolean.bay3_helper
+      - input_boolean.bay4_helper
+      - input_boolean.bay5_helper
+      state: 'off'
+    then:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_4
+  - if:
+    - condition: state
+      entity_id:
+      - input_boolean.bay4_helper
+      - input_boolean.bay5_helper
+      state: 'off'
+    then:
+    - action: light.turn_off
+      target:
+        entity_id: light.highbay_5
+  mode: single
+  trace:
+    stored_traces: 20
