@@ -453,3 +453,55 @@ reconcile_highbay_lights:
     - action: light.turn_off
       target:
         entity_id: light.highbay_5
+team_door_open_for_duration:
+  alias: Team Door - Open For Duration (ad-hoc)
+  description: Ad-hoc club/team door open from the REVO dashboard. Reads input_number.team_door_open_minutes,
+    sets input_datetime.team_door_close_at = now + that many minutes, turns on input_boolean.team_door_hold
+    (suppresses roller-door alerts + the 3-min auto-close-retry), then opens via script.team_door_open_short
+    (open + stop-short so the operator's 30s auto-close stays disarmed). The per-minute
+    'Team Booking - Auto-Close Door' automation shuts it and clears the hold at close_at.
+    Built 2026-07-11.
+  mode: single
+  icon: mdi:door-sliding-open
+  sequence:
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.team_door_close_at
+    data:
+      datetime: '{{ (now() + timedelta(minutes=(states(''input_number.team_door_open_minutes'')
+        | int(60)))).strftime(''%Y-%m-%d %H:%M:%S'') }}'
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.team_door_hold
+  - action: logbook.log
+    data:
+      name: Team Door
+      message: Ad-hoc open for {{ states('input_number.team_door_open_minutes') |
+        int(60) }} min (close at {{ states('input_datetime.team_door_close_at') }}).
+      entity_id: input_boolean.team_door_hold
+  - action: script.team_door_open_short
+team_door_close_now:
+  alias: Team Door - Close Now
+  description: 'Manually end a club/team door hold from the REVO dashboard: if the
+    roller door is open, pulse it closed; clear input_boolean.team_door_hold (restores
+    roller-door alerts). Mirrors the ''Team Booking - Auto-Close Door'' automation.
+    Built 2026-07-11.'
+  mode: single
+  icon: mdi:door-sliding
+  sequence:
+  - if:
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact
+      state: 'on'
+    then:
+    - action: lock.unlock
+      target:
+        entity_id: lock.front_door_lock
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.team_door_hold
+  - action: logbook.log
+    data:
+      name: Team Door
+      message: Manual close from dashboard - hold cleared, alerts restored.
+      entity_id: input_boolean.team_door_hold
