@@ -304,21 +304,22 @@ reconcile_bay_door_codes:
         or {}).get(''events'', []) %}{% for e in events %}{% set desc = e.get(''description'')
         or '''' %}{% set code = desc | regex_findall(''DOOR CODE: ([\d ]+)'') | first
         | default('''') | replace('' '', '''') | trim %}{% set name = desc | regex_findall(''Customer:
-        (.+)'') | first | default(''Guest'') | trim %}{% set lead = 45 if ''Coach
-        Session'' in desc else 30 %}{% set sstr = e.get(''start'') | string %}{% set
-        estr = e.get(''end'') | string %}{% if code != '''' and code not in ns.codes
-        and ''T'' in sstr and ''T'' in estr %}{% set st = as_datetime(sstr) %}{% set
-        en = as_datetime(estr) %}{% if st is not none and en is not none and now()
-        >= (st - timedelta(minutes=lead)) and now() <= (en + timedelta(minutes=15))
-        %}{% set ns.items = ns.items + [code ~ '':'' ~ name] %}{% set ns.codes = ns.codes
-        + [code] %}{% endif %}{% endif %}{% endfor %}{% set slotcodes = [ states(sa).split('':'')[0],
-        states(sb).split('':'')[0], states(sc).split('':'')[0] ] %}{% set exraw =
-        states(''input_text.door_code_exempt'') %}{% set exlist = (exraw if exraw
-        not in [''unknown'',''unavailable'',''None''] else '''').split('','') %}{%
-        for ent in exlist %}{% set ent2 = ent | trim %}{% set ecode = (ent2.split('':'')[0])
-        | trim %}{% if ent2 != '''' and ecode != '''' and ecode in slotcodes and ecode
-        not in ns.codes %}{% set ns.items = ns.items + [ent2] %}{% set ns.codes =
-        ns.codes + [ecode] %}{% endif %}{% endfor %}{{ ns.items[:3] }}'
+        (.+)'') | first | default(''Guest'') | trim | regex_replace("[^A-Za-z0-9 ]",
+        "") | trim %}{% set lead = 45 if ''Coach Session'' in desc else 30 %}{% set
+        sstr = e.get(''start'') | string %}{% set estr = e.get(''end'') | string %}{%
+        if code != '''' and code not in ns.codes and ''T'' in sstr and ''T'' in estr
+        %}{% set st = as_datetime(sstr) %}{% set en = as_datetime(estr) %}{% if st
+        is not none and en is not none and now() >= (st - timedelta(minutes=lead))
+        and now() <= (en + timedelta(minutes=15)) %}{% set ns.items = ns.items + [code
+        ~ '':'' ~ name] %}{% set ns.codes = ns.codes + [code] %}{% endif %}{% endif
+        %}{% endfor %}{% set slotcodes = [ states(sa).split('':'')[0], states(sb).split('':'')[0],
+        states(sc).split('':'')[0] ] %}{% set exraw = states(''input_text.door_code_exempt'')
+        %}{% set exlist = (exraw if exraw not in [''unknown'',''unavailable'',''None'']
+        else '''').split('','') %}{% for ent in exlist %}{% set ent2 = ent | trim
+        %}{% set ecode = (ent2.split('':'')[0]) | trim %}{% if ent2 != '''' and ecode
+        != '''' and ecode in slotcodes and ecode not in ns.codes %}{% set ns.items
+        = ns.items + [ent2] %}{% set ns.codes = ns.codes + [ecode] %}{% endif %}{%
+        endfor %}{{ ns.items[:3] }}'
       target_a: '{{ desired[0] if (desired | length) > 0 else '''' }}'
       target_b: '{{ desired[1] if (desired | length) > 1 else '''' }}'
       target_c: '{{ desired[2] if (desired | length) > 2 else '''' }}'
