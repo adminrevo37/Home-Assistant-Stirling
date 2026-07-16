@@ -1,7 +1,7 @@
 {
     "0x54ef4410014ae72a": {
         "contact": true,
-        "voltage": 3061,
+        "voltage": 3063,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 9,
@@ -9,21 +9,21 @@
         "linkquality": 52
     },
     "0xa4c138074803a9a9": {
-        "energy": 145.71,
-        "voltage": 240,
+        "energy": 149.23,
+        "voltage": 241,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 146,
-        "current": 0.71,
+        "power": 138,
+        "current": 0.68,
         "linkquality": 172
     },
     "0xa4c138ba345696ae": {
         "state": "ON",
-        "energy": 7.63,
+        "energy": 8.31,
         "voltage": 240,
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -36,7 +36,7 @@
     },
     "0x54ef4410014ae8c0": {
         "contact": true,
-        "voltage": 3067,
+        "voltage": 3068,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 11,
@@ -44,8 +44,8 @@
         "linkquality": 128
     },
     "0xa4c13851f47cb91d": {
-        "energy": 7.56,
-        "voltage": 243,
+        "energy": 8.12,
+        "voltage": 241,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,8 +70,8 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 243,
-        "energy": 9.5,
+        "voltage": 241,
+        "energy": 10.18,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -83,8 +83,8 @@
         "linkquality": 112
     },
     "0xa4c13879a2af63a1": {
-        "energy": 2.44,
-        "voltage": 243,
+        "energy": 2.64,
+        "voltage": 241,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -96,7 +96,7 @@
         "linkquality": 52
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 5.55,
+        "energy": 5.82,
         "voltage": 242,
         "state": "OFF",
         "countdown": 0,
