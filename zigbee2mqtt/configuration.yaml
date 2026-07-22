@@ -47,23 +47,32 @@ homeassistant:
 devices:
   '0x54ef4410014ae72a':
     friendly_name: roller_door_contact
+    retain: true
   '0xa4c138074803a9a9':
     friendly_name: Plug 1
+    retain: true
   '0xa4c138ba345696ae':
     friendly_name: Plug 2
+    retain: true
   '0x54ef4410014ae8c0':
     friendly_name: Fire Exit Door (WEST)
+    retain: true
   '0xa4c13851f47cb91d':
     friendly_name: Lane 1 Left
+    retain: true
   '0xa4c138bc9b38b0c2':
     friendly_name: '0xa4c138bc9b38b0c2'
   '0xa4c138fdcd4c98b3':
     friendly_name: Lane 2 Left
+    retain: true
   '0xa4c13879a2af63a1':
     friendly_name: Lane 2 Right
+    retain: true
   '0xa4c138d3ea816fa6':
     friendly_name: Lane 3 Left
+    retain: true
   '0xa4c13861a6ad537a':
     friendly_name: Lane 3 Right
+    retain: true
 availability:
   enabled: true

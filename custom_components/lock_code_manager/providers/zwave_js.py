@@ -15,14 +15,21 @@ import logging
 from typing import Any, Literal
 
 from zwave_js_server.client import Client
-from zwave_js_server.const import NodeStatus
+from zwave_js_server.const import CommandClass, NodeStatus
 from zwave_js_server.const.command_class.access_control import UserCredentialType
+from zwave_js_server.const.command_class.lock import (
+    ATTR_IN_USE,
+    LOCK_USERCODE_PROPERTY,
+    LOCK_USERCODE_STATUS_PROPERTY,
+    CodeSlotStatus,
+)
 from zwave_js_server.const.command_class.notification import (
     AccessControlNotificationEvent,
     NotificationType,
 )
-from zwave_js_server.exceptions import BaseZwaveJSServerError
+from zwave_js_server.exceptions import BaseZwaveJSServerError, NotFoundError
 from zwave_js_server.model.node import Node
+from zwave_js_server.util.lock import get_usercode
 
 from homeassistant.components.zwave_js import lock_helpers
 from homeassistant.components.zwave_js.const import (
@@ -119,6 +126,11 @@ class ZWaveJSLock(BaseLock):
     write verification) -- guaranteed by the integration's minimum Home
     Assistant version. The legacy User Code CC value-path fallback that
     worked around the pre-15.24.3 capability bug (#1251) has been removed.
+
+    One temporary bridge remains: the User Code CC report shim (grep
+    ``_uc_``), which compensates for report-driven User Code CC changes
+    emitting no unified credential events on released drivers. See the
+    shim section below for details and the removal recipe.
     """
 
     lock_config_entry: ConfigEntry = field(repr=False)
@@ -269,15 +281,22 @@ class ZWaveJSLock(BaseLock):
 
         ``num_slots == 0`` while a PIN type is advertised is no longer a
         routing branch -- it means the node interview is incomplete or the
-        driver is too old, so we raise an actionable error (issue #1298).
+        driver is too old. Before concluding that, a one-shot recovery
+        query re-reads the users count from the device (see
+        ``_async_recover_user_code_slot_count``); only when the re-read is
+        still degenerate do we raise an actionable error (issue #1298).
         """
-        try:
-            caps = await lock_helpers.async_get_credential_capabilities(self.node)
-        except BaseZwaveJSServerError as err:
-            raise LockDisconnected(f"get capabilities failed: {err}") from err
-        except HomeAssistantError as err:
-            raise LockOperationFailed(f"get capabilities failed: {err}") from err
+        caps = await self._async_read_credential_capabilities()
         pin = caps["supported_credential_types"].get(_PIN_TYPE_STR)
+
+        if (
+            pin is not None
+            and pin["num_slots"] == 0
+            and self._node_advertises_user_code_cc()
+            and await self._async_recover_user_code_slot_count()
+        ):
+            caps = await self._async_read_credential_capabilities()
+            pin = caps["supported_credential_types"].get(_PIN_TYPE_STR)
 
         if pin and pin["num_slots"] > 0:
             return LockCapabilities(
@@ -319,6 +338,56 @@ class ZWaveJSLock(BaseLock):
             credential_types={},
             max_user_name_length=0,
         )
+
+    async def _async_read_credential_capabilities(self) -> dict[str, Any]:
+        """Read raw credential capabilities, mapping transport errors."""
+        try:
+            return await lock_helpers.async_get_credential_capabilities(self.node)
+        except BaseZwaveJSServerError as err:
+            raise LockDisconnected(f"get capabilities failed: {err}") from err
+        except HomeAssistantError as err:
+            raise LockOperationFailed(f"get capabilities failed: {err}") from err
+
+    async def _async_recover_user_code_slot_count(self) -> bool:
+        """
+        Re-query the User Code CC users count so the driver caches it.
+
+        The driver derives a User Code CC lock's PIN slot count from the
+        cached ``supportedUsers`` value and reports 0 when it is missing
+        from the value database -- the state a battery lock lands in when
+        its interview completes while asleep (common right after a
+        factory-reset re-inclusion, issue #1298). ``refreshValues`` on the
+        CC reads that same cached value rather than re-querying it, so the
+        only primitive that repopulates it is the CC API ``getUsersCount``
+        device query: the solicited UsersNumberReport persists
+        ``supportedUsers``, after which the cached capability read serves
+        real numbers.
+
+        Returns True when the query completed and a capability re-read is
+        worthwhile; False when it failed (the caller falls through to the
+        actionable structural error).
+        """
+        _LOGGER.info(
+            "Lock %s reports zero PIN slots; re-querying the User Code CC "
+            "users count once before concluding the lock is unusable",
+            self.lock.entity_id,
+        )
+        # .get() rather than subscription: a KeyError from a node model
+        # missing its root endpoint would escape past every typed handler
+        # and get the lock dropped instead of degraded.
+        endpoint = self.node.endpoints.get(0)
+        if endpoint is None:
+            return False
+        try:
+            await endpoint.async_invoke_cc_api(CommandClass.USER_CODE, "getUsersCount")
+        except BaseZwaveJSServerError as err:
+            _LOGGER.debug(
+                "Lock %s: users count recovery query failed: %s",
+                self.lock.entity_id,
+                err,
+            )
+            return False
+        return True
 
     async def async_set_user(self, user: User) -> SetUserResult:
         """
@@ -480,11 +549,6 @@ class ZWaveJSLock(BaseLock):
             ) from err
         except HomeAssistantError as err:
             key = getattr(err, "translation_key", None)
-            if key == "credential_rejected_duplicate":
-                raise DuplicateCodeError(
-                    code_slot=credential.slot,
-                    lock_entity_id=self.lock.entity_id,
-                ) from err
             if key == "credential_rejected_unknown":
                 _LOGGER.debug(
                     "Lock %s slot %s: driver returned ERROR_UNKNOWN; treating "
@@ -496,12 +560,28 @@ class ZWaveJSLock(BaseLock):
                     credential.slot,
                     err,
                 )
+                # No reconciliation read here: the seam's on-demand
+                # confirmation read hard-refreshes for every OPTIMISTIC
+                # write, so a single-slot read would be pure duplication.
                 return WriteResult.OPTIMISTIC
+            # Definitive rejection: pre-15.25.2 drivers never re-read the
+            # slot after a supervised failure, so an already-stale cache
+            # entry would stay wrong forever (see
+            # _async_uc_reconcile_value_db).
+            await self._async_uc_reconcile_value_db(credential.slot)
+            if key == "credential_rejected_duplicate":
+                raise DuplicateCodeError(
+                    code_slot=credential.slot,
+                    lock_entity_id=self.lock.entity_id,
+                ) from err
             raise CodeRejectedError(
                 code_slot=credential.slot,
                 lock_entity_id=self.lock.entity_id,
                 reason=str(err),
             ) from err
+        # Pre-15.25.2 drivers never persist a supervised success to the
+        # value database (see _async_uc_reconcile_value_db).
+        await self._async_uc_reconcile_value_db(credential.slot)
         return WriteResult.CONFIRMED
 
     async def async_delete_credential(self, ref: CredentialRef) -> bool:
@@ -519,6 +599,11 @@ class ZWaveJSLock(BaseLock):
                 f"delete credential slot {ref.slot} failed: {err}"
             ) from err
         except HomeAssistantError as err:
+            # Same supervised-failure staleness as the set path (see
+            # _async_uc_reconcile_value_db). Success needs no read: the
+            # driver clears its cached User Code CC values on a
+            # successful delete since 15.24.3 (zwave-js/zwave-js#8866).
+            await self._async_uc_reconcile_value_db(ref.slot)
             raise LockOperationFailed(
                 f"delete credential slot {ref.slot} failed: {err}"
             ) from err
@@ -555,6 +640,13 @@ class ZWaveJSLock(BaseLock):
         from its unified ``access_control`` API for both User Code CC and
         User Credential CC locks. The handlers are self-filtering and
         pushes are idempotent.
+
+        On nodes that advertise User Code CC, also subscribe to raw
+        ``value updated`` events for the User Code CC report shim (see
+        that section below): released drivers emit no unified events for
+        report-driven User Code CC changes, and both listener sets are
+        safe together because the handlers self-filter and pushes are
+        idempotent.
         """
         if self._push_unsubs:
             return
@@ -568,6 +660,8 @@ class ZWaveJSLock(BaseLock):
             ("credential modified", self._on_credential_changed),
             ("credential deleted", self._on_credential_deleted),
         ]
+        if self._node_advertises_user_code_cc():
+            subscriptions.append(("value updated", self._on_uc_value_updated))
 
         try:
             for name, handler in subscriptions:
@@ -601,6 +695,180 @@ class ZWaveJSLock(BaseLock):
         if args.credential_type != UserCredentialType.PIN_CODE:
             return
         self._confirm_slot(args.credential_slot, SlotCredential.empty())
+
+    # ------------------------------------------------------------------
+    # User Code CC report shim
+    #
+    # Bridges an upstream gap on released drivers: on locks the driver
+    # dispatches to User Code CC (User Code CC-only locks, and dual-CC
+    # locks whose User Credential CC advertises zero users), any change
+    # that arrives as a *report* -- keypad programming, zwave-js-ui
+    # edits, Home Assistant's ``zwave_js.set/clear_lock_usercode``
+    # services, and the driver's own post-write verification polls --
+    # updates the driver's value database without emitting a unified
+    # credential event. LCM disables periodic polling for push
+    # providers, so without this shim those changes would never reach
+    # the coordinator and sync could not reconcile them.
+    #
+    # zwave-js/zwave-js#8930 (merged to the v16 branch, unreleased)
+    # fixes this by making the access-control API the source of truth
+    # for User Code CC. It also makes these User Code CC values
+    # internal -- and the driver does not emit value events for
+    # internal value IDs -- so once a driver with it ships the value
+    # events stop arriving and the unified events we already subscribe
+    # to take over: the shim goes dormant on its own, no LCM change
+    # needed.
+    #
+    # The shim also carries ``_async_uc_reconcile_value_db``, a
+    # post-write single-slot read that bridges a second gap fixed in
+    # driver 15.25.2 (zwave-js/zwave-js#8927): before that, supervised
+    # User Code CC writes through the unified API never persisted to
+    # (success) or reconciled (failure) the driver's value database,
+    # so cached reads served stale slots until the next report.
+    #
+    # To remove the whole section once the minimum supported driver
+    # includes #8930 (which implies #8927):
+    #
+    # 1. Delete everything from this comment through
+    #    ``_async_uc_reconcile_value_db``.
+    # 2. Delete the ``_node_advertises_user_code_cc`` branch in
+    #    ``setup_push_subscription`` (and its docstring paragraph).
+    # 3. Delete the ``_async_uc_reconcile_value_db`` call sites in
+    #    ``async_set_credential`` and ``async_delete_credential``.
+    # 4. Delete the shim tests in
+    #    ``tests/providers/zwave_js/test_events.py`` and
+    #    ``tests/providers/zwave_js/test_provider.py`` (grep ``_uc_``)
+    #    and restore ``_EXPECTED_PUSH_UNSUB_COUNT`` to 3.
+    # ------------------------------------------------------------------
+
+    def _node_advertises_user_code_cc(self) -> bool:
+        """Return whether the node's endpoint 0 advertises User Code CC."""
+        return any(cc.id == CommandClass.USER_CODE for cc in self.node.command_classes)
+
+    @callback
+    def _on_uc_value_updated(self, event: dict[str, Any]) -> None:
+        """Handle ``value updated`` node events for User Code CC values."""
+        args: dict[str, Any] = event["args"]
+        if args.get("commandClass") != CommandClass.USER_CODE:
+            return
+
+        property_name = args.get("property")
+        if property_name not in (
+            LOCK_USERCODE_PROPERTY,
+            LOCK_USERCODE_STATUS_PROPERTY,
+        ):
+            return
+
+        code_slot = int(args["propertyKey"])
+        # Slot 0 is not a valid user code slot.
+        if code_slot == 0:
+            return
+
+        if property_name == LOCK_USERCODE_STATUS_PROPERTY:
+            self._handle_uc_status_update(code_slot, args.get("newValue"))
+        else:
+            self._handle_uc_code_update(code_slot, args.get("newValue"))
+
+    @callback
+    def _handle_uc_status_update(self, code_slot: int, status: Any) -> None:
+        """Handle a userIdStatus value update for a code slot."""
+        if status != CodeSlotStatus.AVAILABLE:
+            # Occupied statuses carry no code; the paired userCode update
+            # delivers the value.
+            return
+        # Ignore AVAILABLE when Lock Code Manager expects a PIN on this
+        # slot. Some locks send stale AVAILABLE events after a code was
+        # set, which would cause infinite sync loops.
+        if (
+            self.coordinator is not None
+            and self.coordinator.desired_credential(code_slot).is_present
+        ):
+            _LOGGER.debug(
+                "Lock %s: ignoring userIdStatus=AVAILABLE for slot %s "
+                "(LCM expects PIN on this slot)",
+                self.lock.entity_id,
+                code_slot,
+            )
+            return
+        self._confirm_slot(code_slot, SlotCredential.empty())
+
+    @callback
+    def _handle_uc_code_update(self, code_slot: int, new_value: Any) -> None:
+        """Handle a userCode value update for a code slot."""
+        if not new_value:
+            resolved = SlotCredential.empty()
+        else:
+            value = str(new_value)
+            slot_in_use = self._uc_slot_in_use(code_slot)
+            # Asymmetric in_use checks: masked codes count as unreadable
+            # even when in_use is None (some firmwares mask before
+            # reporting status), but all-zeros only counts as empty when
+            # in_use is explicitly False (zeros from a partially-loaded
+            # cache must not be misread as cleared).
+            if value == "*" * len(value) and slot_in_use is not False:
+                resolved = SlotCredential.unreadable()
+            elif value.strip("0") == "" and slot_in_use is False:
+                resolved = SlotCredential.empty()
+            else:
+                resolved = SlotCredential.known(value)
+        # Route through _confirm_slot like the unified handlers: the
+        # driver's post-write verification report doubles as the
+        # confirming push for a pending optimistic write.
+        self._confirm_slot(code_slot, resolved)
+
+    def _uc_slot_in_use(self, code_slot: int) -> bool | None:
+        """Return whether a User Code CC slot is in use, None when unknown."""
+        try:
+            in_use = get_usercode(self.node, code_slot).get(ATTR_IN_USE)
+        except NotFoundError:
+            return None
+        return in_use if isinstance(in_use, bool) else None
+
+    async def _async_uc_reconcile_value_db(self, code_slot: int) -> None:
+        """
+        Read one slot back from the device so the driver's cache converges.
+
+        Pre-15.25.2 drivers never persist a supervised User Code CC write
+        to the value database (success) and never re-read the slot after a
+        failure, so every later cached read -- including LCM's own initial
+        load after a restart -- serves the pre-write state. This fresh
+        single-slot read through the unified API forces the driver to
+        query the device: on the User Code CC dispatch path the solicited
+        report repairs the value database and doubles as a push through
+        the report shim above; on a User Credential CC lock the driver
+        dispatches natively and the read is merely redundant.
+
+        Best-effort by design: the write already concluded (the caller
+        returns or raises on its own evidence), so a failed read must not
+        change the outcome -- the next hard refresh or sync tick reconciles
+        instead.
+        """
+        if not self._node_advertises_user_code_cc():
+            return
+        try:
+            await self.node.access_control.get_credential(
+                UserCredentialType.PIN_CODE, code_slot
+            )
+        except BaseZwaveJSServerError as err:
+            _LOGGER.debug(
+                "Lock %s slot %s: post-write reconciliation read failed (%s); "
+                "leaving it to the next hard refresh or sync tick",
+                self.lock.entity_id,
+                code_slot,
+                err,
+            )
+        except Exception:
+            # Broad by design, mirroring the coordinator's confirmation-read
+            # backstop: two call sites run inside except clauses mapping the
+            # write outcome to typed errors, and an escaping exception here
+            # would replace that typed error and derail the seam's handling.
+            _LOGGER.exception(
+                "Lock %s slot %s: unexpected error during post-write "
+                "reconciliation read; leaving it to the next hard refresh "
+                "or sync tick",
+                self.lock.entity_id,
+                code_slot,
+            )
 
     @callback
     def teardown_push_subscription(self) -> None:

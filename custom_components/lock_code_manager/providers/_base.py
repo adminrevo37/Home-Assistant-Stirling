@@ -23,6 +23,11 @@ from homeassistant.const import ATTR_DEVICE_ID, ATTR_ENTITY_ID, ATTR_STATE, CONF
 from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.issue_registry import (
+    IssueSeverity,
+    async_create_issue,
+    async_delete_issue,
+)
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from ..const import (
@@ -62,7 +67,7 @@ from ..domain.exceptions import (
 )
 from ..domain.models import SlotCredential
 from ..domain.queries import find_entry_for_lock_slot, get_managed_slots
-from ..domain.util import mask_pin
+from ..domain.util import mask_pin, per_lock_issue_id
 from ._util import make_tagged_name, parse_tag
 from .const import LOGGER
 
@@ -524,6 +529,21 @@ class BaseLock:
         """
         return False
 
+    @final
+    @property
+    def provider_setup_succeeded(self) -> bool:
+        """
+        Return whether provider setup (including capability validation) succeeded.
+
+        False both while setup is deferred (provider integration still
+        loading) and after a structural validation failure (e.g. the lock
+        reports zero usable PIN slots). Sync managers gate write attempts
+        on this so a degraded lock is not hammered with operations that
+        fail on the capability probe; the LOADED-transition revalidation
+        flips it back and reconciliation resumes.
+        """
+        return self._setup_succeeded
+
     @property
     def supports_native_users(self) -> bool:
         """
@@ -632,7 +652,12 @@ class BaseLock:
 
         Validates the lock advertises PIN credential support for
         native-user providers; structural failures
-        (``LockCodeManagerProviderError``) propagate and prevent setup.
+        (``LockCodeManagerProviderError``) are logged and the lock is
+        kept degraded — the same outcome as the reconnect path — so the
+        LOADED transition can revalidate once the underlying condition is
+        fixed (e.g. a re-interview repopulating a Z-Wave lock's slot
+        count). Dropping the lock here would leave it invisible with no
+        retry path until a full reload.
         ``supports_user_management`` is deliberately NOT required: a
         native-user provider can serve a slot-only lock (e.g. a Z-Wave
         User Code CC fallback), in which case the seam's
@@ -670,6 +695,7 @@ class BaseLock:
                 else:
                     await self._async_run_provider_setup(config_entry)
                     self._setup_succeeded = True
+                    self._clear_setup_validation_issue()
             except (LockDisconnected, LockOperationFailed) as err:
                 LOGGER.warning(
                     "Provider setup failed for %s: %s. Coordinator will be "
@@ -679,6 +705,15 @@ class BaseLock:
                     self.lock.entity_id,
                     err,
                 )
+            except LockCodeManagerProviderError as err:
+                LOGGER.error(
+                    "Provider setup failed validation for %s: %s. Entities "
+                    "will be created but unavailable; validation is retried "
+                    "when the lock's integration reloads or reconnects.",
+                    self.lock.entity_id,
+                    err,
+                )
+                self._report_setup_validation_failure(err)
 
             lock_entity_id = self.lock.entity_id
             # Track the provider's config entry (e.g., zwave_js) so we can resubscribe
@@ -741,10 +776,48 @@ class BaseLock:
         if self.supports_native_users:
             caps = await self._get_cached_capabilities()
             if CredentialType.PIN not in caps.credential_types:
+                # A degenerate-but-successful probe was just cached;
+                # invalidate it so the reconnect-path revalidation
+                # re-probes instead of serving the failed read forever.
+                self._capabilities_cache = None
                 raise LockCodeManagerProviderError(
                     f"{self.lock.entity_id}: lock does not advertise PIN credential support"
                 )
         await self.async_setup(config_entry)
+
+    @final
+    @callback
+    def _report_setup_validation_failure(self, err: Exception) -> None:
+        """
+        Raise a repair issue so the structural failure is visible in the UI.
+
+        The actionable error message (e.g. "re-interview the lock") would
+        otherwise land only in the log. Persistent so it survives restarts:
+        the underlying condition does too.
+        """
+        async_create_issue(
+            self.hass,
+            DOMAIN,
+            per_lock_issue_id("lock_setup_failed", self.lock.entity_id),
+            is_fixable=False,
+            is_persistent=True,
+            severity=IssueSeverity.ERROR,
+            translation_key="lock_setup_failed",
+            translation_placeholders={
+                "lock_entity_id": self.lock.entity_id,
+                "error": str(err),
+            },
+        )
+
+    @final
+    @callback
+    def _clear_setup_validation_issue(self) -> None:
+        """Dismiss the setup-failed repair issue after validation succeeds."""
+        async_delete_issue(
+            self.hass,
+            DOMAIN,
+            per_lock_issue_id("lock_setup_failed", self.lock.entity_id),
+        )
 
     async def _async_on_integration_loaded(self) -> None:
         """
@@ -783,6 +856,11 @@ class BaseLock:
                 self.lock.entity_id,
                 err,
             )
+            # A previously-validated lock can fail revalidation (e.g. a
+            # re-interview zeroed its slot count); reset the flag so sync
+            # stays gated and the eventual recovery is observable.
+            self._setup_succeeded = False
+            self._report_setup_validation_failure(err)
         else:
             if not self._setup_succeeded:
                 LOGGER.info(
@@ -790,6 +868,7 @@ class BaseLock:
                     self.lock.entity_id,
                 )
             self._setup_succeeded = True
+            self._clear_setup_validation_issue()
         finally:
             self._setup_running = False
 
@@ -817,6 +896,12 @@ class BaseLock:
 
     async def async_unload(self, remove_permanently: bool) -> None:
         """Tear down config-entry-state listener, reconnect task, and push subscription."""
+        if remove_permanently:
+            # The lock is leaving Lock Code Manager entirely; a persistent
+            # setup-failed repair would otherwise outlive it. Non-permanent
+            # unloads (reload, restart) keep it — the condition does too.
+            self._clear_setup_validation_issue()
+
         if self._config_entry_state_unsub:
             self._config_entry_state_unsub()
             self._config_entry_state_unsub = None

@@ -486,19 +486,23 @@ class LockCodeManagerFlowHandler(
             last_step=True,
         )
 
-    async def async_step_reauth(self, user_input: dict[str, Any]):
-        """Handle import flow step."""
+    async def async_step_reauth(self, user_input: dict[str, Any] | None = None):
+        """Handle reauth flow step."""
         config_entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
         )
+        assert config_entry
         errors = {}
         description_placeholders = {
             **self.context["title_placeholders"],
             "lock": self.context["lock_entity_id"],
         }
 
-        if CONF_SLOTS not in user_input:
-            assert config_entry
+        if user_input is None:
+            # The frontend re-invokes the step with no input to render the
+            # form; seed the lock selector from the entry's current config.
+            user_input = {CONF_LOCKS: list(get_entry_config(config_entry).locks)}
+        elif CONF_SLOTS not in user_input:
             additional_errors, additional_placeholders = _check_common_slots(
                 self.hass,
                 user_input[CONF_LOCKS],
@@ -508,8 +512,20 @@ class LockCodeManagerFlowHandler(
             errors.update(additional_errors)
             description_placeholders.update(additional_placeholders)
             if not errors:
+                # Consume any options-flow save that sat unprocessed while
+                # the entry was failed (no update listener registered in
+                # that state) and clear it: the data→options migration
+                # merges options-preferred, so leaving stale options in
+                # place would silently override this reauth fix on the
+                # next load.
                 self.hass.config_entries.async_update_entry(
-                    config_entry, data={**config_entry.data, **user_input}
+                    config_entry,
+                    data={
+                        **config_entry.data,
+                        **config_entry.options,
+                        **user_input,
+                    },
+                    options={},
                 )
                 self.hass.async_create_task(
                     self.hass.config_entries.async_reload(config_entry.entry_id),
