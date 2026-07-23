@@ -11,7 +11,7 @@ serial:
   adapter: ember
 advanced:
   log_level: info
-  channel: 11
+  channel: 25
   network_key:
     - 114
     - 37
