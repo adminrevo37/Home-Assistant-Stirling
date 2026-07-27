@@ -9,29 +9,29 @@
         "linkquality": 112
     },
     "0xa4c138074803a9a9": {
-        "energy": 184.34,
-        "voltage": 238,
+        "energy": 187.75,
+        "voltage": 242,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 144,
-        "current": 0.7,
+        "power": 134,
+        "current": 0.66,
         "linkquality": 176
     },
     "0xa4c138ba345696ae": {
         "state": "ON",
-        "energy": 13.28,
-        "voltage": 238,
+        "energy": 13.84,
+        "voltage": 242,
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
         "power": 0,
-        "current": 0,
+        "current": 0.04,
         "linkquality": 128
     },
     "0x54ef4410014ae8c0": {
@@ -44,8 +44,8 @@
         "linkquality": 120
     },
     "0xa4c13851f47cb91d": {
-        "energy": 12.62,
-        "voltage": 240,
+        "energy": 13.01,
+        "voltage": 244,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,8 +70,8 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 240,
-        "energy": 15.22,
+        "voltage": 243,
+        "energy": 15.57,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -83,8 +83,8 @@
         "linkquality": 92
     },
     "0xa4c13879a2af63a1": {
-        "energy": 3.82,
-        "voltage": 240,
+        "energy": 3.83,
+        "voltage": 243,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -96,8 +96,8 @@
         "linkquality": 108
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 9.3,
-        "voltage": 240,
+        "energy": 9.41,
+        "voltage": 243,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
