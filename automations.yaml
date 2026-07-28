@@ -4018,37 +4018,3 @@
   mode: single
   trace:
     stored_traces: 20
-- id: '1785142590066'
-  alias: Lane 3 hold on until 730pm 27 Jul
-  description: 'Manual one-off (created 2026-07-27 on request): keeps Highbay 3 (Lane
-    3) ON until 19:30 today by re-asserting every minute, overriding the booking-end
-    and night shutdown. At 19:30 turns it off and disables itself. Safe to delete
-    after it has fired.'
-  triggers:
-  - trigger: time_pattern
-    minutes: /1
-    id: tick
-  - trigger: time
-    at: '19:30:00'
-    id: stop
-  actions:
-  - choose:
-    - conditions:
-      - condition: trigger
-        id: stop
-      sequence:
-      - action: light.turn_off
-        target:
-          entity_id: light.highbay_3
-      - action: automation.turn_off
-        target:
-          entity_id: automation.lane_3_hold_on_until_730pm_27_jul
-        data:
-          stop_actions: false
-    default:
-    - condition: time
-      before: '19:30:00'
-    - action: light.turn_on
-      target:
-        entity_id: light.highbay_3
-  mode: single
