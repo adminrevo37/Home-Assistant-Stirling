@@ -3177,3 +3177,196 @@
         behaved oddly after a recovery, check the Power Outage Recovery automation
         trace.
   mode: single
+- id: '1785466770276'
+  alias: Network Watchdog - Ping every 30s
+  description: Forces a fresh ping of all network-watchdog probes every 30 seconds
+    so device-down detection is near real-time (the Ping integration's native poll
+    is slower). Pairs with 'Network Watchdog - Device Down/Recovered Alert'.
+  triggers:
+  - trigger: time_pattern
+    seconds: /30
+  actions:
+  - action: homeassistant.update_entity
+    target:
+      entity_id:
+      - binary_sensor.192_168_1_2
+      - binary_sensor.192_168_1_112
+      - binary_sensor.192_168_1_127
+      - binary_sensor.1_1_1_1
+  mode: single
+- id: '1785466777919'
+  alias: Network Watchdog - Device Down/Recovered Alert
+  description: Pushes to Julian's phone when any monitored network device (Reyee switch,
+    Control4 Director, roller-door keypad, internet uplink) is unreachable for 30s,
+    and again when it recovers. Down = critical sound so it breaks through silent/DND.
+  triggers:
+  - trigger: state
+    id: down
+    entity_id:
+    - binary_sensor.192_168_1_2
+    - binary_sensor.192_168_1_112
+    - binary_sensor.192_168_1_127
+    - binary_sensor.1_1_1_1
+    to: 'off'
+    for:
+      seconds: 30
+  - trigger: state
+    id: up
+    entity_id:
+    - binary_sensor.192_168_1_2
+    - binary_sensor.192_168_1_112
+    - binary_sensor.192_168_1_127
+    - binary_sensor.1_1_1_1
+    from: 'off'
+    to: 'on'
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: down
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: ⚠️ Cricket network DOWN
+          message: '{{ trigger.to_state.attributes.friendly_name }} has gone offline
+            (unreachable 30s+). Door access / remote access may be affected.'
+          data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
+            tag: network-watchdog-{{ trigger.entity_id }}
+    - conditions:
+      - condition: trigger
+        id: up
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: ✅ Cricket network recovered
+          message: '{{ trigger.to_state.attributes.friendly_name }} is back online.'
+          data:
+            tag: network-watchdog-{{ trigger.entity_id }}
+  mode: parallel
+  max: 12
+- id: '1785471383130'
+  alias: Lanes - Lighting + Machine Reconcile (every minute, self-heal)
+  description: 'Self-healing safety net. Every minute, for each of the 5 lanes, reads
+    the lane calendar; if a booking is active or starts within ~11 min it ENSURES
+    that lane''s highbay light is ON (plus documented neighbours: Lane 3 -> highbay_2
+    + highbay_4, Lane 5 -> highbay_4) unless the bay is blocked, and for machine lanes
+    1/2/3 ensures the correctly Truman-gated bowling-machine plug(s) are ON. ON-ENSURE
+    ONLY: it never turns anything OFF, so it cannot cut a session mid-way or fight
+    the per-bay END / night shutdown / outage-off logic. Fills two gaps: (a) a booking
+    created/changed inside the T-11/T-10 offset window that never fires the per-bay
+    START trigger, and (b) after a Control4 feed freeze / Zigbee blip / HA restart,
+    it re-asserts the correct ON state within a minute once the link is back. Gated
+    on input_boolean.control4_ready (stays out of the way during the fail-bright power-outage
+    recovery) and operating hours 05:00-22:15 (below the 22:15 absolute all-off catch-all).
+    continue_on_error so an off-mesh plug (e.g. lane_1_right) can''t halt the sweep.
+    Built 2026-07-31.'
+  triggers:
+  - trigger: time_pattern
+    minutes: /1
+  conditions:
+  - condition: state
+    entity_id: input_boolean.control4_ready
+    state: 'on'
+  - condition: time
+    after: 05:00:00
+    before: '22:15:00'
+  actions:
+  - repeat:
+      for_each: '{{ lanes }}'
+      sequence:
+      - action: calendar.get_events
+        target:
+          entity_id: '{{ repeat.item.cal }}'
+        data:
+          start_date_time: '{{ (now() - timedelta(minutes=1)).isoformat() }}'
+          end_date_time: '{{ (now() + timedelta(minutes=11)).isoformat() }}'
+        response_variable: ev
+      - if:
+        - condition: template
+          value_template: '{{ (ev[repeat.item.cal].events | default([])) | count >
+            0 }}'
+        then:
+        - if:
+          - condition: template
+            value_template: '{{ is_state(repeat.item.blocked, ''off'') }}'
+          then:
+          - action: light.turn_on
+            continue_on_error: true
+            target:
+              entity_id: '{{ ([repeat.item.light] + repeat.item.neighbours) | join('','')
+                }}'
+          - action: input_boolean.turn_on
+            continue_on_error: true
+            target:
+              entity_id: '{{ repeat.item.helper }}'
+        - if:
+          - condition: template
+            value_template: '{{ repeat.item.plugL | length > 0 }}'
+          then:
+          - action: switch.turn_on
+            continue_on_error: true
+            target:
+              entity_id: '{% set d = (ev[repeat.item.cal].events | first).description
+                | default('''') %}{% set tl = states(''input_select.truman_location'')
+                %}{% set here = tl in [repeat.item.posL, repeat.item.posR] %}{% set
+                is_coach = ''Coach Session'' in d %}{% set is_customer = ''Net Session''
+                in d %}{% set paid = ''(Truman)'' in d %}{% if (not here) or is_coach
+                or (is_customer and paid) %}{{ repeat.item.plugL }},{{ repeat.item.plugR
+                }}{% else %}{{ repeat.item.plugR if tl == repeat.item.posL else repeat.item.plugL
+                }}{% endif %}'
+  mode: single
+  variables:
+    lanes:
+    - cal: calendar.lane_1_bowling_machine
+      light: light.highbay_1
+      helper: input_boolean.bay1_helper
+      blocked: input_boolean.bay1_blocked
+      neighbours: []
+      plugL: switch.lane_1_left
+      plugR: switch.lane_1_right
+      posL: Lane 1 Left
+      posR: Lane 1 Right
+    - cal: calendar.lane_2_bowling_machine
+      light: light.highbay_2
+      helper: input_boolean.bay2_helper
+      blocked: input_boolean.bay2_blocked
+      neighbours: []
+      plugL: switch.lane_2_left
+      plugR: switch.lane_2_right
+      posL: Lane 2 Left
+      posR: Lane 2 Right
+    - cal: calendar.lane_3_truman_or_bowling_machine
+      light: light.highbay_3
+      helper: input_boolean.bay3_helper
+      blocked: input_boolean.bay3_blocked
+      neighbours:
+      - light.highbay_2
+      - light.highbay_4
+      plugL: switch.lane_3_left
+      plugR: switch.lane_3_right
+      posL: Lane 3 Left
+      posR: Lane 3 Right
+    - cal: calendar.lane_4_run_up_net
+      light: light.highbay_4
+      helper: input_boolean.bay4_helper
+      blocked: input_boolean.bay4_blocked
+      neighbours: []
+      plugL: ''
+      plugR: ''
+      posL: ''
+      posR: ''
+    - cal: calendar.lane_5_run_up_net
+      light: light.highbay_5
+      helper: input_boolean.bay5_helper
+      blocked: input_boolean.bay5_blocked
+      neighbours:
+      - light.highbay_4
+      plugL: ''
+      plugR: ''
+      posL: ''
+      posR: ''
