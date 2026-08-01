@@ -3267,9 +3267,14 @@
   mode: single
 - id: '1785466770276'
   alias: Network Watchdog - Ping every 30s
-  description: Forces a fresh ping of all network-watchdog probes every 30 seconds
-    so device-down detection is near real-time (the Ping integration's native poll
-    is slower). Pairs with 'Network Watchdog - Device Down/Recovered Alert'.
+  description: 'Forces a fresh ping of all network-watchdog probes every 30 seconds
+    so device-down detection is near real-time (the Ping integration''s native poll
+    is slower). Pairs with ''Network Watchdog - Device Down/Recovered Alert''. NOTE
+    2026-08-01: binary_sensor.192_168_1_127 (keypad ping) removed — the keypad''s
+    DHCP lease moved to .121 after the 31-Jul power loss, so .127 was pinging a vacant
+    IP (false down alerts). Keypad coverage is now via binary_sensor.cricket_keypad_online
+    (ESPHome push-based, no forced poll needed). Re-add a ping probe here only after
+    a DHCP reservation pins the keypad''s IP.'
   triggers:
   - trigger: time_pattern
     seconds: /30
@@ -3279,21 +3284,24 @@
       entity_id:
       - binary_sensor.192_168_1_2
       - binary_sensor.192_168_1_112
-      - binary_sensor.192_168_1_127
       - binary_sensor.1_1_1_1
   mode: single
 - id: '1785466777919'
   alias: Network Watchdog - Device Down/Recovered Alert
-  description: Pushes to Julian's phone when any monitored network device (Reyee switch,
-    Control4 Director, roller-door keypad, internet uplink) is unreachable for 30s,
-    and again when it recovers. Down = critical sound so it breaks through silent/DND.
+  description: 'Pushes to Julian''s phone when any monitored network device (Reyee
+    switch, Control4 Director, roller-door keypad, internet uplink) is unreachable
+    for 30s, and again when it recovers. Down = critical sound so it breaks through
+    silent/DND. NOTE 2026-08-01: keypad probe = binary_sensor.cricket_keypad_online
+    (ESPHome connectivity, IP-agnostic) — the old ping probe binary_sensor.192_168_1_127
+    went stale when the keypad''s DHCP lease moved to .121 after the 31-Jul power
+    loss; re-add a ping probe only after a DHCP reservation pins the keypad''s IP.'
   triggers:
   - trigger: state
     id: down
     entity_id:
     - binary_sensor.192_168_1_2
     - binary_sensor.192_168_1_112
-    - binary_sensor.192_168_1_127
+    - binary_sensor.cricket_keypad_online
     - binary_sensor.1_1_1_1
     to: 'off'
     for:
@@ -3303,7 +3311,7 @@
     entity_id:
     - binary_sensor.192_168_1_2
     - binary_sensor.192_168_1_112
-    - binary_sensor.192_168_1_127
+    - binary_sensor.cricket_keypad_online
     - binary_sensor.1_1_1_1
     from: 'off'
     to: 'on'
