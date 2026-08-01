@@ -2869,14 +2869,17 @@
     stored_traces: 20
 - id: team_booking_door_open
   alias: Team Booking - Auto-Open Door (tagged bookings)
-  description: 15 min before a TEAM booking start (calendar event description contains
-    'AUTO-DOOR', added by Krickora for Balcatta CC + Paolo Sat 4-6pm etc.), opens
-    the roller door and stops it just short of full-open (script.team_door_open_short)
-    so the operator's 30s auto-close doesn't take over. Sets input_boolean.team_door_hold
-    (suppresses roller-door alerts) + input_datetime.team_door_close_at = booking
-    start + 5 min (the Auto-Close Door automation shuts it then). Dedupes multi-lane
-    team bookings via the team_door_hold guard + mode single. Assumes the door is
-    CLOSED at T-15. Built 2026-07-07.
+  description: '15 min before a TEAM booking start (calendar event description contains
+    ''AUTO-DOOR''), opens the roller door and stops it just short of full-open (script.team_door_open_short)
+    so the operator''s 30s auto-close doesn''t take over. Sets input_boolean.team_door_hold
+    + input_datetime.team_door_close_at = booking start + 5 min (Auto-Close automation
+    shuts it then). Dedupes multi-lane team bookings via the team_door_hold guard
+    + mode single. 2026-08-01 REWORK: door-state gate - only pulses open if the contact
+    sensor reads CLOSED; if the door is OPEN at T-15 it waits up to 12 min for it
+    to register closed (3s debounce) before pulsing; if still open after the wait,
+    the hold/close window is armed WITHOUT pulsing (door is already open for the club).
+    If the contact sensor is unavailable/unknown it blind-pulses open + notifies Julian.
+    Built 2026-07-07.'
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -2911,6 +2914,19 @@
     entity_id: input_boolean.team_door_hold
     state: 'off'
   actions:
+  - alias: If door is open, wait until it registers closed (max 12 min)
+    if:
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact
+      state: 'on'
+    then:
+    - wait_for_trigger:
+      - trigger: state
+        entity_id: binary_sensor.roller_door_contact
+        to: 'off'
+        for: 00:00:03
+      timeout: 00:12:00
+      continue_on_timeout: true
   - action: input_datetime.set_datetime
     target:
       entity_id: input_datetime.team_door_close_at
@@ -2923,22 +2939,64 @@
   - action: logbook.log
     data:
       name: Team Door
-      message: Auto-open for team booking '{{ trigger.calendar_event.summary }}' (start
-        {{ trigger.calendar_event.start }}); close at {{ states('input_datetime.team_door_close_at')
-        }}.
+      message: 'Auto-open for team booking ''{{ trigger.calendar_event.summary }}''
+        (start {{ trigger.calendar_event.start }}); close at {{ states(''input_datetime.team_door_close_at'')
+        }}. Door contact: {{ states(''binary_sensor.roller_door_contact'') }}.'
       entity_id: input_boolean.team_door_hold
-  - action: script.team_door_open_short
+  - alias: Pulse open only from a verified-closed door
+    choose:
+    - alias: Door closed - normal open pulse
+      conditions:
+      - condition: state
+        entity_id: binary_sensor.roller_door_contact
+        state: 'off'
+      sequence:
+      - action: script.team_door_open_short
+    - alias: Door still open after wait - arm window without pulsing
+      conditions:
+      - condition: state
+        entity_id: binary_sensor.roller_door_contact
+        state: 'on'
+      sequence:
+      - action: logbook.log
+        data:
+          name: Team Door
+          message: Door still OPEN after 12-min wait - team window armed WITHOUT pulsing
+            (door already open); auto-close will shut it at the scheduled close time.
+          entity_id: input_boolean.team_door_hold
+      - action: notify.mobile_app_julian
+        data:
+          title: 'Team door: left open'
+          message: Roller door was open at team-booking open time and didn't close
+            within 12 min. Window armed without pulsing; auto-close still scheduled.
+    default:
+    - action: logbook.log
+      data:
+        name: Team Door
+        message: Roller-door contact sensor UNAVAILABLE - blind open pulse (cannot
+          verify door closed).
+        entity_id: input_boolean.team_door_hold
+    - action: notify.mobile_app_julian
+      data:
+        title: 'Team door: sensor dead'
+        message: Roller-door contact sensor is unavailable - blind-pulsed the door
+          open for a team booking. Re-pair/check the Zigbee contact sensor.
+    - action: script.team_door_open_short
   mode: single
   trace:
     stored_traces: 20
 - id: team_booking_door_close
   alias: Team Booking - Auto-Close Door
-  description: While a team-booking door hold is active (input_boolean.team_door_hold
+  description: 'While a team-booking door hold is active (input_boolean.team_door_hold
     on), once now reaches team_door_close_at (booking start + 5 min) pulse the roller
     door to CLOSE, then clear the hold (restores roller-door alerts). Per-minute check
-    = restart-safe (survives an HA restart mid-hold). Only pulses close if the door
-    is actually OPEN (binary_sensor.roller_door_contact on) - if the operator's auto-close
-    already shut it, just clears the hold without re-opening. Built 2026-07-07.
+    = restart-safe (survives an HA restart mid-hold). Pulses close if the door is
+    actually OPEN (binary_sensor.roller_door_contact on). 2026-08-01 REWORK: if the
+    contact sensor is UNAVAILABLE/UNKNOWN, pulses close anyway (blind close) + notifies
+    Julian - within a team window the door was opened by us and stopped short (operator
+    auto-close never armed), so it is almost certainly still open; the old behaviour
+    (skip close on unavailable) guaranteed the door was left open all day. If the
+    sensor reads closed, just clears the hold without pulsing. Built 2026-07-07.'
   triggers:
   - trigger: time_pattern
     minutes: /1
@@ -2950,20 +3008,50 @@
     value_template: '{{ now().timestamp() >= (state_attr(''input_datetime.team_door_close_at'',''timestamp'')
       | float(0)) }}'
   actions:
-  - if:
-    - condition: state
-      entity_id: binary_sensor.roller_door_contact
-      state: 'on'
-    then:
-    - action: lock.unlock
-      target:
-        entity_id: lock.front_door_lock
-  - action: logbook.log
-    data:
-      name: Team Door
-      message: Hold ended - door {{ 'pulsed closed' if is_state('binary_sensor.roller_door_contact','on')
-        else 'was already closed' }}; alerts restored.
-      entity_id: input_boolean.team_door_hold
+  - alias: Close pulse - verified open, or blind when sensor dead
+    choose:
+    - alias: Door open - pulse close
+      conditions:
+      - condition: state
+        entity_id: binary_sensor.roller_door_contact
+        state: 'on'
+      sequence:
+      - action: lock.unlock
+        target:
+          entity_id: lock.front_door_lock
+      - action: logbook.log
+        data:
+          name: Team Door
+          message: Hold ended - door pulsed closed; alerts restored.
+          entity_id: input_boolean.team_door_hold
+    - alias: Sensor dead - blind close pulse
+      conditions:
+      - condition: state
+        entity_id: binary_sensor.roller_door_contact
+        state:
+        - unavailable
+        - unknown
+      sequence:
+      - action: lock.unlock
+        target:
+          entity_id: lock.front_door_lock
+      - action: logbook.log
+        data:
+          name: Team Door
+          message: Hold ended - contact sensor UNAVAILABLE, BLIND close pulse sent
+            (door presumed open from team window); alerts restored.
+          entity_id: input_boolean.team_door_hold
+      - action: notify.mobile_app_julian
+        data:
+          title: 'Team door: blind close'
+          message: Team window ended but the roller-door contact sensor is unavailable
+            - sent a blind close pulse. Verify the door is closed; re-pair the sensor.
+    default:
+    - action: logbook.log
+      data:
+        name: Team Door
+        message: Hold ended - door was already closed; alerts restored.
+        entity_id: input_boolean.team_door_hold
   - action: input_boolean.turn_off
     target:
       entity_id: input_boolean.team_door_hold
