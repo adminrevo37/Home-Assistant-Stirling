@@ -9,16 +9,16 @@
         "linkquality": 112
     },
     "0xa4c138074803a9a9": {
-        "energy": 209.26,
-        "voltage": 239,
+        "energy": 209.3,
+        "voltage": 237,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 146,
-        "current": 0.69,
+        "power": 136,
+        "current": 0.67,
         "linkquality": 144
     },
     "0xa4c138ba345696ae": {
@@ -45,7 +45,7 @@
     },
     "0xa4c13851f47cb91d": {
         "energy": 15.25,
-        "voltage": 245,
+        "voltage": 246,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
