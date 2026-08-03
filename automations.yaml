@@ -3466,3 +3466,32 @@
       plugR: ''
       posL: ''
       posR: ''
+- id: '1785734844911'
+  alias: Healthcheck - External Heartbeat (Healthchecks.io)
+  description: 'Pings an EXTERNAL watchdog (Healthchecks.io) every 5 minutes. If Home
+    Assistant, the HA box, its power, or the site internet dies, the pings stop and
+    Healthchecks.io raises the alarm by email/phone. WHY: every other watchdog we
+    run lives INSIDE HA, so none of them can alert when HA itself is what failed -
+    proven on 2026-08-03 when the box hung overnight and nothing told anyone (the
+    first sign would have been a coach locked out at the door). SETUP: paste the check''s
+    ping URL into input_text.healthchecks_ping_url - this automation stays inert while
+    that helper is empty. Recommended check settings at healthchecks.io: Period 5
+    minutes, Grace 15 minutes (a normal HA restart takes 2-5 min and must NOT alert;
+    a real outage alerts within ~20 min). The URL lives in .storage, not git, so the
+    check''s secret UUID is never committed.'
+  triggers:
+  - trigger: time_pattern
+    minutes: /5
+  conditions:
+  - condition: not
+    conditions:
+    - condition: state
+      entity_id: input_text.healthchecks_ping_url
+      state:
+      - ''
+      - unknown
+      - unavailable
+  actions:
+  - action: rest_command.healthchecks_ping
+    continue_on_error: true
+  mode: single
