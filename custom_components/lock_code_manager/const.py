@@ -7,7 +7,7 @@ from datetime import timedelta
 from homeassistant.const import CONF_ENABLED, CONF_NAME, CONF_PIN, Platform
 
 DOMAIN = "lock_code_manager"
-VERSION = "4.3.1"
+VERSION = "4.4.0"
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.EVENT, Platform.SENSOR)
 
 FILES_URL_BASE = f"/{DOMAIN}_files"
