@@ -9,17 +9,17 @@
         "linkquality": 112
     },
     "0xa4c138074803a9a9": {
-        "energy": 209.38,
-        "voltage": 237,
+        "energy": 209.56,
+        "voltage": 241,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 138,
-        "current": 0.68,
-        "linkquality": 144
+        "power": 152,
+        "current": 0.71,
+        "linkquality": 148
     },
     "0xa4c138ba345696ae": {
         "state": "ON",
@@ -45,16 +45,16 @@
     },
     "0xa4c13851f47cb91d": {
         "energy": 15.25,
-        "voltage": 246,
-        "state": "ON",
+        "voltage": 245,
+        "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
         "power": 0,
-        "current": 0.02,
-        "linkquality": 112
+        "current": 0,
+        "linkquality": 88
     },
     "0xa4c138bc9b38b0c2": {
         "energy": 0,
@@ -70,7 +70,7 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 244,
+        "voltage": 241,
         "energy": 18.24,
         "state": "OFF",
         "countdown": 0,
@@ -84,7 +84,7 @@
     },
     "0xa4c13879a2af63a1": {
         "energy": 4.44,
-        "voltage": 244,
+        "voltage": 241,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -93,11 +93,11 @@
         "switch_type_button": "release",
         "power": 0,
         "current": 0,
-        "linkquality": 116
+        "linkquality": 112
     },
     "0xa4c138d3ea816fa6": {
         "energy": 11.31,
-        "voltage": 244,
+        "voltage": 242,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -106,7 +106,7 @@
         "switch_type_button": "release",
         "power": 0,
         "current": 0,
-        "linkquality": 92
+        "linkquality": 100
     },
     "0xa4c13861a6ad537a": {
         "energy": 0,

@@ -811,12 +811,43 @@
   mode: single
 - id: '1780149352883'
   alias: Common Lights - On (Occupancy Rises)
-  description: Occupancy rises above the configured threshold -> ensure common lights
-    on. Backstop to door-open arrival trigger.
+  description: 'Occupancy rises above the configured threshold -> ensure common lights
+    on. Backstop to the door-open arrival trigger. | DAYLIGHT GATE 2026-08-03 (Inspector):
+    in DAYLIGHT this now only fires inside a booking window - i.e. a bay helper is
+    on, which spans booking start-11min through end+10min (the same lead-in/lead-out
+    the lane highbays use). Outside that window during the day the building is naturally
+    lit and occupancy (staff, passing movement, camera motion) must NOT switch the
+    common lights on. After dark (sun below horizon) the gate is bypassed and any
+    occupancy still lights the building - never leave someone in a dark facility.
+    NOTE: automation.common_lights_on_front_door_opened is deliberately NOT gated,
+    so a real arrival through the front door always lights the building even on a
+    gloomy day with no booking.'
   triggers:
   - trigger: numeric_state
     entity_id: sensor.main_occupancy_probability
     above: input_number.lighting_occupancy_threshold
+  conditions:
+  - condition: or
+    alias: After dark, OR inside a booking's lead-in/lead-out window
+    conditions:
+    - condition: state
+      entity_id: sun.sun
+      state: below_horizon
+    - condition: state
+      entity_id: input_boolean.bay1_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay2_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay3_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay4_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay5_helper
+      state: 'on'
   actions:
   - action: light.turn_on
     target:
