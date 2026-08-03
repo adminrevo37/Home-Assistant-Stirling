@@ -150,6 +150,29 @@ shell_command:
   c4_item_dump: python3 /config/c4_item_dump.py
 
 ###############################################################################
+##### EXTERNAL HEARTBEAT (Healthchecks.io)
+# Pings an EXTERNAL watchdog every 5 minutes. If Home Assistant, the box, its
+# power, or the site internet dies, the pings stop and Healthchecks.io raises
+# the alarm.
+#
+# WHY THIS EXISTS: every other watchdog we have runs INSIDE Home Assistant, so
+# none of them can alert when HA itself is the thing that failed. On 2026-08-03
+# the box hung overnight and nothing told anyone - the first sign would have
+# been a coach locked out at the door. This is the only monitoring that
+# survives that failure mode.
+#
+# The ping URL is held in input_text.healthchecks_ping_url (stored in .storage,
+# NOT in git) so the check's secret UUID is never committed to this repo.
+# Driven by automation "Healthcheck - External Heartbeat (Healthchecks.io)",
+# which stays inert until that input_text holds a real https:// URL.
+###############################################################################
+rest_command:
+  healthchecks_ping:
+    url: "{{ states('input_text.healthchecks_ping_url') }}"
+    method: GET
+    timeout: 10
+
+###############################################################################
 ##### ROLLER DOOR — Visual sensor state helper
 # Updated every 15 seconds by the door_visual_sensor_poll automation.
 # on  = door visually open (brightness delta > 15 from baseline)
