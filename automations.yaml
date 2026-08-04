@@ -3555,3 +3555,30 @@
   - action: rest_command.healthchecks_ping
     continue_on_error: true
   mode: single
+- id: '1785811915396'
+  alias: TV - On at First Door Open (bookings TV)
+  description: Any roller-door open (physical contact sensor OR the front-door lock
+    pulsing unlocked) -> ping rest_command.tv_door_open, which stamps a date marker
+    on the lane-display Pi (cricket-door-listener :8800). cricket-tv-cec.py reads
+    the marker and holds the bookings TV ON over HDMI-CEC from the FIRST door open
+    of the day until 21:30, independent of the booking schedule (a booking window
+    can still hold it later; the TV's smart plug has been removed so CEC is the only
+    power path). Fires on EVERY open - the stamp is idempotent, so no first-of-day
+    state is needed in HA. Time-gated 05:00-21:30 (the listener enforces the same
+    gate) so a late-night or small-hours open can never hold the TV on overnight.
+    Built 2026-08-04 (Inspector).
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.roller_door_contact
+    to: 'on'
+  - trigger: state
+    entity_id: lock.front_door_lock
+    to: unlocked
+  conditions:
+  - condition: time
+    after: 05:00:00
+    before: '21:30:00'
+  actions:
+  - action: rest_command.tv_door_open
+  mode: single
+  max_exceeded: silent
