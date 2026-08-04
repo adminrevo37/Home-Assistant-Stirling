@@ -2793,13 +2793,15 @@
   mode: single
 - id: machine_audit_booking_start
   alias: Machine Audit - Booking Start (capture baseline)
-  description: 'At each lane booking start, records the lane''s cumulative machine-minutes
-    counter as the baseline and captures the booking context (customer|bookedMinutes|startISO|email)
-    into the lane''s audit-booking helper. Paired with Machine Audit - Booking End.
-    Built 2026-06-24; email appended 2026-06-25. 2026-07-06: start triggers offset
-    +15s so that at a back-to-back boundary the ENDing booking reads its baseline
-    before this start overwrites it (fixes earlier-booking used=0 race; ending booking
-    is attributed up to its exact end time).'
+  description: 'Captures the lane''s cumulative machine-minutes counter as the audit
+    baseline + booking context (customer|bookedMinutes|startISO|email). 2026-08-04
+    (Inspector): baseline now captured at POWER-ON (start-9:45, just after the -10min
+    power automation) when the lane is idle, so warm-up bowling counts toward usage
+    and util% reflects the real powered window (can exceed 100%). At a back-to-back
+    boundary the early trigger is skipped (lane calendar still on) and the original
+    start+15s trigger captures instead - preserving the 2026-07-06 race fix (ending
+    booking reads its baseline before this start overwrites it). The +15s trigger
+    skips itself if the early capture already wrote this booking''s context.'
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -2816,6 +2818,31 @@
     event: start
     offset: 0:00:15
     id: l3
+  - trigger: calendar
+    entity_id: calendar.lane_1_bowling_machine
+    event: start
+    offset: -0:09:45
+    id: l1e
+  - trigger: calendar
+    entity_id: calendar.lane_2_bowling_machine
+    event: start
+    offset: -0:09:45
+    id: l2e
+  - trigger: calendar
+    entity_id: calendar.lane_3_truman_or_bowling_machine
+    event: start
+    offset: -0:09:45
+    id: l3e
+  conditions:
+  - condition: template
+    value_template: '{{ not trigger.id.endswith(''e'') or is_state(trigger.entity_id,
+      ''off'') }}'
+    alias: Early (power-on) capture only when the lane is idle - at a back-to-back
+      boundary the previous booking still owns the counter
+  - condition: template
+    value_template: '{{ trigger.id.endswith(''e'') or states(''input_text.lane_''
+      ~ n ~ ''_audit_booking'') != ctx }}'
+    alias: Start+15s capture skipped if the early trigger already baselined this booking
   actions:
   - action: input_number.set_value
     target:
@@ -2843,9 +2870,16 @@
   description: 'At each lane booking end: actual machine-use minutes (counter - baseline),
     util%, logs a ''Machine Audit'' logbook record + Machine Audit Last Record helper,
     and POSTs {ts,lane,customer,email,bookedMin,usedMin,utilPct,startISO} to Krickora
-    /ha/usage via shell_command.usage_webhook (HMAC-signed, continue_on_error so logging
-    still works if the shell_command/key isn''t wired yet). Then clears the lane''s
-    audit-booking helper. Built 2026-06-24; POST wired 2026-06-25.'
+    /ha/usage via shell_command.usage_webhook (HMAC-signed, continue_on_error). 2026-08-04
+    (Inspector): when there is NO back-to-back next booking, the record now keeps
+    measuring past the calendar end - it waits until the next booking claims the lane
+    (audit-booking helper changes) or ~10:45 (power cuts at end+10), so tail bowling
+    counts and util% can exceed 100% (paired with the power-on baseline in the START
+    automation: a solo booking is measured over its full powered window, -10 to +10).
+    Back-to-back ends still compute immediately at the boundary (exact-window attribution,
+    no double count). Context/baseline are read at trigger time; the clear step is
+    guarded so a next booking''s context captured during the wait is never wiped.
+    Mode parallel so one lane''s wait cannot delay another lane''s record.'
   triggers:
   - trigger: calendar
     entity_id: calendar.lane_1_bowling_machine
@@ -2863,6 +2897,30 @@
   - condition: template
     value_template: '{{ (ctx | trim) != '''' }}'
   actions:
+  - if:
+    - condition: template
+      value_template: '{{ is_state(trigger.entity_id, ''off'') }}'
+    then:
+    - wait_for_trigger:
+      - trigger: template
+        value_template: '{{ states(''input_text.lane_'' ~ n ~ ''_audit_booking'')
+          != ctx }}'
+      timeout: 0:10:45
+      continue_on_timeout: true
+    note: No next event active at end -> keep measuring until the next booking overwrites
+      the audit context or power cuts at end+10. Back-to-back (calendar still on)
+      -> compute immediately, preserving the +15s baseline race fix.
+  - variables:
+      counter: '{{ states(''sensor.lane_'' ~ n ~ ''_machine_minutes'') | float(0)
+        }}'
+      used: '{{ (counter - baseline) | round(1) }}'
+      util: '{{ ((used / booked * 100) | round(0)) if booked > 0 else 0 }}'
+      rec: Lane {{ n }} | {{ cust }} | booked {{ booked | int }}m / used {{ used }}m
+        ({{ util }}%)
+      payload: '{"ts": {{ now().timestamp() | int }}, "lane": {{ n | int }}, "customer":
+        {{ cust | tojson }}, "email": {{ email | tojson }}, "bookedMin": {{ booked
+        | int }}, "usedMin": {{ used }}, "utilPct": {{ util }}, "startISO": {{ startiso
+        | tojson }}}'
   - action: logbook.log
     data:
       name: Machine Audit
@@ -2877,33 +2935,31 @@
     data:
       payload: '{{ payload }}'
     continue_on_error: true
-  - action: input_text.set_value
-    target:
-      entity_id: input_text.lane_{{ n }}_audit_booking
-    data:
-      value: ''
-  mode: queued
-  max: 10
+  - if:
+    - condition: template
+      value_template: '{{ states(''input_text.lane_'' ~ n ~ ''_audit_booking'') ==
+        ctx }}'
+    then:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.lane_{{ n }}_audit_booking
+      data:
+        value: ''
+    note: Guarded clear - if a next booking captured its context during the wait,
+      leave it untouched.
+  mode: parallel
+  max: 6
   variables:
     n: '{{ trigger.id[1] }}'
-    counter: '{{ states(''sensor.lane_'' ~ n ~ ''_machine_minutes'') | float(0) }}'
-    baseline: '{{ states(''input_number.lane_'' ~ n ~ ''_audit_baseline'') | float(0)
-      }}'
-    used: '{{ (counter - baseline) | round(1) }}'
-    ctx: '{{ states(''input_text.lane_'' ~ n ~ ''_audit_booking'') | default('''')
+    ctx: '{{ states(''input_text.lane_'' ~ trigger.id[1] ~ ''_audit_booking'') | default('''')
       }}'
     parts: '{{ ctx.split(''|'') }}'
     cust: '{{ parts[0] if (parts | length) > 0 else ''Unknown'' }}'
     booked: '{{ (parts[1] | float(0)) if (parts | length) > 1 else 0 }}'
     startiso: '{{ parts[2] if (parts | length) > 2 else '''' }}'
     email: '{{ parts[3] if (parts | length) > 3 else '''' }}'
-    util: '{{ ((used / booked * 100) | round(0)) if booked > 0 else 0 }}'
-    rec: Lane {{ n }} | {{ cust }} | booked {{ booked | int }}m / used {{ used }}m
-      ({{ util }}%)
-    payload: '{"ts": {{ now().timestamp() | int }}, "lane": {{ n | int }}, "customer":
-      {{ cust | tojson }}, "email": {{ email | tojson }}, "bookedMin": {{ booked |
-      int }}, "usedMin": {{ used }}, "utilPct": {{ util }}, "startISO": {{ startiso
-      | tojson }}}'
+    baseline: '{{ states(''input_number.lane_'' ~ trigger.id[1] ~ ''_audit_baseline'')
+      | float(0) }}'
 - id: roller_door_auto_close_retry
   alias: Roller Door - Auto-Close Retry (3 min -> 2 pulses -> notify Julian)
   description: If binary_sensor.roller_door_contact stays OPEN for 3 min (operator
