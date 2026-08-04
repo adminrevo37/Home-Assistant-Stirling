@@ -1,13 +1,14 @@
 - id: bay1_booking_start
   alias: Bay 1 Booking - START
-  description: '11 min before booking: turn on highbay 1 + bay-1 helper (if not blocked).
-    Neighbour highbays handled by the night-neighbour automation; common lights by
-    door-open/occupancy.'
+  description: '11 min before booking: turn on highbay 1 + bay-1 helper + the common
+    lights (if not blocked). Neighbour highbays handled by the neighbour-on-bay-start
+    automation (all-day full adjacency since 2026-08-04); common lights ON with the
+    booking itself since 2026-08-04 (door-open/occupancy remain as backstops).'
   triggers:
   - event: start
     entity_id: calendar.lane_1_bowling_machine
     offset: -0:11:00
-    platform: calendar
+    trigger: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay1_blocked
@@ -19,16 +20,26 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_1
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+    note: 'Inspector 2026-08-04: common lights come on WITH the booking (idempotent
+      if already on). The off-sweep cannot undo this - its imminent-booking guard
+      blocks while a booking is active or within the protect window.'
   mode: single
 - id: bay1_booking_end
   alias: Bay 1 Booking - END
   description: '10 min after booking: force-refresh the lane calendar, then turn off
-    highbay 1 (neighbour-aware at night). Common lights handled separately; highbay
-    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
-    is latched, END only clears the helper and leaves highbays to Keep-On / night
-    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
-    entity + delay 2s before any state check or light action, so last-minute back-to-back
-    bookings are seen before the keep-on decision.'
+    highbay 1 (neighbour-aware day AND night since 2026-08-04 - daylight off guarded
+    so an adjacent active lane keeps its neighbour highbay). Common lights handled
+    separately; highbay 3 reserved as night residual. | Busy-mode guard 2026-06-16:
+    while lighting_all_lanes_active is latched, END only clears the helper and leaves
+    highbays to Keep-On / night shutdown. | RULE: all end-trigger automations MUST
+    force-update the lane calendar entity + delay 2s before any state check or light
+    action, so last-minute back-to-back bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_1_bowling_machine
@@ -75,20 +86,31 @@
         target:
           entity_id: light.highbay_2
     else:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_1
+    - if:
+      - condition: state
+        entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        state: 'off'
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_1
+      note: '2026-08-04 all-day neighbour rule: hb1 also serves an active Lane 2 booking,
+        so daylight off is guarded on bay1+bay2 helpers (same guard the night branch
+        and stranded-clearer use).'
   mode: single
 - id: bay2_booking_start
   alias: Bay 2 Booking - START
-  description: '11 min before booking: turn on highbay 2 + bay-2 helper (if not blocked).
-    Neighbour highbays handled by the night-neighbour automation; common lights by
-    door-open/occupancy.'
+  description: '11 min before booking: turn on highbay 2 + bay-2 helper + the common
+    lights (if not blocked). Neighbour highbays handled by the neighbour-on-bay-start
+    automation (all-day full adjacency since 2026-08-04); common lights ON with the
+    booking itself since 2026-08-04 (door-open/occupancy remain as backstops).'
   triggers:
   - event: start
     entity_id: calendar.lane_2_bowling_machine
     offset: -0:11:00
-    platform: calendar
+    trigger: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay2_blocked
@@ -100,16 +122,26 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_2
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+    note: 'Inspector 2026-08-04: common lights come on WITH the booking (idempotent
+      if already on). The off-sweep cannot undo this - its imminent-booking guard
+      blocks while a booking is active or within the protect window.'
   mode: single
 - id: bay2_booking_end
   alias: Bay 2 Booking - END
   description: '10 min after booking: force-refresh the lane calendar, then turn off
-    highbay 2 (neighbour-aware at night). Common lights handled separately; highbay
-    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
-    is latched, END only clears the helper and leaves highbays to Keep-On / night
-    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
-    entity + delay 2s before any state check or light action, so last-minute back-to-back
-    bookings are seen before the keep-on decision.'
+    highbay 2 (neighbour-aware day AND night since 2026-08-04 - daylight off guarded
+    so an adjacent active lane keeps its neighbour highbay). Common lights handled
+    separately; highbay 3 reserved as night residual. | Busy-mode guard 2026-06-16:
+    while lighting_all_lanes_active is latched, END only clears the helper and leaves
+    highbays to Keep-On / night shutdown. | RULE: all end-trigger automations MUST
+    force-update the lane calendar entity + delay 2s before any state check or light
+    action, so last-minute back-to-back bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_2_bowling_machine
@@ -156,20 +188,32 @@
         target:
           entity_id: light.highbay_2
     else:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_2
+    - if:
+      - condition: state
+        entity_id:
+        - input_boolean.bay1_helper
+        - input_boolean.bay2_helper
+        - input_boolean.bay3_helper
+        state: 'off'
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_2
+      note: '2026-08-04 all-day neighbour rule: hb2 also serves active Lane 1/Lane
+        3 bookings, so daylight off is guarded on bay1+bay2+bay3 helpers (same guard
+        the night branch and stranded-clearer use).'
   mode: single
 - id: bay3_booking_start
   alias: Bay 3 Booking - START
-  description: '11 min before booking: turn on highbay 3 + bay-3 helper (if not blocked).
-    Neighbour highbays handled by the night-neighbour automation; common lights by
-    door-open/occupancy.'
+  description: '11 min before booking: turn on highbay 3 + bay-3 helper + the common
+    lights (if not blocked). Neighbour highbays handled by the neighbour-on-bay-start
+    automation (all-day full adjacency since 2026-08-04); common lights ON with the
+    booking itself since 2026-08-04 (door-open/occupancy remain as backstops).'
   triggers:
   - event: start
     entity_id: calendar.lane_3_truman_or_bowling_machine
     offset: -0:11:00
-    platform: calendar
+    trigger: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay3_blocked
@@ -181,11 +225,21 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_3
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+    note: 'Inspector 2026-08-04: common lights come on WITH the booking (idempotent
+      if already on). The off-sweep cannot undo this - its imminent-booking guard
+      blocks while a booking is active or within the protect window.'
   mode: single
 - id: bay3_booking_end
   alias: Bay 3 Booking - END
   description: '10 min after booking: force-refresh the lane calendar, then turn off
-    highbay 3 in daylight; at night reserve highbay 3 (residual) and only drop neighbours.
+    highbay 3 in daylight (guarded on bay2/3/4 helpers since 2026-08-04 - all-day
+    neighbour rule); at night reserve highbay 3 (residual) and only drop neighbours.
     Common lights handled separately. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
     is latched, END only clears the helper and leaves highbays to Keep-On / night
     shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
@@ -238,20 +292,32 @@
         target:
           entity_id: light.highbay_4
     else:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_3
+    - if:
+      - condition: state
+        entity_id:
+        - input_boolean.bay2_helper
+        - input_boolean.bay3_helper
+        - input_boolean.bay4_helper
+        state: 'off'
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_3
+      note: '2026-08-04 all-day neighbour rule: hb3 also serves active Lane 2/Lane
+        4 bookings, so daylight off is guarded on bay2+bay3+bay4 helpers (same guard
+        the stranded-clearer uses).'
   mode: single
 - id: bay4_booking_start
   alias: Bay 4 Booking - START
-  description: '11 min before booking: turn on highbay 4 + bay-4 helper (if not blocked).
-    Neighbour highbays handled by the night-neighbour automation; common lights by
-    door-open/occupancy.'
+  description: '11 min before booking: turn on highbay 4 + bay-4 helper + the common
+    lights (if not blocked). Neighbour highbays handled by the neighbour-on-bay-start
+    automation (all-day full adjacency since 2026-08-04); common lights ON with the
+    booking itself since 2026-08-04 (door-open/occupancy remain as backstops).'
   triggers:
   - event: start
     entity_id: calendar.lane_4_run_up_net
     offset: -0:11:00
-    platform: calendar
+    trigger: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay4_blocked
@@ -263,16 +329,26 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_4
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+    note: 'Inspector 2026-08-04: common lights come on WITH the booking (idempotent
+      if already on). The off-sweep cannot undo this - its imminent-booking guard
+      blocks while a booking is active or within the protect window.'
   mode: single
 - id: bay4_booking_end
   alias: Bay 4 Booking - END
   description: '10 min after booking: force-refresh the lane calendar, then turn off
-    highbay 4 (neighbour-aware at night). Common lights handled separately; highbay
-    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
-    is latched, END only clears the helper and leaves highbays to Keep-On / night
-    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
-    entity + delay 2s before any state check or light action, so last-minute back-to-back
-    bookings are seen before the keep-on decision.'
+    highbay 4 (neighbour-aware day AND night since 2026-08-04 - daylight off guarded
+    so an adjacent active lane keeps its neighbour highbay). Common lights handled
+    separately; highbay 3 reserved as night residual. | Busy-mode guard 2026-06-16:
+    while lighting_all_lanes_active is latched, END only clears the helper and leaves
+    highbays to Keep-On / night shutdown. | RULE: all end-trigger automations MUST
+    force-update the lane calendar entity + delay 2s before any state check or light
+    action, so last-minute back-to-back bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_4_run_up_net
@@ -319,20 +395,32 @@
         target:
           entity_id: light.highbay_5
     else:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_4
+    - if:
+      - condition: state
+        entity_id:
+        - input_boolean.bay3_helper
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+        state: 'off'
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_4
+      note: '2026-08-04 all-day neighbour rule: hb4 also serves active Lane 3/Lane
+        5 bookings, so daylight off is guarded on bay3+bay4+bay5 helpers (same guard
+        the night branch and stranded-clearer use).'
   mode: single
 - id: bay5_booking_start
   alias: Bay 5 Booking - START
-  description: '11 min before booking: turn on highbay 5 + bay-5 helper (if not blocked).
-    Neighbour highbays handled by the night-neighbour automation; common lights by
-    door-open/occupancy.'
+  description: '11 min before booking: turn on highbay 5 + bay-5 helper + the common
+    lights (if not blocked). Neighbour highbays handled by the neighbour-on-bay-start
+    automation (all-day full adjacency since 2026-08-04); common lights ON with the
+    booking itself since 2026-08-04 (door-open/occupancy remain as backstops).'
   triggers:
   - event: start
     entity_id: calendar.lane_5_run_up_net
     offset: -0:11:00
-    platform: calendar
+    trigger: calendar
   conditions:
   - condition: state
     entity_id: input_boolean.bay5_blocked
@@ -344,16 +432,26 @@
   - action: light.turn_on
     target:
       entity_id: light.highbay_5
+  - action: light.turn_on
+    target:
+      entity_id:
+      - light.inside_wall_lights
+      - light.fluro_x_4
+      - light.mezzanine_wall_lights
+    note: 'Inspector 2026-08-04: common lights come on WITH the booking (idempotent
+      if already on). The off-sweep cannot undo this - its imminent-booking guard
+      blocks while a booking is active or within the protect window.'
   mode: single
 - id: bay5_booking_end
   alias: Bay 5 Booking - END
   description: '10 min after booking: force-refresh the lane calendar, then turn off
-    highbay 5 (neighbour-aware at night). Common lights handled separately; highbay
-    3 reserved as night residual. | Busy-mode guard 2026-06-16: while lighting_all_lanes_active
-    is latched, END only clears the helper and leaves highbays to Keep-On / night
-    shutdown. | RULE: all end-trigger automations MUST force-update the lane calendar
-    entity + delay 2s before any state check or light action, so last-minute back-to-back
-    bookings are seen before the keep-on decision.'
+    highbay 5 (neighbour-aware day AND night since 2026-08-04 - daylight off guarded
+    so an adjacent active lane keeps its neighbour highbay). Common lights handled
+    separately; highbay 3 reserved as night residual. | Busy-mode guard 2026-06-16:
+    while lighting_all_lanes_active is latched, END only clears the helper and leaves
+    highbays to Keep-On / night shutdown. | RULE: all end-trigger automations MUST
+    force-update the lane calendar entity + delay 2s before any state check or light
+    action, so last-minute back-to-back bookings are seen before the keep-on decision.'
   triggers:
   - event: end
     entity_id: calendar.lane_5_run_up_net
@@ -400,9 +498,19 @@
         target:
           entity_id: light.highbay_5
     else:
-    - action: light.turn_off
-      target:
-        entity_id: light.highbay_5
+    - if:
+      - condition: state
+        entity_id:
+        - input_boolean.bay4_helper
+        - input_boolean.bay5_helper
+        state: 'off'
+      then:
+      - action: light.turn_off
+        target:
+          entity_id: light.highbay_5
+      note: '2026-08-04 all-day neighbour rule: hb5 also serves an active Lane 4 booking,
+        so daylight off is guarded on bay4+bay5 helpers (same guard the night branch
+        and stranded-clearer use).'
   mode: single
 - id: '1773291498207'
   alias: Booking BAY1 Access - Webhook
@@ -727,11 +835,15 @@
       message: The front roller door has been open for 3 minutes.
   mode: single
 - id: '1780070397691'
-  alias: Night - Activate Neighbour Highbays on Bay Start
-  description: 'Safety net: when any bay_helper turns ON during dusk/night (sun within
-    45 min of setting or already set), immediately activate the correct neighbour
-    highbays. Closes race condition where booking_start fires just outside the 30-min
-    night window. Idempotent — turning on an already-on light has no effect.'
+  alias: Lanes - Activate Neighbour Highbays on Bay Start
+  description: 'When any bay_helper turns ON, immediately turn on the adjacent (neighbour)
+    highbays: Bay 1 -> hb2 | Bay 2 -> hb1,hb3 | Bay 3 -> hb2,hb4 | Bay 4 -> hb3,hb5
+    | Bay 5 -> hb4. Idempotent - turning on an already-on light has no effect. 2026-08-04
+    (Inspector): night-only gate REMOVED - the Lane-3-style neighbour rule now applies
+    to every lane ALL DAY, so any booking lights its own lane plus the adjacent lanes.
+    Off side = neighbour-aware guards in the bay END automations + Highbays - Clear
+    Stranded Neighbour Lights; the every-minute reconcile carries the same mapping
+    as self-heal.'
   triggers:
   - trigger: state
     entity_id:
@@ -741,11 +853,7 @@
     - input_boolean.bay4_helper
     - input_boolean.bay5_helper
     to: 'on'
-  conditions:
-  - condition: template
-    value_template: '{{ is_state(''sun.sun'', ''below_horizon'') or (is_state(''sun.sun'',
-      ''above_horizon'') and (as_timestamp(state_attr(''sun.sun'', ''next_setting''))
-      - as_timestamp(now())) < 2700) }}'
+  conditions: []
   actions:
   - choose:
     - conditions:
@@ -3409,8 +3517,9 @@
   alias: Lanes - Lighting + Machine Reconcile (every minute, self-heal)
   description: 'Self-healing safety net. Every minute, for each of the 5 lanes, reads
     the lane calendar; if a booking is active or starts within ~11 min it ENSURES
-    that lane''s highbay light is ON (plus documented neighbours: Lane 3 -> highbay_2
-    + highbay_4, Lane 5 -> highbay_4) unless the bay is blocked, and for machine lanes
+    that lane''s highbay light is ON (plus adjacent neighbours - full adjacency since
+    2026-08-04, Inspector: Lane 1 -> hb2, Lane 2 -> hb1+hb3, Lane 3 -> hb2+hb4, Lane
+    4 -> hb3+hb5, Lane 5 -> hb4) unless the bay is blocked, and for machine lanes
     1/2/3 ensures the correctly Truman-gated bowling-machine plug(s) are ON. ON-ENSURE
     ONLY: it never turns anything OFF, so it cannot cut a session mid-way or fight
     the per-bay END / night shutdown / outage-off logic. Fills two gaps: (a) a booking
@@ -3482,7 +3591,8 @@
       light: light.highbay_1
       helper: input_boolean.bay1_helper
       blocked: input_boolean.bay1_blocked
-      neighbours: []
+      neighbours:
+      - light.highbay_2
       plugL: switch.lane_1_left
       plugR: switch.lane_1_right
       posL: Lane 1 Left
@@ -3491,7 +3601,9 @@
       light: light.highbay_2
       helper: input_boolean.bay2_helper
       blocked: input_boolean.bay2_blocked
-      neighbours: []
+      neighbours:
+      - light.highbay_1
+      - light.highbay_3
       plugL: switch.lane_2_left
       plugR: switch.lane_2_right
       posL: Lane 2 Left
@@ -3511,7 +3623,9 @@
       light: light.highbay_4
       helper: input_boolean.bay4_helper
       blocked: input_boolean.bay4_blocked
-      neighbours: []
+      neighbours:
+      - light.highbay_3
+      - light.highbay_5
       plugL: ''
       plugR: ''
       posL: ''
