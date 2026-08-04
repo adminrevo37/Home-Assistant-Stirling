@@ -796,11 +796,40 @@
   description: 'Front door unlocked (booking code entry / exit button) -> turn on
     common lights. Primary arrival trigger; occupancy>threshold is the backstop. NOTE:
     assumes a DS3 code entry surfaces as lock.front_door_lock -> unlocked; verify
-    on-site.'
+    on-site. | DAYLIGHT GATE 2026-08-04 (Inspector): now carries the SAME gate as
+    the occupancy automation - in daylight it only fires inside a booking''s lead-in/lead-out
+    window (a bay helper on = booking start-11min through end+10min). Inspector''s
+    rule: during the day the common lights come on ONLY for a booking, or manually
+    via the HA app / Control4 panel (manual control is never blocked - this automation
+    only governs automatic turn-on). After dark the gate is bypassed: any door open
+    lights the building. This closes the 2026-08-03 deliberate exception where door-open
+    was left ungated as a safety net.'
   triggers:
   - trigger: state
     entity_id: lock.front_door_lock
     to: unlocked
+  conditions:
+  - condition: or
+    alias: After dark, OR inside a booking's lead-in/lead-out window
+    conditions:
+    - condition: state
+      entity_id: sun.sun
+      state: below_horizon
+    - condition: state
+      entity_id: input_boolean.bay1_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay2_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay3_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay4_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay5_helper
+      state: 'on'
   actions:
   - action: light.turn_on
     target:
