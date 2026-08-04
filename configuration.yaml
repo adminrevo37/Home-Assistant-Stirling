@@ -171,6 +171,19 @@ rest_command:
     url: "{{ states('input_text.healthchecks_ping_url') }}"
     method: GET
     timeout: 10
+  # TV DOOR-OPEN HOLD (2026-08-04): pings the cricket-door-listener service on
+  # the lane-display Pi (cricket-display, .128). The listener stamps today's
+  # date into a marker file; cricket-tv-cec.py then holds the bookings TV ON
+  # (via HDMI-CEC - the TV's smart plug has been removed) from the first
+  # roller-door open of the day until 21:30, independent of the booking
+  # schedule. Called by automation "TV - On at First Door Open (bookings TV)"
+  # on every door open (the stamp is idempotent). ⚠️ Pi IP is a DHCP lease with
+  # no reservation (Swoop router admin still closed) - if the Pi's lease ever
+  # moves off .128, update this URL or get the reservation done.
+  tv_door_open:
+    url: "http://192.168.1.128:8800/door-open"
+    method: POST
+    timeout: 10
 
 ###############################################################################
 ##### ROLLER DOOR — Visual sensor state helper
