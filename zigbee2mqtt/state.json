@@ -9,7 +9,7 @@
         "linkquality": 112
     },
     "0xa4c138074803a9a9": {
-        "energy": 217.13,
+        "energy": 217.15,
         "voltage": 234,
         "state": "ON",
         "countdown": 0,
@@ -17,8 +17,8 @@
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 154,
-        "current": 0.73,
+        "power": 152,
+        "current": 0.75,
         "linkquality": 148
     },
     "0xa4c138ba345696ae": {
@@ -44,16 +44,16 @@
         "linkquality": 120
     },
     "0xa4c13851f47cb91d": {
-        "energy": 16.06,
-        "voltage": 242,
+        "energy": 16.07,
+        "voltage": 243,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 59,
-        "current": 0.36,
+        "power": 46,
+        "current": 0.85,
         "linkquality": 88
     },
     "0xa4c138bc9b38b0c2": {
@@ -71,27 +71,27 @@
     },
     "0xa4c138fdcd4c98b3": {
         "voltage": 242,
-        "energy": 19.18,
+        "energy": 19.19,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 104,
-        "current": 0.17,
+        "power": 30,
+        "current": 0.2,
         "linkquality": 92
     },
     "0xa4c13879a2af63a1": {
         "energy": 4.51,
-        "voltage": 243,
+        "voltage": 242,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 0,
+        "power": 3,
         "current": 0.02,
         "linkquality": 112
     },
@@ -104,8 +104,8 @@
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 0,
-        "current": 0.02,
+        "power": 31,
+        "current": 0.2,
         "linkquality": 100
     },
     "0xa4c13861a6ad537a": {
