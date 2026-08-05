@@ -3752,3 +3752,74 @@
   - action: rest_command.tv_door_open
   mode: single
   max_exceeded: silent
+- id: '1785928193955'
+  alias: Door - Unlock Command-Verify (reload C4 + retry on frozen feed)
+  description: 'SAFETY NET built 2026-08-05 during the evening Control4 freeze incident
+    (Paolo/Nick lockout): every lock.unlock command on the front door is verified
+    8s later - if lock.front_door_lock shows NO state change in the last 15s (command
+    silently swallowed by a frozen Control4 feed), reload the Control4 config entry
+    (01KM09V3X1JDWRBA7KSWMD1WAJ), wait for the lock entity to come back, re-fire the
+    unlock ONCE, verify again, and push Julian CRITICAL if it still failed. mode:single
+    drops re-entrant events (incl. our own retry unlock''s call_service event, which
+    fires while this run is still executing). Template age-checks on last_changed
+    are intentional: the failure mode is ''no state transition at all'', which no
+    native condition expresses. Complements the 2-min age watchdog, which is blind
+    to this mode (Director answers REST polls with stale data = fresh last_reported
+    timestamps while the event feed + command execution are dead). Remove/disable
+    once the C4 network link (flapping Reyee switch) is fixed.'
+  triggers:
+  - trigger: event
+    event_type: call_service
+    event_data:
+      domain: lock
+      service: unlock
+  conditions: []
+  actions:
+  - delay: 00:00:08
+  - if:
+    - condition: template
+      value_template: '{{ states(''lock.front_door_lock'') != ''unavailable'' and
+        (as_timestamp(now()) - as_timestamp(states.lock.front_door_lock.last_changed))
+        > 15 }}'
+    then:
+    - action: homeassistant.reload_config_entry
+      data:
+        entry_id: 01KM09V3X1JDWRBA7KSWMD1WAJ
+      note: 'Feed frozen: unlock produced no lock state transition. Reload resyncs
+        the C4 websocket.'
+    - wait_template: '{{ states(''lock.front_door_lock'') not in [''unavailable'',''unknown'']
+        }}'
+      timeout: 00:00:30
+      continue_on_timeout: true
+    - delay: 00:00:02
+    - action: lock.unlock
+      target:
+        entity_id: lock.front_door_lock
+      continue_on_error: true
+      note: One retry immediately after reload, while the fresh connection still works.
+    - delay: 00:00:08
+    - if:
+      - condition: template
+        value_template: '{{ (as_timestamp(now()) - as_timestamp(states.lock.front_door_lock.last_changed))
+          > 15 }}'
+      then:
+      - action: notify.mobile_app_julian
+        data:
+          title: "\U0001F6A8 Front door unlock FAILED twice"
+          message: A door unlock command got no response from Control4 even after
+            reloading the integration. Someone may be locked out at the roller door
+            - check the entry camera. Likely the C4 network link (Reyee switch).
+          data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
+      else:
+      - action: notify.mobile_app_julian
+        data:
+          title: ⚠️ Door unlock needed a C4 reload
+          message: An unlock command was swallowed by a frozen Control4 feed. Auto-reloaded
+            the integration and re-fired the unlock - it worked on retry. The C4 link
+            is unstable; Reyee switch suspect.
+  mode: single
