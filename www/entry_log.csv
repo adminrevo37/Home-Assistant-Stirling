@@ -5907,3 +5907,95 @@ Timestamp,Bay,Slot,Customer Name,Code Used
 2026-08-06 01:20:00,Staff,2,User 1,staff-protected
 2026-08-06 01:35:00,Staff,2,User 1,staff-protected
 2026-08-06 01:51:00,Staff,2,User 1,staff-protected
+2026-08-06 02:07:00,Staff,2,User 1,staff-protected
+2026-08-06 02:22:00,Staff,2,User 1,staff-protected
+2026-08-06 02:38:00,Staff,2,User 1,staff-protected
+2026-08-06 02:54:00,Staff,2,User 1,staff-protected
+2026-08-06 03:09:00,Staff,2,User 1,staff-protected
+2026-08-06 03:25:00,Staff,2,User 1,staff-protected
+2026-08-06 03:40:00,Staff,2,User 1,staff-protected
+2026-08-06 03:56:00,Staff,2,User 1,staff-protected
+2026-08-06 04:12:00,Staff,2,User 1,staff-protected
+2026-08-06 04:28:00,Staff,2,User 1,staff-protected
+2026-08-06 04:43:00,Staff,2,User 1,staff-protected
+2026-08-06 04:59:00,Staff,2,User 1,staff-protected
+2026-08-06 05:14:00,Staff,2,User 1,staff-protected
+2026-08-06 05:30:00,Staff,2,User 1,staff-protected
+2026-08-06 05:46:00,Staff,2,User 1,staff-protected
+2026-08-06 06:02:00,Staff,2,User 1,staff-protected
+2026-08-06 06:17:00,Staff,2,User 1,staff-protected
+2026-08-06 06:32:00,Staff,2,User 1,staff-protected
+2026-08-06 06:48:00,Staff,2,User 1,staff-protected
+2026-08-06 07:04:00,Staff,2,User 1,staff-protected
+2026-08-06 07:20:00,Staff,2,User 1,staff-protected
+2026-08-06 07:36:00,Staff,2,User 1,staff-protected
+2026-08-06 07:51:00,Staff,2,User 1,staff-protected
+2026-08-06 08:07:00,Staff,2,User 1,staff-protected
+2026-08-06 08:22:00,Staff,2,User 1,staff-protected
+2026-08-06 08:37:00,Staff,2,User 1,staff-protected
+2026-08-06 08:53:00,Staff,2,User 1,staff-protected
+2026-08-06 09:09:00,Staff,2,User 1,staff-protected
+2026-08-06 09:25:00,Staff,2,User 1,staff-protected
+2026-08-06 09:41:00,Staff,2,User 1,staff-protected
+2026-08-06 09:56:00,Staff,2,User 1,staff-protected
+2026-08-06 10:12:00,Staff,2,User 1,staff-protected
+2026-08-06 10:28:00,Staff,2,User 1,staff-protected
+2026-08-06 10:43:00,Staff,2,User 1,staff-protected
+2026-08-06 10:59:00,Staff,2,User 1,staff-protected
+2026-08-06 11:14:00,Staff,2,User 1,staff-protected
+2026-08-06 11:30:00,Staff,2,User 1,staff-protected
+2026-08-06 11:46:00,Staff,2,User 1,staff-protected
+2026-08-06 12:02:00,Staff,2,User 1,staff-protected
+2026-08-06 12:18:00,Staff,2,User 1,staff-protected
+2026-08-06 12:33:00,Staff,2,User 1,staff-protected
+2026-08-06 12:49:00,Staff,2,User 1,staff-protected
+2026-08-06 13:05:00,Staff,2,User 1,staff-protected
+2026-08-06 13:20:00,Staff,2,User 1,staff-protected
+2026-08-06 13:35:00,Staff,2,User 1,staff-protected
+2026-08-06 13:51:00,Staff,2,User 1,staff-protected
+2026-08-06 14:07:00,Staff,2,User 1,staff-protected
+2026-08-06 14:22:00,Staff,2,User 1,staff-protected
+2026-08-06 14:38:00,Staff,2,User 1,staff-protected
+2026-08-06 14:54:00,Staff,2,User 1,staff-protected
+2026-08-06 15:10:00,Staff,2,User 1,staff-protected
+2026-08-06 15:25:00,Staff,2,User 1,staff-protected
+2026-08-06 15:40:00,Staff,2,User 1,staff-protected
+2026-08-06 16:00:02,Staff,2,User 1,staff-protected
+2026-08-06 16:16:00,Staff,2,User 1,staff-protected
+2026-08-06 16:32:00,Staff,2,User 1,staff-protected
+2026-08-06 16:48:00,Staff,2,User 1,staff-protected
+2026-08-06 17:03:00,Staff,2,User 1,staff-protected
+2026-08-06 17:19:00,Staff,2,User 1,staff-protected
+2026-08-06 17:34:00,Staff,2,User 1,staff-protected
+2026-08-06 17:50:00,Unknown (slot 0),0,Unknown,
+2026-08-06 18:06:00,Unknown (slot 0),0,Unknown,
+2026-08-06 18:22:00,Unknown (slot 0),0,Unknown,
+2026-08-06 18:38:00,Unknown (slot 0),0,Unknown,
+2026-08-06 18:53:00,Unknown (slot 0),0,Unknown,
+2026-08-06 19:09:00,Unknown (slot 0),0,Unknown,
+2026-08-06 19:24:00,Unknown (slot 0),0,Unknown,
+2026-08-06 19:40:00,Unknown (slot 0),0,Unknown,
+2026-08-06 19:55:01,Unknown (slot 0),0,Unknown,
+2026-08-06 20:11:00,Unknown (slot 0),0,Unknown,
+2026-08-06 20:27:00,Unknown (slot 0),0,Unknown,
+2026-08-06 20:42:00,Unknown (slot 0),0,Unknown,
+2026-08-06 20:58:00,Unknown (slot 0),0,Unknown,
+2026-08-06 21:14:00,Unknown (slot 0),0,Unknown,
+2026-08-06 21:30:00,Unknown (slot 0),0,Unknown,
+2026-08-06 21:45:00,Unknown (slot 0),0,Unknown,
+2026-08-06 22:00:00,Unknown (slot 0),0,Unknown,
+2026-08-06 22:16:00,Unknown (slot 0),0,Unknown,
+2026-08-06 22:31:00,Unknown (slot 0),0,Unknown,
+2026-08-06 22:46:00,Unknown (slot 0),0,Unknown,
+2026-08-06 23:02:00,Unknown (slot 0),0,Unknown,
+2026-08-06 23:18:00,Unknown (slot 0),0,Unknown,
+2026-08-06 23:34:00,Unknown (slot 0),0,Unknown,
+2026-08-06 23:49:00,Unknown (slot 0),0,Unknown,
+2026-08-07 00:05:00,Unknown (slot 0),0,Unknown,
+2026-08-07 00:21:00,Unknown (slot 0),0,Unknown,
+2026-08-07 00:36:00,Unknown (slot 0),0,Unknown,
+2026-08-07 00:51:00,Unknown (slot 0),0,Unknown,
+2026-08-07 01:07:00,Unknown (slot 0),0,Unknown,
+2026-08-07 01:23:00,Unknown (slot 0),0,Unknown,
+2026-08-07 01:38:00,Unknown (slot 0),0,Unknown,
+2026-08-07 01:54:00,Unknown (slot 0),0,Unknown,
