@@ -1331,9 +1331,12 @@
 - id: keypad_validate_entry
   alias: Customer Keypad - Validate Entry & Open Door
   description: Customer entry keypad fires esphome.keypad_code with the typed PIN.
-    Compare against active-booking codes in input_text.bay{N}_code_slot_{a/b/c}. Match
-    -> unlock lock.front_door_lock + log. No match -> log. Fully self-contained templates
-    (no inter-variable refs). See BUILD_KEYPAD_PATH_A_JAYCAR.md.
+    Compare against active-booking codes in input_text.bay{N}_code_slot_{a/b/c}. ALSO
+    accepts the fallback code (input_text.door_fallback_code, default 2026) while
+    input_boolean.door_fallback_code_active is on - a temporary code made live automatically
+    when a customer is stuck (3 invalid attempts), so Julian can relay it. Match ->
+    unlock lock.front_door_lock + log. No match -> log + fire keypad_invalid_attempt.
+    Fully self-contained templates. See BUILD_KEYPAD_PATH_A_JAYCAR.md.
   triggers:
   - event_type: esphome.keypad_code
     trigger: event
@@ -1378,7 +1381,9 @@
       s in [''a'', ''b'', ''c''] %}{% set val = states(''input_text.bay'' ~ n ~ ''_code_slot_''
       ~ s) %}{% if val and '':'' in val and (val.split('':'', 1)[0] | trim) == t and
       t != '''' %}{% set ns.found = n ~ ''|'' ~ val.split('':'', 1)[1] %}{% endif
-      %}{% endfor %}{% endfor %}{{ ns.found }}'
+      %}{% endfor %}{% endfor %}{% if ns.found == '''' and t != '''' and t == (states(''input_text.door_fallback_code'')
+      | default('''') | trim) and is_state(''input_boolean.door_fallback_code_active'',
+      ''on'') %}{% set ns.found = ''FB|Fallback '' ~ t %}{% endif %}{{ ns.found }}'
   trace:
     stored_traces: 30
 - id: '1780392305276'
@@ -4163,14 +4168,15 @@
   mode: single
 - id: '1786432902360'
   alias: Watchdog - Customer Stuck at Keypad (3 invalid in 5 min)
-  description: 'THE incident signature: 2026-07-14 a customer typed her correct-but-never-loaded
-    code NINE times and the door-code outage stayed silent for 2 hours. The keypad
-    validate automation fires keypad_invalid_attempt on every rejected PIN; counted
-    in a rolling 5-min window. At 3: snapshots the 3 door cameras (intercom + outside_entry
-    CCTV + inside pier_facing_entry) to /config/www/keypad_alert_*.jpg, stacks them
-    into one push attachment (shell_command.combine_door_snapshots - iOS single image),
-    CRITICAL push; tap opens the Alert Cameras dashboard which shows those 3 CAPTURED
-    stills. Catches every HA-up code failure in real time.'
+  description: 'THE incident signature (2026-07-14: a customer typed her correct-but-unloaded
+    code 9x into a 2h silent outage). Fires on 3 invalid keypad attempts in a rolling
+    5-min window. INSTANTLY: (1) makes fallback code 2026 live (input_boolean.door_fallback_code_active
+    on, 30-min expiry) so Julian can relay it; (2) snapshots the 3 door cameras ->
+    one composite; (3) CRITICAL push confirming 2026 is verified-live + a ''Turn OFF
+    2026 now'' button, tap opens the Screenshots dashboard. Auto-expires via ''Door
+    Fallback - Auto Expire''. SECURITY: 2026 is a widely-used facility code (clubs/teams)
+    - a fumbler could self-activate it; Julian gets a camera + can kill it from the
+    notification.'
   triggers:
   - trigger: event
     event_type: keypad_invalid_attempt
@@ -4183,6 +4189,15 @@
       entity_id: counter.keypad_invalid_attempts
       above: 2
     then:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.door_fallback_code_active
+    - action: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.door_fallback_expires
+      data:
+        datetime: '{{ (now() + timedelta(minutes=30)).strftime(''%Y-%m-%d %H:%M:%S'')
+          }}'
     - action: camera.snapshot
       target:
         entity_id: camera.front_intercom
@@ -4207,10 +4222,12 @@
     - action: notify.mobile_app_julian
       data:
         title: "\U0001F6A8 Someone can't get in"
-        message: 3+ invalid keypad attempts in the last 5 min at the front door ({{
-          now().strftime('%H:%M') }}). Their code is probably missing from the slots
-          - check the Door Codes dashboard. Tap for the 3 captured door photos (intercom
-          + outside CCTV + inside roller door).
+        message: 3+ invalid keypad attempts at the front door ({{ now().strftime('%H:%M')
+          }}). {% if is_state('input_boolean.door_fallback_code_active','on') and
+          states('input_text.door_fallback_code')=='2026' %}✅ I've made code 2026
+          LIVE + verified - tell them to enter 2026# (expires {{ states('input_datetime.door_fallback_expires')[11:16]
+          }}).{% else %}⚠️ Fallback code did NOT activate - attend the door.{% endif
+          %} Tap for the 3 captured door photos.
         data:
           image: /local/keypad_alert_snapshot.jpg
           url: /alert-cameras/door
@@ -4220,6 +4237,9 @@
               name: default
               critical: 1
               volume: 1
+          actions:
+          - action: FALLBACK_OFF
+            title: Turn OFF code 2026 now
     - action: counter.reset
       target:
         entity_id: counter.keypad_invalid_attempts
@@ -4417,4 +4437,47 @@
           message: The lane-display Pi is reachable again.
           data:
             tag: lane-display-pi
+  mode: single
+- id: '1786439617401'
+  alias: Door Fallback - Auto Expire (30 min)
+  description: Safety timer for the temporary fallback door code (2026). When input_boolean.door_fallback_code_active
+    turns on (via the stuck-at-keypad alert), waits 30 min then turns it off so 2026
+    never stays a live backdoor. mode:restart = each fresh activation resets the 30-min
+    clock. Also fires a confirming push. (A box restart clears the boolean anyway
+    - no restore - so this is belt+braces.)
+  triggers:
+  - trigger: state
+    entity_id: input_boolean.door_fallback_code_active
+    to: 'on'
+  actions:
+  - delay:
+      minutes: 30
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.door_fallback_code_active
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F510 Fallback code 2026 expired"
+      message: The temporary fallback code 2026 has auto-expired (30 min) and no longer
+        opens the door.
+  mode: restart
+- id: '1786439630146'
+  alias: Door Fallback - Turn OFF from notification button
+  description: Handles the 'Turn OFF code 2026 now' action button on the stuck-at-keypad
+    push, so Julian can kill the fallback code instantly from his phone (e.g. if the
+    person at the door is not a legitimate customer). Turns off input_boolean.door_fallback_code_active
+    + confirms.
+  triggers:
+  - trigger: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: FALLBACK_OFF
+  actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.door_fallback_code_active
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F510 Fallback code 2026 turned OFF"
+      message: Code 2026 no longer opens the door.
   mode: single

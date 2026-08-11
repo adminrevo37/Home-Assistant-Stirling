@@ -9,16 +9,16 @@
         "linkquality": 108
     },
     "0xa4c138074803a9a9": {
-        "energy": 237.49,
-        "voltage": 231,
+        "energy": 237.51,
+        "voltage": 237,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 157,
-        "current": 0.73,
+        "power": 150,
+        "current": 0.76,
         "linkquality": 180
     },
     "0xa4c138ba345696ae": {
@@ -44,7 +44,7 @@
         "linkquality": 120
     },
     "0xa4c13851f47cb91d": {
-        "energy": 18.78,
+        "energy": 18.79,
         "voltage": 241,
         "state": "ON",
         "countdown": 0,
@@ -52,8 +52,8 @@
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 59,
-        "current": 0.35,
+        "power": 110,
+        "current": 0.63,
         "linkquality": 80
     },
     "0xa4c138bc9b38b0c2": {
@@ -70,21 +70,21 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 237,
-        "energy": 22.08,
+        "voltage": 240,
+        "energy": 22.09,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 43,
-        "current": 0.28,
+        "power": 59,
+        "current": 0.3,
         "linkquality": 72
     },
     "0xa4c13879a2af63a1": {
         "energy": 4.84,
-        "voltage": 241,
+        "voltage": 242,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -96,7 +96,7 @@
         "linkquality": 108
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 13.89,
+        "energy": 13.9,
         "voltage": 239,
         "state": "ON",
         "countdown": 0,
@@ -104,8 +104,8 @@
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 0,
-        "current": 0.02,
+        "power": 145,
+        "current": 0.25,
         "linkquality": 112
     },
     "0xa4c13861a6ad537a": {
