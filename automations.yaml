@@ -1362,6 +1362,8 @@
         message: Invalid code attempt (typed {{ (trigger.event.data.pin | default('')
           | string) | regex_replace('[^0-9]','') }}) - door not opened
         entity_id: lock.front_door_lock
+    - alias: Fire event for the stuck-at-door watchdog (3 invalids in 5 min alerts)
+      event: keypad_invalid_attempt
   - action: shell_command.entry_webhook
     data:
       code: '{{ (trigger.event.data.pin | default('''') | string) | regex_replace(''[^0-9]'','''')
@@ -3471,6 +3473,7 @@
       - binary_sensor.192_168_1_2
       - binary_sensor.192_168_1_112
       - binary_sensor.1_1_1_1
+      - binary_sensor.lane_display_pi_ping
   mode: single
 - id: '1785466777919'
   alias: Network Watchdog - Device Down/Recovered Alert
@@ -4060,7 +4063,11 @@
     entity_id:
     - binary_sensor.roller_door_contact
     - binary_sensor.0x54ef4410014ae8c0_contact
+    - switch.lane_1_left
     - switch.lane_1_right
+    - switch.lane_2_left
+    - switch.lane_2_right
+    - switch.lane_3_left
     - switch.lane_3_right
     - switch.lane_display_tv
     to: unavailable
@@ -4097,7 +4104,19 @@
       entity_id: binary_sensor.0x54ef4410014ae8c0_contact
       state: unavailable
     - condition: state
+      entity_id: switch.lane_1_left
+      state: unavailable
+    - condition: state
       entity_id: switch.lane_1_right
+      state: unavailable
+    - condition: state
+      entity_id: switch.lane_2_left
+      state: unavailable
+    - condition: state
+      entity_id: switch.lane_2_right
+      state: unavailable
+    - condition: state
+      entity_id: switch.lane_3_left
       state: unavailable
     - condition: state
       entity_id: switch.lane_3_right
@@ -4115,12 +4134,13 @@
     data:
       title: "\U0001F527 Device health digest"
       message: 'Currently offline: {{ ([''binary_sensor.roller_door_contact'', ''binary_sensor.0x54ef4410014ae8c0_contact'',
-        ''switch.lane_1_right'', ''switch.lane_3_right'', ''switch.lane_display_tv'']
+        ''switch.lane_1_left'', ''switch.lane_1_right'', ''switch.lane_2_left'', ''switch.lane_2_right'',
+        ''switch.lane_3_left'', ''switch.lane_3_right'', ''switch.lane_display_tv'']
         | select(''is_state'', ''unavailable'') | map(''state_attr'', ''friendly_name'')
         | reject(''none'') | list + ([''Keypad (offline)''] if states(''binary_sensor.cricket_keypad_online'')
         in [''off'', ''unavailable''] else [])) | join('', '') }}. Zigbee devices
-        need a re-pair (permit-join + button); the 3 plugs are mesh ROUTERS - fixing
-        them stabilises the battery sensors too.'
+        need a re-pair (permit-join + button); the machine plugs are mesh ROUTERS
+        - fixing them stabilises the battery sensors too.'
   mode: single
 - id: '1786431319404'
   alias: Watchdog - Backups Stale
@@ -4140,4 +4160,225 @@
       message: 'Google Drive Backup reports backups are stale (no fresh backup). Last
         successful automatic backup: {{ states(''sensor.backup_last_successful_automatic_backup'')
         }}. Check the add-on before the next outage needs a restore.'
+  mode: single
+- id: '1786432902360'
+  alias: Watchdog - Customer Stuck at Keypad (3 invalid in 5 min)
+  description: 'THE incident signature: 2026-07-14 a customer typed her correct-but-never-loaded
+    code NINE times and the facility-wide door-code outage stayed silent for 2 hours.
+    The keypad validate automation now fires keypad_invalid_attempt on every rejected
+    PIN; this counts them in a rolling window (mode restart = 5 quiet minutes resets).
+    At 3 attempts: CRITICAL push with the front-door camera attached. Catches every
+    HA-up code failure in real time - missing calendar event, Krickora fault, stale
+    slot, or a genuinely wrong code being hammered.'
+  triggers:
+  - trigger: event
+    event_type: keypad_invalid_attempt
+  actions:
+  - action: counter.increment
+    target:
+      entity_id: counter.keypad_invalid_attempts
+  - if:
+    - condition: numeric_state
+      entity_id: counter.keypad_invalid_attempts
+      above: 2
+    then:
+    - action: notify.mobile_app_julian
+      data:
+        title: "\U0001F6A8 Someone can't get in"
+        message: 3+ invalid keypad attempts in the last 5 min at the front door ({{
+          now().strftime('%H:%M') }}). Their code is probably missing from the slots
+          - check the Door Codes dashboard / camera.
+        data:
+          entity_id: camera.pier_facing_entry
+          push:
+            sound:
+              name: default
+              critical: 1
+              volume: 1
+    - action: counter.reset
+      target:
+        entity_id: counter.keypad_invalid_attempts
+  - delay:
+      minutes: 5
+  - action: counter.reset
+    target:
+      entity_id: counter.keypad_invalid_attempts
+  mode: restart
+- id: '1786432919539'
+  alias: Security - After-Hours Person Detected (critical)
+  description: Intrusion alerting - previously ZERO. Frigate person detection on any
+    INDOOR camera between 22:30 and 05:30 while no booking is active (all 5 bay helpers
+    off) sends a CRITICAL push with the triggering camera attached. Outdoor cameras
+    deliberately excluded (street traffic false alarms). Bay-helper gate means a legitimate
+    late booking (helpers on until end+10) never alarms; staff after hours WILL alarm
+    - acceptable, they know the system.
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.cricket_facing_batters_person_occupancy
+    - binary_sensor.cricket_facing_bowlers_person_occupancy
+    - binary_sensor.pier_facing_bags_person_occupancy
+    - binary_sensor.pier_facing_entry_person_occupancy
+    - binary_sensor.pier_facing_office_person_occupancy
+    - binary_sensor.upstairs_person_occupancy
+    to: 'on'
+  conditions:
+  - condition: time
+    after: '22:30:00'
+    before: 05:30:00
+  - condition: state
+    entity_id: input_boolean.bay1_helper
+    state: 'off'
+  - condition: state
+    entity_id: input_boolean.bay2_helper
+    state: 'off'
+  - condition: state
+    entity_id: input_boolean.bay3_helper
+    state: 'off'
+  - condition: state
+    entity_id: input_boolean.bay4_helper
+    state: 'off'
+  - condition: state
+    entity_id: input_boolean.bay5_helper
+    state: 'off'
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F6A8 PERSON INSIDE after hours"
+      message: '{{ trigger.to_state.name }} detected a person at {{ now().strftime(''%H:%M:%S'')
+        }} with no active booking. Camera attached.'
+      data:
+        entity_id: camera.{{ trigger.entity_id.split('.')[1].replace('_person_occupancy',
+          '') }}
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1
+  mode: parallel
+  max: 10
+- id: '1786432934072'
+  alias: Watchdog - Zigbee Network DOWN (Z2M bridge)
+  description: Whole-mesh failure alert. If the Zigbee2MQTT bridge connection drops
+    for 10+ minutes (Z2M add-on crash, MQTT broker death, coordinator fault), EVERY
+    Zigbee device - machine plugs, door contacts, sensors - is dead at once. Without
+    this it only surfaces as scattered 30-min per-device dropout alerts; this names
+    the real cause in 10 min. Push on down AND recovery.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+    to:
+    - 'off'
+    - unavailable
+    for:
+      minutes: 10
+    id: down
+  - trigger: state
+    entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+    from:
+    - 'off'
+    - unavailable
+    to: 'on'
+    id: up
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: down
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: "\U0001F6A8 ZIGBEE NETWORK DOWN"
+          message: Zigbee2MQTT bridge offline 10+ min - ALL Zigbee devices dead (machine
+            plugs, door contacts, sensors). Check the Z2M add-on / Mosquitto broker.
+          data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
+    - conditions:
+      - condition: trigger
+        id: up
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: ✅ Zigbee network recovered
+          message: Zigbee2MQTT bridge back online.
+  mode: single
+- id: '1786433025349'
+  alias: Watchdog - Frigate DOWN (security recording stopped)
+  description: 'Frigate add-on death = security recording + person detection silently
+    stop (and the new after-hours intrusion alert goes blind). Frigate exposes no
+    single status entity, so this watches two independent cameras'' person-occupancy
+    sensors: trigger when either is unavailable 30 min AND condition requires BOTH
+    unavailable - a single camera being disabled/reconfigured never false-alarms;
+    only whole-Frigate death fires.'
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.pier_facing_entry_person_occupancy
+    - binary_sensor.cricket_facing_batters_person_occupancy
+    to: unavailable
+    for:
+      minutes: 30
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.pier_facing_entry_person_occupancy
+    state: unavailable
+  - condition: state
+    entity_id: binary_sensor.cricket_facing_batters_person_occupancy
+    state: unavailable
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: ⚠️ Frigate DOWN - no security recording
+      message: 'Frigate camera entities unavailable 30+ min: recording, person detection
+        and the after-hours intrusion alert are all dead. Check the Frigate add-on
+        (it was throwing DNS/timeout errors after the last reboot).'
+  mode: single
+- id: '1786433147359'
+  alias: Watchdog - Lane Display Pi Down (gentle)
+  description: Lane-display Pi (192.168.1.128, DHCP lease - no reservation, Swoop
+    router still closed) runs the TV booking board + the door-listener the bookings-TV
+    depends on. Down 10+ min -> NORMAL-priority push (deliberately not critical -
+    it is a customer-facing display, not safety; kept OUT of the main network watchdog
+    whose alerts are all critical-sound). Recovery push included. NB if the Pi's DHCP
+    lease ever moves off .128 this probe goes permanently down AND the tv_door_open
+    rest_command breaks - get the reservation done.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.lane_display_pi_ping
+    to: 'off'
+    for:
+      minutes: 10
+    id: down
+  - trigger: state
+    entity_id: binary_sensor.lane_display_pi_ping
+    from: 'off'
+    to: 'on'
+    id: up
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: down
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: ⚠️ Lane display Pi offline
+          message: The lane-display Pi (.128) has been unreachable 10+ min - TV booking
+            board + bookings-TV door-open hold are down. Power/WiFi/lease check needed.
+          data:
+            tag: lane-display-pi
+    - conditions:
+      - condition: trigger
+        id: up
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: ✅ Lane display Pi back
+          message: The lane-display Pi is reachable again.
+          data:
+            tag: lane-display-pi
   mode: single
