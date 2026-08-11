@@ -134,6 +134,10 @@ sensor:
       minutes: 5
 
 shell_command:
+  # Stacks the two front-door snapshots (intercom + outside_entry CCTV) into
+  # ONE image for the stuck-at-keypad push - iOS shows a single attachment.
+  # See /config/combine_door_snapshots.py (2026-08-11).
+  combine_door_snapshots: python3 /config/combine_door_snapshots.py
   usage_webhook: 'python3 /config/usage_webhook.py {{ payload | to_json | base64_encode }}'
   entry_webhook: 'python3 /config/entry_webhook.py "{{ code }}" "{{ result }}" "{{ bay }}"'
   git_push: bash /config/git_push.sh
