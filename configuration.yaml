@@ -171,6 +171,21 @@ rest_command:
     url: "{{ states('input_text.healthchecks_ping_url') }}"
     method: GET
     timeout: 10
+  # RECONCILE HEARTBEAT (2026-08-11): pings a SECOND Healthchecks.io check
+  # ("Door-Code Reconcile") from the END of the every-minute door-code
+  # reconcile automation. The main heartbeat above proves HA is alive; this
+  # one proves the reconcile itself is completing successfully - it goes
+  # silent if the reconcile crashes per-run (the 2026-07-14 apostrophe class)
+  # or its trigger dies (the 2026-08-06 calendar-trigger class) while HA is
+  # otherwise up. The check uses a CRON schedule (* 5-22 * * *,
+  # Australia/Perth) matching the automation's 05:00-23:00 gate, so the
+  # overnight quiet window never false-alarms. URL held in
+  # input_text.healthchecks_reconcile_url (.storage, NOT git - secret UUID
+  # never committed). Inert while that helper is empty.
+  healthchecks_ping_reconcile:
+    url: "{{ states('input_text.healthchecks_reconcile_url') }}"
+    method: GET
+    timeout: 10
   # TV DOOR-OPEN HOLD (2026-08-04): pings the cricket-door-listener service on
   # the lane-display Pi (cricket-display, .128). The listener stamps today's
   # date into a marker file; cricket-tv-cec.py then holds the bookings TV ON
