@@ -1,0 +1,308 @@
+Director: 192.168.1.112
+
+Using cached Director token
+Auth OK
+
+=== Probing Director REST endpoints ===
+
+GET /api/v1/agents
+  Status : 200
+  Body   : [
+  "Daylight",
+  "delay",
+  "variables",
+  "access",
+  "communication",
+  "color_preset",
+  "Voice Coordinator",
+  "Data Analytics Agent",
+  "Recently Played Manager",
+  "navigation",
+  "media_sessions",
+  "push_notification",
+  "email_notification",
+  "ui_configuration",
+  "identity",
+  "history",
+  "driver_update",
+  "zwave_scenes",
+  "zwave",
+  "advanced_lighting",
+  "system_diagnostics",
+  "remote_access",
+  "backup",
+  "update_manager",
+  "scheduler"
+]
+
+GET /api/v1/agents/access
+  Status : 404
+  Body   : <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/v1/agents/access</pre>
+</body>
+</html>
+
+
+GET /api/v1/agents/access/users
+  Status : 404
+  Body   : <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/v1/agents/access/users</pre>
+</body>
+</html>
+
+
+GET /api/v1/agents/access/codes
+  Status : 404
+  Body   : <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/v1/agents/access/codes</pre>
+</body>
+</html>
+
+
+GET /api/v1/agents/userManager
+  Status : 404
+  Body   : <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/v1/agents/userManager</pre>
+</body>
+</html>
+
+
+GET /api/v1/agents/userManager/users
+  Status : 404
+  Body   : <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/v1/agents/userManager/users</pre>
+</body>
+</html>
+
+
+GET /api/v1/users
+  Status : 404
+  Body   : <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/v1/users</pre>
+</body>
+</html>
+
+
+GET /api/v1/codes
+  Status : 404
+  Body   : <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot GET /api/v1/codes</pre>
+</body>
+</html>
+
+
+GET /api/v1/items/87
+  Status : 200
+  Body   : [
+  {
+    "type": 9,
+    "typeName": "agent",
+    "control": "control4_agent_access",
+    "name": "Access",
+    "id": 87,
+    "proxy": "control4_agent_access",
+    "parentId": 1,
+    "URIs": {
+      "commands": "/api/v1/items/87/commands"
+    }
+  }
+]
+
+GET /api/v1/items/87/variables
+  Status : 200
+  Body   : []
+
+GET /api/v1/items/87/commands
+  Status : 200
+  Body   : []
+
+GET /api/v1/items/39/variables
+  Status : 200
+  Body   : [
+  {
+    "id": 39,
+    "varName": "Last Known User Code ID",
+    "type": "Number",
+    "hidden": 0,
+    "value": 2,
+    "variableId": 1001,
+    "name": "Control4 DS3 Door Station",
+    "roomName": "Room"
+  },
+  {
+    "id": 39,
+    "varName": "Last Known User Name",
+    "type": "String",
+    "hidden": 0,
+    "value": "User 1",
+    "variableId": 1002,
+    "name": "Control4 DS3 Door Station",
+    "roomName": "Room"
+  },
+  {
+    "id": 39,
+    "varName": "DS_ADDRESS",
+    "type": "String",
+    "hidden": 1,
+    "value": "192.168.1.107",
+    "variableId": 1003,
+    "name": "Control4 DS3 Door Station",
+    "roomName": "Room"
+  }
+]
+
+GET /api/v1/items/39/commands
+  Status : 200
+  Body   : [
+  {
+    "command": "Restart",
+    "label": "Restart",
+    "display": "Send Restart Command to Room \u203a Control4 DS3 Door Station",
+    "deviceId": 39
+  },
+  {
+    "command": "Send Snapshot Email",
+    "label": "Send Snapshot Email",
+    "display": "Send Snapshot Email from Room \u203a Control4 DS3 Door Station",
+    "deviceId": 39
+  }
+]
+
+GET /api/v1/items/93/variables
+  Status : 200
+  Body   : [
+  {
+    "id": 92,
+    "varName": "Last Unlocked By",
+    "type": "String",
+    "hidden": 0,
+    "value": "User 1",
+    "variableId": 1001,
+    "name": "Control4 DS2 Lock",
+    "roomName": "Room"
+  },
+  {
+    "id": 93,
+    "varName": "LockStatus",
+    "type": "String",
+    "hidden": 0,
+    "value": "locked",
+    "variableId": 1000,
+    "name": "DS2 Lock - Front Door",
+    "roomName": "Room"
+  },
+  {
+    "id": 93,
+    "varName": "BatteryStatus",
+    "type": "String",
+    "hidden": 0,
+    "value": "normal",
+    "variableId": 1001,
+    "name": "DS2 Lock - Front Door",
+    "roomName": "Room"
+  },
+  {
+    "id": 93,
+    "varName": "LastActionDescription",
+    "type": "String",
+    "hidden": 0,
+    "value": "Locked by Control4",
+    "variableId": 1002,
+    "name": "DS2 Lock - Front Door",
+    "r
+
+GET /api/v1/items/93/commands
+  Status : 200
+  Body   : [
+  {
+    "id": 0,
+    "display": "Unlock the Room \u203a DS2 Lock - Front Door",
+    "command": "UNLOCK",
+    "deviceId": 93
+  },
+  {
+    "id": 1,
+    "display": "Lock the Room \u203a DS2 Lock - Front Door",
+    "command": "LOCK",
+    "deviceId": 93
+  },
+  {
+    "id": 2,
+    "display": "Toggle the Room \u203a DS2 Lock - Front Door",
+    "command": "TOGGLE",
+    "deviceId": 93
+  }
+]
+
+
+=== Testing set_item_variable on DS3 (ID 39) ===
+
+  set_item_variable(USER_CODE_1=1234) => ERROR: 'C4Director' object has no attribute 'set_item_variable'
+  set_item_variable(USERCODE1=1234) => ERROR: 'C4Director' object has no attribute 'set_item_variable'
+  set_item_variable(Code1=1234) => ERROR: 'C4Director' object has no attribute 'set_item_variable'
+  set_item_variable(UserCode=1234) => ERROR: 'C4Director' object has no attribute 'set_item_variable'
+
+=== Testing commands on DS3 (ID 39) ===
+
+  POST command=SET_USER_CODE: status=200 body={
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "613fbbb688f053d855f5ea735511ce5e",
+ "$t": ""
+}
+  POST command=ADD_USER_CODE: status=200 body={
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "6966c9b275a32d5f2565a2c9160317b7",
+ "$t": ""
+}
+  POST command=SET_ACCESS_CODE: status=200 body={
+ "name": "SendToDevice",
+ "result": 1,
+ "seq": "311731dbf30eb85ef0bb686437a37620",
+ "$t": ""
+}
+
+=== Done ===

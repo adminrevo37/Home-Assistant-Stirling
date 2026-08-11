@@ -1,0 +1,548 @@
+"""
+ZHA (Zigbee Home Automation) lock provider.
+
+Communicates with Zigbee locks via the zigpy DoorLock cluster through ZHA.
+Supports push updates via cluster listeners for operation events (lock/unlock
+with user ID) and programming events (PIN code changes).  When the lock does
+not support programming event notifications, falls back to drift detection
+polling.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import timedelta
+import logging
+from typing import Any, Literal
+
+from zigpy.zcl.clusters.closures import DoorLock
+
+from homeassistant.components.zha.const import DOMAIN as ZHA_DOMAIN
+from homeassistant.components.zha.helpers import (
+    get_zha_gateway_proxy as _get_zha_gateway_proxy,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import callback
+
+from ..domain.credentials import (
+    Credential,
+    CredentialRef,
+    User,
+    WriteResult,
+    user_from_slot,
+)
+from ..domain.exceptions import CodeRejectedError, LockDisconnected
+from ..domain.models import SlotCredential
+from ._base import BaseLock
+
+_LOGGER = logging.getLogger(__name__)
+
+OPERATION_TO_LOCKED: dict[int, bool] = {
+    DoorLock.OperationEvent.Lock: True,
+    DoorLock.OperationEvent.KeyLock: True,
+    DoorLock.OperationEvent.AutoLock: True,
+    DoorLock.OperationEvent.Manual_Lock: True,
+    DoorLock.OperationEvent.ScheduleLock: True,
+    DoorLock.OperationEvent.OnTouchLock: True,
+    DoorLock.OperationEvent.Unlock: False,
+    DoorLock.OperationEvent.KeyUnlock: False,
+    DoorLock.OperationEvent.Manual_Unlock: False,
+    DoorLock.OperationEvent.ScheduleUnlock: False,
+}
+
+OPERATION_SOURCE_NAMES: dict[int, str] = {
+    DoorLock.OperationEventSource.Keypad: "Keypad",
+    DoorLock.OperationEventSource.RF: "RF",
+    DoorLock.OperationEventSource.Manual: "Manual",
+    DoorLock.OperationEventSource.RFID: "RFID",
+    DoorLock.OperationEventSource.Indeterminate: "Unknown",
+}
+
+
+@dataclass(repr=False, eq=False)
+class ZHALock(BaseLock):
+    """
+    ZHA lock provider.
+
+    Push updates come from zigpy cluster listeners:
+    - ``programming_event_notification`` (0x21): PIN added/deleted/changed
+    - ``operation_event_notification`` (0x20): lock/unlock with user ID
+
+    If the lock does not support programming event notifications (detected via
+    event mask attributes), falls back to hourly drift detection polling.
+    """
+
+    _door_lock_cluster: DoorLock | None = field(init=False, default=None)
+    _endpoint_id: int | None = field(init=False, default=None)
+    _supports_programming_events: bool | None = field(init=False, default=None)
+
+    # -- Properties ----------------------------------------------------------
+
+    @property
+    def domain(self) -> str:
+        """Return integration domain."""
+        return ZHA_DOMAIN
+
+    @property
+    def supports_push(self) -> bool:
+        """
+        Return whether this lock supports push-based updates.
+
+        Always True — we subscribe to cluster events for operation
+        notifications (lock/unlock with user ID).  Programming event support
+        is checked separately to decide whether drift detection is needed.
+        """
+        return True
+
+    @property
+    def hard_refresh_interval(self) -> timedelta | None:
+        """
+        Return interval for drift detection.
+
+        One hour if the lock lacks programming event notifications, otherwise
+        None (push handles code changes).
+        """
+        if self._supports_programming_events is False:
+            return timedelta(hours=1)
+        return None
+
+    # -- Setup ---------------------------------------------------------------
+
+    async def async_setup(self, config_entry: ConfigEntry) -> None:
+        """
+        Initialize provider state and detect programming event support.
+
+        Called on initial setup AND on integration reconnect, so we clear
+        cached cluster references (which may be stale after a ZHA reload)
+        and re-detect programming event support.  The coordinator reads
+        ``hard_refresh_interval`` during init, so detection must complete
+        before coordinator creation.
+        """
+        self.unsubscribe_push_updates()
+        self._door_lock_cluster = None
+        self._endpoint_id = None
+        await super().async_setup(config_entry)
+        self._supports_programming_events = (
+            await self._async_check_programming_event_support()
+        )
+        if not self._supports_programming_events:
+            _LOGGER.info(
+                "Lock %s: programming event notifications not supported, "
+                "enabling drift detection (1 hour interval)",
+                self.lock.entity_id,
+            )
+
+    # -- Cluster access ------------------------------------------------------
+
+    def _get_door_lock_cluster(self) -> DoorLock | None:
+        """Return the DoorLock cluster for this device, caching the result."""
+        if self._door_lock_cluster is not None:
+            return self._door_lock_cluster
+
+        gateway = self._get_gateway()
+        if not gateway:
+            return None
+
+        entity_ref = gateway.get_entity_reference(self.lock.entity_id)
+        if not entity_ref:
+            _LOGGER.debug("Could not find entity reference for %s", self.lock.entity_id)
+            return None
+
+        device_proxy = entity_ref.entity_data.device_proxy
+        if not device_proxy:
+            _LOGGER.debug("Could not find device proxy for %s", self.lock.entity_id)
+            return None
+
+        zigpy_device = device_proxy.device.device
+        if not zigpy_device:
+            _LOGGER.debug("Could not find zigpy device for %s", self.lock.entity_id)
+            return None
+
+        for endpoint_id, endpoint in zigpy_device.endpoints.items():
+            if endpoint_id == 0:
+                continue
+            for cluster in endpoint.in_clusters.values():
+                if cluster.cluster_id == DoorLock.cluster_id:
+                    self._door_lock_cluster = cluster
+                    self._endpoint_id = endpoint_id
+                    _LOGGER.debug(
+                        "Found DoorLock cluster on endpoint %s for %s",
+                        endpoint_id,
+                        self.lock.entity_id,
+                    )
+                    return cluster
+
+        _LOGGER.warning("Could not find DoorLock cluster for %s", self.lock.entity_id)
+        return None
+
+    async def _get_connected_cluster(self) -> DoorLock:
+        """Return a connected DoorLock cluster or raise LockDisconnected."""
+        cluster = self._get_door_lock_cluster()
+        if not cluster:
+            raise LockDisconnected("DoorLock cluster not available")
+        if not await self.async_is_integration_connected():
+            raise LockDisconnected("Lock not connected")
+        return cluster
+
+    # -- Helpers -------------------------------------------------------------
+
+    def _get_gateway(self) -> Any | None:
+        """Return the ZHA gateway proxy, or None if unavailable."""
+        try:
+            return _get_zha_gateway_proxy(self.hass)
+        except KeyError:
+            return None
+        except ValueError:
+            _LOGGER.warning(
+                "Lock %s: unexpected ValueError getting ZHA gateway",
+                self.lock.entity_id,
+                exc_info=True,
+            )
+            return None
+
+    # -- Connection ----------------------------------------------------------
+
+    async def async_is_integration_connected(self) -> bool:
+        """Return whether ZHA is loaded and the device is available."""
+        gateway = self._get_gateway()
+        if not gateway:
+            return False
+        entity_ref = gateway.get_entity_reference(self.lock.entity_id)
+        if not entity_ref:
+            return False
+        device_proxy = entity_ref.entity_data.device_proxy
+        if not device_proxy:
+            return False
+        return device_proxy.device.available
+
+    # -- Credential primitives -----------------------------------------------
+
+    async def async_set_credential(
+        self,
+        user_id: int,
+        credential: Credential,
+        pin: str,
+        *,
+        name: str | None,
+        source: Literal["sync", "direct"],
+    ) -> WriteResult:
+        """
+        Set a Personal Identification Number credential on a slot.
+
+        Bypasses ``async_call_service`` because ZHA exposes its cluster
+        operations as zigpy method calls rather than Home Assistant
+        services. ``cluster.set_pin_code`` raises zigpy-level errors
+        (``DeliveryError``, ``asyncio.TimeoutError``) on communication
+        failure — these are routed to ``LockDisconnected`` so retries
+        and reconnect handling apply, mirroring the OSError branch of
+        the service-call wrapper.
+
+        ``user_id`` is ignored; slot-only providers address the credential
+        by ``credential.slot``.
+        """
+        code_slot = credential.slot
+        cluster = await self._get_connected_cluster()
+        try:
+            result = await cluster.set_pin_code(
+                code_slot,
+                DoorLock.UserStatus.Enabled,
+                DoorLock.UserType.Unrestricted,
+                pin,
+            )
+        except Exception as err:
+            raise LockDisconnected(f"Failed to set PIN: {err}") from err
+        _LOGGER.debug(
+            "Lock %s slot %s set_pin_code: %s",
+            self.lock.entity_id,
+            code_slot,
+            result,
+        )
+        if hasattr(result, "status") and result.status != 0:
+            raise CodeRejectedError(
+                code_slot=code_slot,
+                lock_entity_id=self.lock.entity_id,
+                reason=f"set_pin_code rejected: status {result.status}",
+            )
+        self._push_credential_update(code_slot, SlotCredential.known(pin))
+        return WriteResult.CONFIRMED
+
+    async def async_delete_credential(self, ref: CredentialRef) -> bool:
+        """
+        Clear a Personal Identification Number from a slot.
+
+        See ``async_set_credential`` for why bare zigpy failures route to
+        ``LockDisconnected`` instead of ``LockOperationFailed``.
+        """
+        code_slot = ref.slot
+        cluster = await self._get_connected_cluster()
+        try:
+            result = await cluster.clear_pin_code(code_slot)
+        except Exception as err:
+            raise LockDisconnected(f"Failed to clear PIN: {err}") from err
+        _LOGGER.debug(
+            "Lock %s slot %s clear_pin_code: %s",
+            self.lock.entity_id,
+            code_slot,
+            result,
+        )
+        if hasattr(result, "status") and result.status != 0:
+            raise CodeRejectedError(
+                code_slot=code_slot,
+                lock_entity_id=self.lock.entity_id,
+                reason=f"clear_pin_code rejected: status {result.status}",
+            )
+        self._push_credential_update(code_slot, SlotCredential.empty())
+        return True
+
+    async def async_get_users(self) -> list[User]:
+        """
+        Read Personal Identification Number codes from all managed slots.
+
+        Returns a user per slot via the one-slot-one-user projection.
+        Known codes surface as occupied users; failed reads produce
+        unreadable credentials so the coordinator does not treat a
+        transient cluster error as a confirmed-empty slot.
+        """
+        cluster = await self._get_connected_cluster()
+        managed = self.managed_slots
+        if not managed:
+            return []
+
+        slot_states: dict[int, SlotCredential] = {}
+        for slot_num in managed:
+            try:
+                result = await cluster.get_pin_code(slot_num)
+                _LOGGER.debug(
+                    "Lock %s slot %s get_pin_code: %s",
+                    self.lock.entity_id,
+                    slot_num,
+                    result,
+                )
+                user_status, pin_code = self._parse_pin_response(result)
+                if user_status == DoorLock.UserStatus.Enabled and pin_code:
+                    slot_states[slot_num] = SlotCredential.known(pin_code)
+                else:
+                    slot_states[slot_num] = SlotCredential.empty()
+            except LockDisconnected:
+                raise
+            except Exception:
+                _LOGGER.debug(
+                    "Lock %s: failed to read slot %s, marking unreadable",
+                    self.lock.entity_id,
+                    slot_num,
+                    exc_info=True,
+                )
+                slot_states[slot_num] = SlotCredential.unreadable()
+        return [user_from_slot(slot, state) for slot, state in slot_states.items()]
+
+    async def async_hard_refresh_codes(self) -> dict[int, SlotCredential]:
+        """Re-read all codes from the lock (no cache to invalidate)."""
+        return await self.async_get_usercodes()
+
+    # -- Response parsing ----------------------------------------------------
+
+    @staticmethod
+    def _parse_pin_response(result: Any) -> tuple[int, str]:
+        """Extract (user_status, pin_code) from a get_pin_code response."""
+        if hasattr(result, "user_status"):
+            pin = getattr(result, "code", "") or ""
+            if isinstance(pin, bytes):
+                pin = pin.decode("utf-8", errors="ignore")
+            return result.user_status, str(pin)
+        if isinstance(result, (list, tuple)) and len(result) >= 4:
+            pin = result[3]
+            if isinstance(pin, bytes):
+                pin = pin.decode("utf-8", errors="ignore")
+            return result[1], str(pin) if pin else ""
+        return DoorLock.UserStatus.Available, ""
+
+    # -- Push updates --------------------------------------------------------
+
+    @callback
+    def setup_push_subscription(self) -> None:
+        """Subscribe to DoorLock cluster events."""
+        if self._push_unsubs:
+            return
+
+        cluster = self._get_door_lock_cluster()
+        if not cluster:
+            raise LockDisconnected(
+                "DoorLock cluster not available for push subscription"
+            )
+
+        cluster.add_listener(self)
+        self._register_push_unsub(lambda: cluster.remove_listener(self))
+        _LOGGER.debug(
+            "Lock %s: subscribed to DoorLock cluster events",
+            self.lock.entity_id,
+        )
+
+    @callback
+    def teardown_push_subscription(self) -> None:
+        """Unsubscribe from DoorLock cluster events."""
+        if not self._push_unsubs:
+            return
+        self._clear_push_unsubs()
+        _LOGGER.debug(
+            "Lock %s: unsubscribed from DoorLock cluster events",
+            self.lock.entity_id,
+        )
+
+    # -- Cluster listener callbacks ------------------------------------------
+
+    def cluster_command(
+        self,
+        tsn: int,
+        command_id: int,
+        args: Any,
+    ) -> None:
+        """Handle incoming cluster commands from the lock (zigpy listener)."""
+        if command_id == DoorLock.ClientCommandDefs.programming_event_notification.id:
+            self._handle_programming_event(args)
+        elif command_id == DoorLock.ClientCommandDefs.operation_event_notification.id:
+            self._handle_operation_event(args)
+
+    def _handle_programming_event(self, args: Any) -> None:
+        """
+        Handle programming event (PIN added/deleted/changed).
+
+        Triggers a coordinator refresh to pick up the new code state.
+        """
+        try:
+            event_code = (
+                args.program_event_code
+                if hasattr(args, "program_event_code")
+                else args[1]
+            )
+            user_id = args.user_id if hasattr(args, "user_id") else args[2]
+        except AttributeError, IndexError, TypeError:
+            _LOGGER.warning(
+                "Lock %s: could not parse programming event, "
+                "triggering refresh as safety net: %s",
+                self.lock.entity_id,
+                args,
+            )
+            # Refresh anyway — we know something changed on the lock
+            if self.coordinator:
+                self.hass.async_create_task(
+                    self.coordinator.async_request_refresh(),
+                    f"Refresh {self.lock.entity_id} after unparseable programming event",
+                )
+            return
+
+        _LOGGER.debug(
+            "Lock %s: programming event code=%s user_id=%s",
+            self.lock.entity_id,
+            event_code,
+            user_id,
+        )
+        if self.coordinator:
+            self.hass.async_create_task(
+                self.coordinator.async_request_refresh(),
+                f"Refresh {self.lock.entity_id} after programming event",
+            )
+
+    def _handle_operation_event(self, args: Any) -> None:
+        """
+        Handle operation event (lock/unlock with user ID).
+
+        Fires a code slot event so automations can react to lock usage.
+        """
+        try:
+            source = (
+                args.operation_event_source
+                if hasattr(args, "operation_event_source")
+                else args[0]
+            )
+            event_code = (
+                args.operation_event_code
+                if hasattr(args, "operation_event_code")
+                else args[1]
+            )
+            user_id = args.user_id if hasattr(args, "user_id") else args[2]
+        except AttributeError, IndexError, TypeError:
+            _LOGGER.warning(
+                "Lock %s: could not parse operation event: %s",
+                self.lock.entity_id,
+                args,
+            )
+            return
+
+        _LOGGER.debug(
+            "Lock %s: operation event source=%s code=%s user_id=%s",
+            self.lock.entity_id,
+            source,
+            event_code,
+            user_id,
+        )
+
+        to_locked = OPERATION_TO_LOCKED.get(event_code)
+        source_name = OPERATION_SOURCE_NAMES.get(source, f"Source {source}")
+        action = "lock" if to_locked else "unlock" if to_locked is False else "event"
+
+        self.async_fire_code_slot_event(
+            code_slot=user_id if user_id > 0 else None,
+            to_locked=to_locked,
+            action_text=f"{source_name} {action} operation",
+            source_data={
+                "source": source,
+                "event_code": event_code,
+                "user_id": user_id,
+            },
+        )
+
+    # -- Programming event support detection ---------------------------------
+
+    async def _async_check_programming_event_support(self) -> bool:
+        """
+        Check if the lock supports programming event notifications.
+
+        Reads event mask attributes to determine if the lock will send
+        programming_event_notification when codes change.
+        """
+        cluster = self._get_door_lock_cluster()
+        if not cluster:
+            return False
+
+        mask_attrs = (
+            DoorLock.AttributeDefs.keypad_programming_event_mask,
+            DoorLock.AttributeDefs.rf_programming_event_mask,
+            DoorLock.AttributeDefs.rfid_programming_event_mask,
+        )
+
+        try:
+            result = await cluster.read_attributes(
+                [attr.id for attr in mask_attrs],
+                allow_cache=False,
+                only_cache=False,
+            )
+        except Exception:
+            _LOGGER.debug(
+                "Lock %s: could not read programming event mask attributes",
+                self.lock.entity_id,
+                exc_info=True,
+            )
+            return False
+
+        values = result[0] if isinstance(result, tuple) else result
+
+        for attr in mask_attrs:
+            value = None
+            if isinstance(values, dict):
+                value = values.get(attr.id, values.get(attr.name))
+            if value is not None and value != 0:
+                _LOGGER.debug(
+                    "Lock %s: supports programming events (%s [0x%04x]=0x%04x)",
+                    self.lock.entity_id,
+                    attr.name,
+                    attr.id,
+                    value,
+                )
+                return True
+
+        _LOGGER.debug(
+            "Lock %s: no programming event mask attributes found, "
+            "will use drift detection fallback",
+            self.lock.entity_id,
+        )
+        return False
