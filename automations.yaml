@@ -1238,27 +1238,6 @@
     target:
       entity_id: light.outside_wall_lights
   mode: single
-- id: temp_clear_keypad_test_slot12
-  alias: TEMP - Clear keypad test code slot 12
-  description: 'One-shot: clears the manual keypad-test code from DS3 slot 12 at 17:23
-    AWST, then disables itself. Created for on-site door-code test 2026-05-31.'
-  triggers:
-  - trigger: time
-    at: '17:23:00'
-  conditions: []
-  actions:
-  - action: shell_command.c4_clear_code
-    data:
-      slot: '12'
-  - action: persistent_notification.create
-    data:
-      title: Keypad test code cleared
-      message: Slot 12 (code 8164) auto-cleared from the DS3 at 17:23. This temp automation
-        has disabled itself.
-  - action: automation.turn_off
-    target:
-      entity_id: automation.temp_clear_keypad_test_code_slot_12
-  mode: single
 - id: roller_door_failed_to_close
   alias: Roller Door - Left Open Escalation (3/5/10 min)
   description: 'Escalating fault alert on binary_sensor.roller_door_contact staying
@@ -2692,27 +2671,6 @@
           message: Control4 did not recover even after an HA restart. Check the Director
             (192.168.1.107) + network switch. Tried to force lights on regardless.
   mode: restart
-- id: '1782125791078'
-  alias: Lucas Corbett entry notify (one-shot 22 Jun)
-  description: Fires once when door unlocks during Lucas Corbett 8pm booking window,
-    then disables itself
-  triggers:
-  - trigger: state
-    entity_id: lock.front_door_lock
-    to: unlocked
-  conditions:
-  - condition: time
-    after: '19:30:00'
-    before: '21:15:00'
-  actions:
-  - action: notify.mobile_app_julian
-    data:
-      title: Lucas Corbett entered
-      message: Door opened during 8pm booking window — Lucas Corbett is in.
-  - action: automation.turn_off
-    target:
-      entity_id: automation.lucas_corbett_entry_notify_one_shot_22_jun
-  mode: single
 - id: door_code_reconcile_allbays
   alias: Door Code Reconcile - Every Minute (all bays)
   description: 'Single source of truth for all 5 bays'' keypad slots. Every minute,
@@ -2775,6 +2733,10 @@
       c4a: '23'
       c4b: '24'
       c4c: '25'
+  - alias: 'Heartbeat: ping Healthchecks.io Door-Code Reconcile check (silent = reconcile
+      dead)'
+    action: rest_command.healthchecks_ping_reconcile
+    continue_on_error: true
   mode: single
 - id: door_code_exempt_nightly_clear
   alias: Door Code Exempt - Nightly Clear
