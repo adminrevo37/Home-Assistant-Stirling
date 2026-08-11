@@ -3954,3 +3954,190 @@
         tag: bay_helper_stuck_{{ trigger.entity_id }}
   mode: parallel
   max: 5
+- id: '1786431157629'
+  alias: Watchdog - Calendar Fetch Probe (every 10 min)
+  description: 'Proves the HA->Google Calendar API path is alive. Every 10 minutes
+    performs a REAL calendar.get_events fetch across all 5 lane calendars; on success
+    stamps input_datetime.last_calendar_fetch_ok. If Google auth/quota/API breaks,
+    the fetch throws, the stamp stays stale, and the companion ''Calendar Fetch STALE''
+    watchdog raises a critical push. Built 2026-08-11 to close the biggest monitoring
+    gap: the door-code reconcile keeps running (and pinging Healthchecks) even when
+    its calendar SOURCE has silently died - nothing else watches the upstream half
+    of the door-code supply chain.'
+  triggers:
+  - trigger: time_pattern
+    minutes: /10
+  conditions:
+  - condition: time
+    after: 04:30:00
+    before: '23:00:00'
+  actions:
+  - action: calendar.get_events
+    target:
+      entity_id:
+      - calendar.lane_1_bowling_machine
+      - calendar.lane_2_bowling_machine
+      - calendar.lane_3_truman_or_bowling_machine
+      - calendar.lane_4_run_up_net
+      - calendar.lane_5_run_up_net
+    data:
+      duration:
+        hours: 1
+    response_variable: cal_probe
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.last_calendar_fetch_ok
+    data:
+      datetime: '{{ now().strftime(''%Y-%m-%d %H:%M:%S'') }}'
+  mode: single
+- id: '1786431187495'
+  alias: Watchdog - Calendar Fetch STALE (critical)
+  description: 'Companion to the Calendar Fetch Probe. If the last successful calendar
+    fetch (input_datetime.last_calendar_fetch_ok) is older than 45 minutes during
+    operating hours, the HA->Google path is dead: door codes will silently stop loading
+    even though HA and the reconcile look healthy. Sends a CRITICAL push every 30
+    min while stale. Template condition is unavoidable (timestamp-age math, same pattern
+    as the existing watchdogs).'
+  triggers:
+  - trigger: time_pattern
+    minutes: /30
+  conditions:
+  - condition: time
+    after: 05:30:00
+    before: '23:00:00'
+  - condition: template
+    value_template: '{{ (now().timestamp() - state_attr(''input_datetime.last_calendar_fetch_ok'',
+      ''timestamp'')) > 2700 }}'
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F6A8 Calendar fetch DEAD"
+      message: HA has not successfully fetched the lane calendars since {{ states('input_datetime.last_calendar_fetch_ok')
+        }} ({{ ((now().timestamp() - state_attr('input_datetime.last_calendar_fetch_ok',
+        'timestamp')) / 60) | round(0) }} min ago). Door codes will STOP loading for
+        new bookings. Check Google Calendar integration / internet on the HA box.
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1
+  mode: single
+- id: '1786431204597'
+  alias: Watchdog - HA Box Disk Low (below 80 GB free)
+  description: Disk-full is a suspected contributor to the HA box hang class (89%
+    full on 2026-08-03; two overnight outages Aug 2026). Alerts when root-disk free
+    space (sensor.system_monitor_disk_free, GB) stays below 80 GB (~83% full) for
+    15 minutes. Frigate recordings are the usual culprit - see FRIGATE_RETENTION_CHANGE_2026-08-03.md
+    for the prepared fix.
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.system_monitor_disk_free
+    below: 80
+    for:
+      minutes: 15
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: ⚠️ HA box disk low
+      message: Free disk is {{ states('sensor.system_monitor_disk_free') }} GB (used
+        {{ states('sensor.system_monitor_disk_use') }} GB). Below 80 GB free. Disk
+        pressure was a suspected factor in the box hangs - prune Frigate or apply
+        the retention change.
+  mode: single
+- id: '1786431252107'
+  alias: Watchdog - Critical Sensor Dropout (30 min unavailable)
+  description: 'Alerts when a safety- or booking-critical device drops off the network
+    for 30+ minutes. These failures were previously SILENT and each one quietly blinds
+    an automation: roller-door contact (auto-door verify + left-open escalation go
+    inert), Fire Exit WEST contact (opened-alert goes blind), Zigbee machine plugs
+    (machine power fails + they are ROUTERS - their absence destabilises the battery
+    sensors'' mesh), lane-display TV plug. Fires once per device per dropout (trigger
+    on the transition); devices ALREADY unavailable when this was built are caught
+    by the companion 08:00 morning digest.'
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.roller_door_contact
+    - binary_sensor.0x54ef4410014ae8c0_contact
+    - switch.lane_1_right
+    - switch.lane_3_right
+    - switch.lane_display_tv
+    to: unavailable
+    for:
+      minutes: 30
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: ⚠️ Device offline 30+ min
+      message: '{{ trigger.to_state.name }} ({{ trigger.entity_id }}) has been unavailable
+        since {{ trigger.from_state.last_changed.astimezone().strftime(''%H:%M'')
+        }}. Automations depending on it are blind - likely Zigbee off-mesh drop (re-pair)
+        or power.'
+  mode: parallel
+  max: 10
+- id: '1786431271899'
+  alias: Watchdog - Morning Device Health Digest (08:00)
+  description: Daily 08:00 summary of any critical device currently unavailable, so
+    standing dropouts (which the transition-triggered dropout watchdog cannot see)
+    never linger silently for weeks again - e.g. the roller-door contact was dead
+    24 Jul - 3 Aug and the Fire Exit WEST contact + 3 router plugs have been off-mesh
+    since before 10 Aug. Repeats daily until the device is fixed/re-paired - that
+    nagging is deliberate. Template is required (dynamic list assembly across a watchlist).
+  triggers:
+  - trigger: time
+    at: 08:00:00
+  conditions:
+  - condition: or
+    conditions:
+    - condition: state
+      entity_id: binary_sensor.roller_door_contact
+      state: unavailable
+    - condition: state
+      entity_id: binary_sensor.0x54ef4410014ae8c0_contact
+      state: unavailable
+    - condition: state
+      entity_id: switch.lane_1_right
+      state: unavailable
+    - condition: state
+      entity_id: switch.lane_3_right
+      state: unavailable
+    - condition: state
+      entity_id: switch.lane_display_tv
+      state: unavailable
+    - condition: state
+      entity_id: binary_sensor.cricket_keypad_online
+      state:
+      - unavailable
+      - 'off'
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F527 Device health digest"
+      message: 'Currently offline: {{ ([''binary_sensor.roller_door_contact'', ''binary_sensor.0x54ef4410014ae8c0_contact'',
+        ''switch.lane_1_right'', ''switch.lane_3_right'', ''switch.lane_display_tv'']
+        | select(''is_state'', ''unavailable'') | map(''state_attr'', ''friendly_name'')
+        | reject(''none'') | list + ([''Keypad (offline)''] if states(''binary_sensor.cricket_keypad_online'')
+        in [''off'', ''unavailable''] else [])) | join('', '') }}. Zigbee devices
+        need a re-pair (permit-join + button); the 3 plugs are mesh ROUTERS - fixing
+        them stabilises the battery sensors too.'
+  mode: single
+- id: '1786431319404'
+  alias: Watchdog - Backups Stale
+  description: Alerts if the Google Drive Backup add-on reports backups stale (binary_sensor.backups_stale
+    on) for 2+ hours. Backups are the recovery path for the box-death incident class
+    - a silent backup failure would only be discovered when a restore is needed.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.backups_stale
+    to: 'on'
+    for:
+      hours: 2
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: ⚠️ HA backups STALE
+      message: 'Google Drive Backup reports backups are stale (no fresh backup). Last
+        successful automatic backup: {{ states(''sensor.backup_last_successful_automatic_backup'')
+        }}. Check the add-on before the next outage needs a restore.'
+  mode: single
