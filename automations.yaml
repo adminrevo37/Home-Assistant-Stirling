@@ -4164,14 +4164,13 @@
 - id: '1786432902360'
   alias: Watchdog - Customer Stuck at Keypad (3 invalid in 5 min)
   description: 'THE incident signature: 2026-07-14 a customer typed her correct-but-never-loaded
-    code NINE times and the facility-wide door-code outage stayed silent for 2 hours.
-    The keypad validate automation fires keypad_invalid_attempt on every rejected
-    PIN; this counts them in a rolling window (mode restart = 5 quiet minutes resets).
-    At 3 attempts: snapshots BOTH front-door cameras (intercom + outside_entry CCTV),
-    composites them into one image (shell_command.combine_door_snapshots - iOS shows
-    a single attachment), CRITICAL push with the composite attached; tap opens the
-    Alert Cameras dashboard (door view = live intercom + outside + inside). Catches
-    every HA-up code failure in real time.'
+    code NINE times and the door-code outage stayed silent for 2 hours. The keypad
+    validate automation fires keypad_invalid_attempt on every rejected PIN; counted
+    in a rolling 5-min window. At 3: snapshots the 3 door cameras (intercom + outside_entry
+    CCTV + inside pier_facing_entry) to /config/www/keypad_alert_*.jpg, stacks them
+    into one push attachment (shell_command.combine_door_snapshots - iOS single image),
+    CRITICAL push; tap opens the Alert Cameras dashboard which shows those 3 CAPTURED
+    stills. Catches every HA-up code failure in real time.'
   triggers:
   - trigger: event
     event_type: keypad_invalid_attempt
@@ -4196,6 +4195,12 @@
       data:
         filename: /config/www/keypad_alert_outside.jpg
       continue_on_error: true
+    - action: camera.snapshot
+      target:
+        entity_id: camera.pier_facing_entry
+      data:
+        filename: /config/www/keypad_alert_inside.jpg
+      continue_on_error: true
     - action: shell_command.combine_door_snapshots
       continue_on_error: true
     - delay: 00:00:02
@@ -4204,8 +4209,8 @@
         title: "\U0001F6A8 Someone can't get in"
         message: 3+ invalid keypad attempts in the last 5 min at the front door ({{
           now().strftime('%H:%M') }}). Their code is probably missing from the slots
-          - check the Door Codes dashboard. Snapshot = intercom + outside CCTV; tap
-          for live door cameras.
+          - check the Door Codes dashboard. Tap for the 3 captured door photos (intercom
+          + outside CCTV + inside roller door).
         data:
           image: /local/keypad_alert_snapshot.jpg
           url: /alert-cameras/door
