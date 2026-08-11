@@ -1290,8 +1290,8 @@
             Please check the entry.
           data:
             image: /local/door_alert_snapshot.jpg
-            url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
-            clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+            url: /alert-cameras/door
+            clickAction: /alert-cameras/door
     - conditions:
       - condition: trigger
         id: 5min
@@ -1303,8 +1303,8 @@
             the entry.
           data:
             image: /local/door_alert_snapshot.jpg
-            url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
-            clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+            url: /alert-cameras/door
+            clickAction: /alert-cameras/door
             push:
               sound:
                 name: default
@@ -1321,8 +1321,8 @@
             the entry now.
           data:
             image: /local/door_alert_snapshot.jpg
-            url: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
-            clickAction: /hassio/ingress/ccab4aaf_frigate/cameras/pier_facing_entry
+            url: /alert-cameras/door
+            clickAction: /alert-cameras/door
             push:
               sound:
                 name: default
@@ -4165,11 +4165,13 @@
   alias: Watchdog - Customer Stuck at Keypad (3 invalid in 5 min)
   description: 'THE incident signature: 2026-07-14 a customer typed her correct-but-never-loaded
     code NINE times and the facility-wide door-code outage stayed silent for 2 hours.
-    The keypad validate automation now fires keypad_invalid_attempt on every rejected
+    The keypad validate automation fires keypad_invalid_attempt on every rejected
     PIN; this counts them in a rolling window (mode restart = 5 quiet minutes resets).
-    At 3 attempts: CRITICAL push with the front-door camera attached. Catches every
-    HA-up code failure in real time - missing calendar event, Krickora fault, stale
-    slot, or a genuinely wrong code being hammered.'
+    At 3 attempts: snapshots BOTH front-door cameras (intercom + outside_entry CCTV),
+    composites them into one image (shell_command.combine_door_snapshots - iOS shows
+    a single attachment), CRITICAL push with the composite attached; tap opens the
+    Alert Cameras dashboard (door view = live intercom + outside + inside). Catches
+    every HA-up code failure in real time.'
   triggers:
   - trigger: event
     event_type: keypad_invalid_attempt
@@ -4182,14 +4184,32 @@
       entity_id: counter.keypad_invalid_attempts
       above: 2
     then:
+    - action: camera.snapshot
+      target:
+        entity_id: camera.front_intercom
+      data:
+        filename: /config/www/keypad_alert_intercom.jpg
+      continue_on_error: true
+    - action: camera.snapshot
+      target:
+        entity_id: camera.outside_entry
+      data:
+        filename: /config/www/keypad_alert_outside.jpg
+      continue_on_error: true
+    - action: shell_command.combine_door_snapshots
+      continue_on_error: true
+    - delay: 00:00:02
     - action: notify.mobile_app_julian
       data:
         title: "\U0001F6A8 Someone can't get in"
         message: 3+ invalid keypad attempts in the last 5 min at the front door ({{
           now().strftime('%H:%M') }}). Their code is probably missing from the slots
-          - check the Door Codes dashboard / camera.
+          - check the Door Codes dashboard. Snapshot = intercom + outside CCTV; tap
+          for live door cameras.
         data:
-          entity_id: camera.pier_facing_entry
+          image: /local/keypad_alert_snapshot.jpg
+          url: /alert-cameras/door
+          clickAction: /alert-cameras/door
           push:
             sound:
               name: default
@@ -4242,14 +4262,25 @@
     entity_id: input_boolean.bay5_helper
     state: 'off'
   actions:
+  - action: camera.snapshot
+    target:
+      entity_id: camera.{{ trigger.entity_id.split('.')[1].replace('_person_occupancy',
+        '') }}
+    data:
+      filename: /config/www/intrusion_{{ trigger.entity_id.split('.')[1].replace('_person_occupancy',
+        '') }}.jpg
+    continue_on_error: true
+  - delay: 00:00:02
   - action: notify.mobile_app_julian
     data:
       title: "\U0001F6A8 PERSON INSIDE after hours"
       message: '{{ trigger.to_state.name }} detected a person at {{ now().strftime(''%H:%M:%S'')
-        }} with no active booking. Camera attached.'
+        }} with no active booking. Snapshot attached; tap for live cameras.'
       data:
-        entity_id: camera.{{ trigger.entity_id.split('.')[1].replace('_person_occupancy',
-          '') }}
+        image: /local/intrusion_{{ trigger.entity_id.split('.')[1].replace('_person_occupancy',
+          '') }}.jpg
+        url: /alert-cameras/inside
+        clickAction: /alert-cameras/inside
         push:
           sound:
             name: default
