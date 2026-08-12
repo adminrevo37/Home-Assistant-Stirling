@@ -4549,3 +4549,40 @@
           title: "\U0001F510 Fallback code 2026 turned OFF"
           message: Code 2026 no longer opens the door.
   mode: single
+- id: '1786513106710'
+  alias: Watchdog - Walk-In Without Booking (people inside, no active booking)
+  description: 'Daytime companion to the After-Hours Person Detected alert (which
+    owns 22:30-05:30): pushes when the vision person counter (sensor.people_inside_vision,
+    sum of 6 indoor Frigate cameras) shows people inside for 15+ continuous minutes
+    while NO bay helper is on (helpers run T-11 before booking start to T+10 after
+    end, so normal arrival/pack-up never trips this; 15-min sustain also skips brief
+    pop-ins). Catches walk-ins / unpaid use / lingerers 25+ min past their booking
+    end. Template trigger required (cross-entity: counter > 0 AND all 5 helpers off,
+    held 15 min). Fires once per episode (re-arms when the building empties or a booking
+    starts). Alert-only - if trades/cleaning mornings make it noisy, tune the window
+    or add a suppression toggle.'
+  triggers:
+  - trigger: template
+    value_template: '{{ states(''sensor.people_inside_vision'')|float(0) > 0 and [''input_boolean.bay1_helper'',''input_boolean.bay2_helper'',''input_boolean.bay3_helper'',''input_boolean.bay4_helper'',''input_boolean.bay5_helper'']
+      | map(''states'') | select(''eq'',''on'') | list | count == 0 }}'
+    for:
+      minutes: 15
+  conditions:
+  - condition: time
+    after: 05:30:00
+    before: '22:30:00'
+  actions:
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F464 People inside with NO booking"
+      message: '{{ states(''sensor.people_inside_vision'')|int }} person(s) inside
+        for 15+ min with no active booking. Seen by: {% set cams = {''cricket_facing_batters'':''Batters'',''cricket_facing_bowlers'':''Bowlers'',''pier_facing_entry'':''Entry'',''pier_facing_bags'':''Bags'',''pier_facing_office'':''Office'',''upstairs'':''Upstairs''}
+        %}{% set ns = namespace(out=[]) %}{% for c, n in cams.items() %}{% if states(''sensor.''
+        ~ c ~ ''_person_count'')|float(0) > 0 %}{% set ns.out = ns.out + [n ~ '' (''
+        ~ states(''sensor.'' ~ c ~ ''_person_count'')|int ~ '')''] %}{% endif %}{%
+        endfor %}{{ ns.out | join('', '') if ns.out else ''cameras (moving between
+        views)'' }}. Tap for live cameras.'
+      data:
+        url: /alert-cameras/inside
+        clickAction: /alert-cameras/inside
+  mode: single
