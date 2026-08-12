@@ -1,7 +1,7 @@
 {
     "0x54ef4410014ae72a": {
         "contact": true,
-        "voltage": 3039,
+        "voltage": 3041,
         "battery": 100,
         "device_temperature": 25,
         "power_outage_count": 9,
@@ -9,7 +9,7 @@
         "linkquality": 108
     },
     "0xa4c138074803a9a9": {
-        "energy": 238.8,
+        "energy": 240.14,
         "voltage": 239,
         "state": "ON",
         "countdown": 0,
@@ -17,7 +17,7 @@
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 142,
+        "power": 144,
         "current": 0.7,
         "linkquality": 180
     },
@@ -45,7 +45,7 @@
     },
     "0xa4c13851f47cb91d": {
         "energy": 19.02,
-        "voltage": 242,
+        "voltage": 244,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,21 +70,21 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 242,
-        "energy": 22.31,
-        "state": "OFF",
+        "voltage": 244,
+        "energy": 22.37,
+        "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
         "power": 0,
-        "current": 0,
+        "current": 0.02,
         "linkquality": 72
     },
     "0xa4c13879a2af63a1": {
         "energy": 4.88,
-        "voltage": 242,
+        "voltage": 244,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -96,16 +96,16 @@
         "linkquality": 108
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 14.15,
-        "voltage": 241,
-        "state": "OFF",
+        "energy": 14.17,
+        "voltage": 243,
+        "state": "ON",
         "countdown": 0,
         "power_outage_memory": "restore",
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 0,
-        "current": 0,
+        "power": 27,
+        "current": 0.17,
         "linkquality": 112
     },
     "0xa4c13861a6ad537a": {

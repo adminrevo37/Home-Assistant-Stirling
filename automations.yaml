@@ -1405,52 +1405,45 @@
         }}%. Replace soon (CR2032).
   mode: single
 - id: '1780392309960'
-  alias: Zigbee - Device Offline Alert
-  description: 'GENERIC - auto-covers ALL Zigbee/MQTT devices, no maintained list.
-    Detects any device whose entities have gone ''unavailable'' (Z2M availability:
-    active/router ~10 min, passive battery ~25 h) and notifies Julian with the device
-    name(s). Whole-bridge-down flagged separately as a network outage. 5-min ''for''
-    guards the brief unavailability during a Z2M restart. New devices are covered
-    automatically.'
+  alias: Zigbee - Device Offline Alert (non-critical devices)
+  description: 'GENERIC fast alert for Zigbee/MQTT devices NOT on the critical watchlist
+    - auto-covers new devices, no maintained list. De-duplicated 2026-08-12 against
+    the watchdog suite: bridge-down trigger REMOVED (owned by ''Watchdog - Zigbee
+    Network DOWN'', critical, 10 min), daily 09:05 nag REMOVED (owned by the 08:00
+    Morning Device Health Digest, which now also lists non-watchlist Zigbee devices),
+    and the 9 critical watchlist devices EXCLUDED here (owned per-device by ''Watchdog
+    - Critical Sensor Dropout''). Gated on the Z2M bridge being up so a whole-mesh
+    death never blasts a device list. Known limit (by design): the template trigger
+    fires on the 0->N transition, so while any non-watchlist device is already down,
+    additional drops don''t re-alert - the 08:00 digest catches those.'
   triggers:
-  - platform: template
-    id: device
+  - id: device
     for:
       minutes: 5
-    value_template: '{% set ns = namespace(c=0) %}{% for e in integration_entities(''mqtt'')
-      %}{% if states(e) == ''unavailable'' %}{% set nm = device_attr(e,''name_by_user'')
-      or device_attr(e,''name'') %}{% if nm and nm != ''Zigbee2MQTT Bridge'' %}{%
-      set ns.c = ns.c + 1 %}{% endif %}{% endif %}{% endfor %}{{ ns.c > 0 }}'
-  - platform: time
-    at: 09:05:00
-    id: daily
-  - platform: state
-    entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
-    to: 'off'
-    for:
-      minutes: 2
-    id: bridge
+    value_template: '{% set wl = [''binary_sensor.roller_door_contact'',''binary_sensor.0x54ef4410014ae8c0_contact'',''switch.lane_1_left'',''switch.lane_1_right'',''switch.lane_2_left'',''switch.lane_2_right'',''switch.lane_3_left'',''switch.lane_3_right'',''switch.lane_display_tv'']
+      | map(''device_id'') | reject(''none'') | list %}{% set ns = namespace(c=0)
+      %}{% for e in integration_entities(''mqtt'') %}{% if states(e) == ''unavailable''
+      and device_id(e) not in wl %}{% set nm = device_attr(e,''name_by_user'') or
+      device_attr(e,''name'') %}{% if nm and nm != ''Zigbee2MQTT Bridge'' %}{% set
+      ns.c = ns.c + 1 %}{% endif %}{% endif %}{% endfor %}{{ ns.c > 0 }}'
+    trigger: template
   conditions:
-  - condition: template
-    value_template: '{% set ns = namespace(c=0) %}{% for e in integration_entities(''mqtt'')
-      %}{% if states(e) == ''unavailable'' %}{% set nm = device_attr(e,''name_by_user'')
-      or device_attr(e,''name'') %}{% if nm and nm != ''Zigbee2MQTT Bridge'' %}{%
-      set ns.c = ns.c + 1 %}{% endif %}{% endif %}{% endfor %}{{ trigger.id == ''bridge''
-      or ns.c > 0 }}'
+  - condition: state
+    entity_id: binary_sensor.zigbee2mqtt_bridge_connection_state
+    state: 'on'
   actions:
   - action: notify.mobile_app_julian
     data:
-      title: '{{ ''Zigbee network DOWN'' if trigger.id == ''bridge'' else ''Zigbee
-        device offline'' }}'
-      message: '{% if trigger.id == ''bridge'' %}Zigbee2MQTT bridge has lost connection
-        - all Zigbee devices are unreachable.{% else %}{% set ns = namespace(names=[])
+      title: Zigbee device offline
+      message: '{% set wl = [''binary_sensor.roller_door_contact'',''binary_sensor.0x54ef4410014ae8c0_contact'',''switch.lane_1_left'',''switch.lane_1_right'',''switch.lane_2_left'',''switch.lane_2_right'',''switch.lane_3_left'',''switch.lane_3_right'',''switch.lane_display_tv'']
+        | map(''device_id'') | reject(''none'') | list %}{% set ns = namespace(names=[])
         %}{% for e in integration_entities(''mqtt'') %}{% if states(e) == ''unavailable''
-        %}{% set nm = device_attr(e,''name_by_user'') or device_attr(e,''name'') %}{%
-        if nm and nm != ''Zigbee2MQTT Bridge'' and nm not in ns.names %}{% set ns.names
-        = ns.names + [nm] %}{% endif %}{% endif %}{% endfor %}These Zigbee devices
-        are offline: {{ ns.names | join('', '') }}{% endif %}'
-  mode: queued
-  max: 5
+        and device_id(e) not in wl %}{% set nm = device_attr(e,''name_by_user'') or
+        device_attr(e,''name'') %}{% if nm and nm != ''Zigbee2MQTT Bridge'' and nm
+        not in ns.names %}{% set ns.names = ns.names + [nm] %}{% endif %}{% endif
+        %}{% endfor %}These Zigbee devices are offline: {{ ns.names | join('', '')
+        }}'
+  mode: single
 - id: '1780393541120'
   alias: Battery - Low Alert (wireless sensors)
   description: Generic low-battery alert for ALL wireless (MQTT/Zigbee) battery sensors.
@@ -4090,12 +4083,16 @@
   max: 10
 - id: '1786431271899'
   alias: Watchdog - Morning Device Health Digest (08:00)
-  description: Daily 08:00 summary of any critical device currently unavailable, so
-    standing dropouts (which the transition-triggered dropout watchdog cannot see)
+  description: 'Daily 08:00 summary of any critical device currently unavailable,
+    so standing dropouts (which the transition-triggered dropout watchdog cannot see)
     never linger silently for weeks again - e.g. the roller-door contact was dead
     24 Jul - 3 Aug and the Fire Exit WEST contact + 3 router plugs have been off-mesh
     since before 10 Aug. Repeats daily until the device is fixed/re-paired - that
-    nagging is deliberate. Template is required (dynamic list assembly across a watchlist).
+    nagging is deliberate. EXTENDED 2026-08-12: also lists any OTHER offline Zigbee/MQTT
+    device (generic sweep, watchlist devices excluded to avoid double-listing) - this
+    absorbed and replaced the old separate 09:05 ''Zigbee - Device Offline Alert''
+    daily nag, so mornings are ONE push. Template is required (dynamic list assembly
+    across a watchlist + generic MQTT sweep).'
   triggers:
   - trigger: time
     at: 08:00:00
@@ -4134,18 +4131,33 @@
       state:
       - unavailable
       - 'off'
+    - condition: template
+      value_template: '{% set wl = [''binary_sensor.roller_door_contact'',''binary_sensor.0x54ef4410014ae8c0_contact'',''switch.lane_1_left'',''switch.lane_1_right'',''switch.lane_2_left'',''switch.lane_2_right'',''switch.lane_3_left'',''switch.lane_3_right'',''switch.lane_display_tv'']
+        | map(''device_id'') | reject(''none'') | list %}{% set ns = namespace(c=0)
+        %}{% for e in integration_entities(''mqtt'') %}{% if states(e) == ''unavailable''
+        and device_id(e) not in wl %}{% set nm = device_attr(e,''name_by_user'') or
+        device_attr(e,''name'') %}{% if nm and nm != ''Zigbee2MQTT Bridge'' %}{% set
+        ns.c = ns.c + 1 %}{% endif %}{% endif %}{% endfor %}{{ ns.c > 0 }}'
   actions:
   - action: notify.mobile_app_julian
     data:
       title: "\U0001F527 Device health digest"
-      message: 'Currently offline: {{ ([''binary_sensor.roller_door_contact'', ''binary_sensor.0x54ef4410014ae8c0_contact'',
+      message: '{% set wl_ids = [''binary_sensor.roller_door_contact'', ''binary_sensor.0x54ef4410014ae8c0_contact'',
         ''switch.lane_1_left'', ''switch.lane_1_right'', ''switch.lane_2_left'', ''switch.lane_2_right'',
         ''switch.lane_3_left'', ''switch.lane_3_right'', ''switch.lane_display_tv'']
-        | select(''is_state'', ''unavailable'') | map(''state_attr'', ''friendly_name'')
-        | reject(''none'') | list + ([''Keypad (offline)''] if states(''binary_sensor.cricket_keypad_online'')
-        in [''off'', ''unavailable''] else [])) | join('', '') }}. Zigbee devices
-        need a re-pair (permit-join + button); the machine plugs are mesh ROUTERS
-        - fixing them stabilises the battery sensors too.'
+        %}{% set critical = wl_ids | select(''is_state'', ''unavailable'') | map(''state_attr'',
+        ''friendly_name'') | reject(''none'') | list + ([''Keypad (offline)''] if
+        states(''binary_sensor.cricket_keypad_online'') in [''off'', ''unavailable'']
+        else []) %}{% set wl_dev = wl_ids | map(''device_id'') | reject(''none'')
+        | list %}{% set ns = namespace(names=[]) %}{% for e in integration_entities(''mqtt'')
+        %}{% if states(e) == ''unavailable'' and device_id(e) not in wl_dev %}{% set
+        nm = device_attr(e,''name_by_user'') or device_attr(e,''name'') %}{% if nm
+        and nm != ''Zigbee2MQTT Bridge'' and nm not in ns.names %}{% set ns.names
+        = ns.names + [nm] %}{% endif %}{% endif %}{% endfor %}{% if critical %}Critical
+        devices offline: {{ critical | join('', '') }}. Zigbee devices need a re-pair
+        (permit-join + button); the machine plugs are mesh ROUTERS - fixing them stabilises
+        the battery sensors too.{% endif %}{% if ns.names %} Other Zigbee devices
+        offline: {{ ns.names | join('', '') }}.{% endif %}'
   mode: single
 - id: '1786431319404'
   alias: Watchdog - Backups Stale
