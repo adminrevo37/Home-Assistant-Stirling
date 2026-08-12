@@ -9,7 +9,7 @@
         "linkquality": 108
     },
     "0xa4c138074803a9a9": {
-        "energy": 240.14,
+        "energy": 240.15,
         "voltage": 239,
         "state": "ON",
         "countdown": 0,
@@ -17,8 +17,8 @@
         "indicator_mode": "off/on",
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
-        "power": 144,
-        "current": 0.7,
+        "power": 138,
+        "current": 0.69,
         "linkquality": 180
     },
     "0xa4c138ba345696ae": {
@@ -96,7 +96,7 @@
         "linkquality": 108
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 14.17,
+        "energy": 14.18,
         "voltage": 243,
         "state": "ON",
         "countdown": 0,
@@ -105,7 +105,7 @@
         "child_lock": "UNLOCK",
         "switch_type_button": "release",
         "power": 27,
-        "current": 0.17,
+        "current": 0.15,
         "linkquality": 112
     },
     "0xa4c13861a6ad537a": {

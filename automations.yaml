@@ -4025,26 +4025,57 @@
             volume: 1
   mode: single
 - id: '1786431204597'
-  alias: Watchdog - HA Box Disk Low (below 80 GB free)
-  description: Disk-full is a suspected contributor to the HA box hang class (89%
-    full on 2026-08-03; two overnight outages Aug 2026). Alerts when root-disk free
-    space (sensor.system_monitor_disk_free, GB) stays below 80 GB (~83% full) for
-    15 minutes. Frigate recordings are the usual culprit - see FRIGATE_RETENTION_CHANGE_2026-08-03.md
-    for the prepared fix.
+  alias: 'Watchdog - HA Box Disk Low (2-stage: 30 GB warn / 20 GB critical)'
+  description: 'Disk-full is a suspected contributor to the HA box hang class (89%
+    full on 2026-08-03; two overnight outages Aug 2026). RE-BASED 2026-08-12: with
+    Frigate''s 1-day rolling window at ~14.5 GB/h across 7 recording cameras, the
+    disk''s NORMAL steady state is ~350 GB Frigate + system = only ~35-45 GB free,
+    permanently below the old 80 GB threshold (which fired once 10:53 2026-08-12 and
+    could never re-arm). Now two stages: below 30 GB for 15 min = warning push (floor
+    eroding beyond Frigate''s normal window - recorder DB growth, backup pile-up,
+    Frigate misbehaving); below 20 GB for 10 min = CRITICAL ring-through (genuinely
+    heading to full = box-hang risk). Real fix = the prepared Frigate retention change
+    (FRIGATE_RETENTION_CHANGE_2026-08-03.md, sub-stream recording ~8-10x reduction)
+    - now unblocked since NVR admin access allows the 720p sub-stream bump first.'
   triggers:
   - trigger: numeric_state
     entity_id: sensor.system_monitor_disk_free
-    below: 80
+    below: 30
     for:
       minutes: 15
+    id: warn
+  - trigger: numeric_state
+    entity_id: sensor.system_monitor_disk_free
+    below: 20
+    for:
+      minutes: 10
+    id: critical
   actions:
-  - action: notify.mobile_app_julian
-    data:
-      title: ⚠️ HA box disk low
-      message: Free disk is {{ states('sensor.system_monitor_disk_free') }} GB (used
-        {{ states('sensor.system_monitor_disk_use') }} GB). Below 80 GB free. Disk
-        pressure was a suspected factor in the box hangs - prune Frigate or apply
-        the retention change.
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: critical
+      sequence:
+      - action: notify.mobile_app_julian
+        data:
+          title: "\U0001F6A8 HA BOX DISK CRITICAL"
+          message: Free disk is {{ states('sensor.system_monitor_disk_free') }} GB
+            and falling - genuinely heading to FULL (box-hang risk). Prune Frigate
+            recordings NOW or stop the Frigate add-on; then apply the retention change.
+          data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
+    default:
+    - action: notify.mobile_app_julian
+      data:
+        title: ⚠️ HA box disk low
+        message: Free disk is {{ states('sensor.system_monitor_disk_free') }} GB -
+          below the ~35-45 GB the Frigate 1-day window normally leaves. Something
+          extra is eating disk (DB growth, backups, Frigate misbehaving). Real fix
+          = the prepared Frigate retention change.
   mode: single
 - id: '1786431252107'
   alias: Watchdog - Critical Sensor Dropout (30 min unavailable)
