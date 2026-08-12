@@ -4586,3 +4586,78 @@
         url: /alert-cameras/inside
         clickAction: /alert-cameras/inside
   mode: single
+- id: '1786514405524'
+  alias: 'Guard - Disk Emergency: STOP Frigate below 18 GB free'
+  description: Last-line box-hang protection (built 2026-08-12 during the post-outage
+    Frigate prune race). Disk-full is the suspected trigger of the Aug box hangs;
+    Frigate is the only large writer (~14.5 GB/h). If free space stays below 18 GB
+    for 5 min (below the 20 GB CRITICAL alert - human had their chance), STOP the
+    Frigate add-on to halt writes, flag input_boolean.frigate_emergency_stopped_disk_guard,
+    and push CRITICAL. Recording + person detection are down while stopped - the companion
+    restart guard brings Frigate back automatically once pruning/cleanup frees 40+
+    GB. Remove or relax once the Frigate retention change (sub-stream recording) is
+    applied and steady-state free is comfortable.
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.system_monitor_disk_free
+    below: 18
+    for:
+      minutes: 5
+  conditions:
+  - condition: state
+    entity_id: input_boolean.frigate_emergency_stopped_disk_guard
+    state: 'off'
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.frigate_emergency_stopped_disk_guard
+  - action: hassio.addon_stop
+    data:
+      addon: ccab4aaf_frigate
+    continue_on_error: true
+  - action: notify.mobile_app_julian
+    data:
+      title: "\U0001F6A8 FRIGATE STOPPED — disk emergency"
+      message: 'Free disk hit {{ states(''sensor.system_monitor_disk_free'') }} GB.
+        Frigate has been STOPPED to prevent disk-full (the box-hang trigger). Recording
+        + person detection are OFF. It will auto-restart when free space recovers
+        above 40 GB; to restart sooner: Settings > Add-ons > Frigate > Start, then
+        turn off the ''Frigate Emergency Stopped'' toggle.'
+      data:
+        push:
+          sound:
+            name: default
+            critical: 1
+            volume: 1
+  mode: single
+- id: '1786514422080'
+  alias: 'Guard - Disk Emergency: RESTART Frigate above 40 GB free'
+  description: Companion to the STOP guard. When Frigate was emergency-stopped by
+    the disk guard and free space has recovered above 40 GB for 10 min (hourly Frigate
+    expire sweep / manual pruning caught up), start the add-on again, clear the flag,
+    push confirmation. Keeps overnight intrusion detection from staying dead after
+    a daytime emergency stop.
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.system_monitor_disk_free
+    above: 40
+    for:
+      minutes: 10
+  conditions:
+  - condition: state
+    entity_id: input_boolean.frigate_emergency_stopped_disk_guard
+    state: 'on'
+  actions:
+  - action: hassio.addon_start
+    data:
+      addon: ccab4aaf_frigate
+    continue_on_error: true
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.frigate_emergency_stopped_disk_guard
+  - action: notify.mobile_app_julian
+    data:
+      title: ✅ Frigate restarted
+      message: Disk recovered ({{ states('sensor.system_monitor_disk_free') }} GB
+        free) — Frigate started again, recording + person detection back.
+  mode: single
