@@ -9,8 +9,8 @@
         "linkquality": 100
     },
     "0xa4c138074803a9a9": {
-        "energy": 256.27,
-        "voltage": 241,
+        "energy": 259.76,
+        "voltage": 234,
         "state": "ON",
         "countdown": 0,
         "power_outage_memory": "on",
@@ -44,8 +44,8 @@
         "linkquality": 120
     },
     "0xa4c13851f47cb91d": {
-        "energy": 21.14,
-        "voltage": 244,
+        "energy": 21.57,
+        "voltage": 242,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -70,8 +70,8 @@
         "linkquality": 136
     },
     "0xa4c138fdcd4c98b3": {
-        "voltage": 243,
-        "energy": 25.17,
+        "voltage": 241,
+        "energy": 25.53,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -83,8 +83,8 @@
         "linkquality": 64
     },
     "0xa4c13879a2af63a1": {
-        "energy": 5.47,
-        "voltage": 244,
+        "energy": 5.54,
+        "voltage": 241,
         "state": "OFF",
         "countdown": 0,
         "power_outage_memory": "restore",
@@ -96,7 +96,7 @@
         "linkquality": 108
     },
     "0xa4c138d3ea816fa6": {
-        "energy": 16.52,
+        "energy": 16.94,
         "voltage": 242,
         "state": "OFF",
         "countdown": 0,
