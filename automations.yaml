@@ -4769,3 +4769,110 @@
       message: Disk recovered ({{ states('sensor.system_monitor_disk_free') }} GB
         free) — Frigate started again, recording + person detection back.
   mode: single
+- id: '1787028604180'
+  alias: Control4 - Dropout Logger
+  description: 'Instrumentation, built 2026-08-18. Records every Control4 integration
+    dropout with its duration, so we have a TREND instead of anecdote. Before this
+    we could only say ''~17 seconds over 2.7 days'' from two hand-read samples.
+
+
+    CANARY = lock.front_door_lock. Control4 dropouts are integration-wide (the websocket
+    drops and every C4 entity goes unavailable together), so one canary captures the
+    event without producing 15 duplicate log lines per dropout. The lock is chosen
+    because it is the highest-consequence C4 device - it opens the roller door.
+
+
+    Silent by default: logs to the logbook and increments counter.c4_dropouts_total
+    on every dropout, but only PUSHES when a dropout exceeds 60s. Observed normal
+    dropouts are 5-12s and are fully absorbed by the per-minute lighting reconcile
+    and the 2-min connection watchdog, so they are not worth waking anyone for. A
+    60s+ dropout is a different animal.
+
+
+    RESTART GUARD: an HA restart also takes entities unavailable->available, which
+    would log a false dropout of hours. Two guards: (1) input_boolean.c4_dropout_active
+    must have been set by a real ''dropped'' event, and (2) any computed duration
+    >= 3600s is discarded as a restart artefact rather than counted.
+
+
+    NOTE: this does NOT catch the 2026-08-05 failure mode (Director answering ping
+    AND REST while silently swallowing commands) - entities stay ''available'' there,
+    so nothing goes unavailable. That case is covered separately by automation.door_unlock_command_verify_reload_c4_retry_on_frozen_feed,
+    which verifies against the physical roller-door contact sensor.'
+  triggers:
+  - trigger: state
+    id: dropped
+    entity_id: lock.front_door_lock
+    to: unavailable
+    note: Integration-wide drop; lock is the canary for all C4 entities.
+  - trigger: state
+    id: restored
+    entity_id: lock.front_door_lock
+    from: unavailable
+  actions:
+  - choose:
+    - alias: Dropout started - stamp the time
+      conditions:
+      - condition: trigger
+        id: dropped
+      sequence:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.c4_dropout_started
+        data:
+          timestamp: '{{ now().timestamp() }}'
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.c4_dropout_active
+      - action: logbook.log
+        data:
+          name: Control4 Dropout
+          message: STARTED - Control4 entities went unavailable.
+    - alias: Dropout ended - measure and record
+      conditions:
+      - condition: trigger
+        id: restored
+      - condition: state
+        entity_id: input_boolean.c4_dropout_active
+        state: 'on'
+      sequence:
+      - variables:
+          secs: '{{ (now().timestamp() - (state_attr(''input_datetime.c4_dropout_started'',''timestamp'')
+            | float(0))) | round(1) }}'
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.c4_dropout_active
+      - choose:
+        - alias: Plausible dropout - count it
+          conditions:
+          - condition: template
+            value_template: '{{ secs | float(0) < 3600 }}'
+          sequence:
+          - action: counter.increment
+            target:
+              entity_id: counter.c4_dropouts_total
+          - action: logbook.log
+            data:
+              name: Control4 Dropout
+              message: 'RECOVERED after {{ secs }}s (total dropouts recorded: {{ (states(''counter.c4_dropouts_total'')
+                | int(0)) + 1 }}).'
+          - if:
+            - condition: template
+              value_template: '{{ secs | float(0) >= 60 }}'
+            then:
+            - action: notify.mobile_app_julian
+              data:
+                title: ⚠️ Control4 dropout {{ secs }}s
+                message: Control4 lost connection for {{ secs }} seconds - well beyond
+                  the usual 5-12s. Lighting self-heals within a minute, but door commands
+                  during that window would have been swallowed. Check the Director
+                  if this repeats.
+                data:
+                  tag: c4-dropout
+        default:
+        - action: logbook.log
+          data:
+            name: Control4 Dropout
+            message: DISCARDED - computed duration {{ secs }}s exceeds 1h, almost
+              certainly an HA restart rather than a real dropout. Not counted.
+  mode: single
