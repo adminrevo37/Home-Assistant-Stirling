@@ -3984,53 +3984,85 @@
 - id: watchdog_bay_helper_stuck
   alias: Watchdog - Bay Helper Stuck On
   description: 'Second, independent net for the 2026-08-06 failure. A bay helper is
-    set at booking start (T-11) and cleared by bay_N_booking_end (T+10), so it should
-    never be on for more than a long booking plus lead/lag. When bay_N_booking_end
-    stops firing the helper sticks ON forever, and that single fact breaks two things
+    set at booking start (T-11) and cleared by bay_N_booking_end (T+10). When bay_N_booking_end
+    stops firing the helper sticks ON forever, and that one fact breaks two things
     silently: night_staggered_shutdown can never run (it triggers on a helper going
     OFF and requires all 5 off - it went 4 nights without firing, lights burning until
     the 22:15 catch-all), and the common-lights daylight gate is permanently satisfied
     (it ORs on any-helper-on) so occupancy lights the building in daylight regardless
-    of bookings. Deliberately native (state + for:) with no templates, so it stays
-    working even if the fancier calendar-vs-fire watchdog has a problem - the two
-    are independent by design. Threshold 7h: the longest real booking seen is 4h (~4h20m
-    of helper time), so 7h cannot false-positive on a legitimate session. CAVEAT:
-    a `for:` clock restarts on every HA restart, so after a restart a genuinely stuck
-    helper takes another 7h to alert - acceptable for a slow-burn fault. Alert only,
-    never auto-clears the helper: clearing it could let the night shutdown run during
-    a long booking that is still in progress (the shutdown only checks for bookings
-    STARTING within 30 min, not ones already running). Built 2026-08-10 -> BUILD_HA_2026-08-10.md'
+    of bookings.
+
+
+    REWRITTEN 2026-08-18 - was a 7h `for:` duration and it cried wolf. The original
+    threshold rested on ''the longest real booking seen is 4h'', which is stale: Dean
+    Holder''s weekend coach blocks run 9-12h, so a helper legitimately sits on ~9h21m
+    (16 Aug 07:49->17:10) and ~11h51m (bay3, 16 Aug). It false-fired 2026-08-16 14:49
+    on a perfectly normal Sunday.
+
+
+    Why NOT just raise the threshold: (1) a full-day 07:00-22:00 booking would put
+    a helper on for 15h21m, so no duration is both safe and useful; (2) per HA''s
+    own guidance a long `for:` clock RESETS on every restart and on every momentary
+    `unavailable` - this box restarts often and Control4 flaps regularly, so a 13h+
+    `for:` might never reach its threshold at all. A long duration is the wrong instrument.
+
+
+    New approach - anchor on CLOSING TIME instead of duration. The facility closes
+    at 22:00 (admin can book to 22:00 at the latest), so the last legitimate helper
+    clears at 22:10. Anything still ON at 23:00 has 50 min of margin and is genuinely
+    stuck. Zero false positives from long bookings, catches the fault the same night,
+    and it is immune to the restart/unavailable reset problem because a `time` trigger
+    has no clock to reset.
+
+
+    Alert only, never auto-clears the helper: clearing it could let the night shutdown
+    run during a long booking still in progress (the shutdown only checks for bookings
+    STARTING within 30 min, not ones already running). Original built 2026-08-10 ->
+    BUILD_HA_2026-08-10.md'
   triggers:
-  - trigger: state
-    entity_id:
-    - input_boolean.bay1_helper
-    - input_boolean.bay2_helper
-    - input_boolean.bay3_helper
-    - input_boolean.bay4_helper
-    - input_boolean.bay5_helper
-    to: 'on'
-    for:
-      hours: 7
-    note: 'Native for: - no template duration math. Fires per entity.'
-  conditions: []
+  - trigger: time
+    at: '23:00:00'
+    note: Closing is 22:00; last legitimate helper clears at 22:10. 50 min margin.
+      No duration clock, so restarts and unavailable blips cannot reset it.
+  conditions:
+  - condition: or
+    alias: Any bay helper still on after closing
+    conditions:
+    - condition: state
+      entity_id: input_boolean.bay1_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay2_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay3_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay4_helper
+      state: 'on'
+    - condition: state
+      entity_id: input_boolean.bay5_helper
+      state: 'on'
   actions:
   - action: logbook.log
     data:
       name: Bay Helper Watchdog
-      message: FAULT - {{ trigger.to_state.name }} has been ON for 7h; bay booking_end
-        has probably stopped firing.
+      message: 'FAULT - still ON at 23:00 (closing is 22:00, helpers clear by 22:10):
+        {{ expand(''input_boolean.bay1_helper'',''input_boolean.bay2_helper'',''input_boolean.bay3_helper'',''input_boolean.bay4_helper'',''input_boolean.bay5_helper'')
+        | selectattr(''state'',''eq'',''on'') | map(attribute=''name'') | join('',
+        '') }}. That bay''s booking_end has probably stopped firing.'
   - action: notify.mobile_app_julian
     data:
-      title: ⚠️ Bay helper stuck on ({{ trigger.to_state.name }})
-      message: '{{ trigger.to_state.name }} has been ON for 7 hours, so that bay''s
-        booking_end automation has probably stopped firing. Consequences: the night
-        lights shutdown CANNOT run (lights will burn until the 22:15 catch-all) and
-        common lights lose their daylight gate. FIX: reload automations; if that does
-        not work, restart Home Assistant. Then switch the stuck helper off manually.'
+      title: ⚠️ Bay helper stuck on
+      message: 'Still ON at 23:00, an hour after closing: {{ expand(''input_boolean.bay1_helper'',''input_boolean.bay2_helper'',''input_boolean.bay3_helper'',''input_boolean.bay4_helper'',''input_boolean.bay5_helper'')
+        | selectattr(''state'',''eq'',''on'') | map(attribute=''name'') | join('',
+        '') }}. That bay''s booking_end automation has probably stopped firing. Consequences:
+        the night lights shutdown CANNOT run (lights burn until the 22:15 catch-all)
+        and common lights lose their daylight gate. FIX: reload automations; if that
+        does not work, restart Home Assistant. Then switch the stuck helper off manually.'
       data:
-        tag: bay_helper_stuck_{{ trigger.entity_id }}
-  mode: parallel
-  max: 5
+        tag: bay_helper_stuck
+  mode: single
 - id: '1786431157629'
   alias: Watchdog - Calendar Fetch Probe (every 10 min)
   description: 'Proves the HA->Google Calendar API path is alive. Every 10 minutes
