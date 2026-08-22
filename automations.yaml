@@ -3498,7 +3498,20 @@
     NOTE 2026-08-01: keypad probe = binary_sensor.cricket_keypad_online (ESPHome connectivity,
     IP-agnostic) - the old ping probe binary_sensor.192_168_1_127 went stale when
     the keypad''s DHCP lease moved to .121. Re-add a ping probe only after a DHCP
-    reservation pins the keypad''s IP.'
+    reservation pins the keypad''s IP.
+
+
+    2026-08-22 CORRECTION: the 2026-08-14 sanity gate was WRONG to classify simultaneous
+    LAN+WAN loss as a benign ''probe stall''. Kernel logs show ''igc 0000:72:00.0
+    enp114s0: NIC Link is Down'' repeatedly - the HA box''s own NIC loses carrier,
+    which takes every probe (LAN and Cloudflare alike) offline in the same second
+    and is indistinguishable from a stall by probe state alone. The 14 Aug reasoning
+    correctly ruled out the Reyee switch but wrongly concluded ''HA stalled''; the
+    third possibility - the box''s own link dropping - was never considered. A genuine
+    4h07m outage (07:14-11:21, ~8 sessions locked out) was reported to Julian as ''the
+    network is almost certainly fine'', and because that branch never set input_boolean.network_watchdog_alerted,
+    the recovery push was suppressed too. That branch now sets the flag, is critical-priority,
+    and states that door access is affected. Recovery pushes now report outage duration.'
   triggers:
   - trigger: state
     id: down_lan
@@ -3571,7 +3584,7 @@
             are affected.
           data:
             tag: network-watchdog-wan
-    - alias: HA-side probe stall - LAN and internet failed together
+    - alias: LAN + internet failed together - box network loss OR HA stall
       conditions:
       - condition: or
         conditions:
@@ -3580,14 +3593,24 @@
         - condition: trigger
           id: down_wan
       sequence:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.network_watchdog_alerted
       - action: notify.mobile_app_julian
         data:
-          title: ℹ️ HA probe stall (not a network fault)
-          message: LAN and internet probes failed together - no switch or cable can
-            take Cloudflare offline, so Home Assistant stalled and every poll timed
-            out at once. The network is almost certainly fine. Usual driver is disk/CPU
-            pressure on the HA box.
+          title: Cricket box OFFLINE - door access affected
+          message: 'LAN and internet probes failed together. This is EITHER the HA
+            box losing its own network link (kernel: ''igc enp114s0: NIC Link is Down''
+            - CONFIRMED 2026-08-22, a 4h07m outage) OR an HA event-loop stall. Do
+            NOT assume the network is fine. While the box is offline the keypad cannot
+            validate ANY code - including the 2026 fallback - so every customer is
+            locked out. Check the HA box ethernet cable and switch port.'
           data:
+            push:
+              sound:
+                name: default
+                critical: 1
+                volume: 1
             tag: network-watchdog-stall
     - alias: Recovery - only if a genuine down alert was sent
       conditions:
@@ -3603,7 +3626,11 @@
       - action: notify.mobile_app_julian
         data:
           title: ✅ Cricket network recovered
-          message: '{{ trigger.to_state.attributes.friendly_name }} is back online.'
+          message: '{{ trigger.to_state.attributes.friendly_name }} is back online
+            after {% set s = (now() - trigger.from_state.last_changed).total_seconds()
+            | int %}{{ s // 3600 }}h {{ (s % 3600) // 60 }}m offline. If that was
+            more than a few minutes, door codes were NOT reaching Control4 and the
+            keypad could not validate entries - check whether anyone was locked out.'
           data:
             tag: network-watchdog-{{ trigger.entity_id }}
   mode: parallel
